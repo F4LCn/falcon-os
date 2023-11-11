@@ -1,4 +1,4 @@
-org 0x7C00
+org 0x600
 use16
 
 ; LBA Packet struct
@@ -46,6 +46,17 @@ end if
     mov bp, 600h
     push cs
     pop ds
+    call .relocate
+
+.relocate:
+    pop si
+    sub si, .relocate - .start
+    mov di, 0x500
+    mov cx, 128
+    repnz stosw
+    mov cx, 256
+    repnz movsw
+    jmp 0:.check_disk
 
 .check_disk:
     mov byte [boot_drive], dl
@@ -70,12 +81,15 @@ end if
 
 .lba_ok:
     mov word [lba_packet.size], 16
-    mov word [lba_packet.count], 60      ; read 1 sector for now, needs to change when we have a 2nd stage
+    mov word cx, [stage2_len]
+    mov word [lba_packet.count], cx      ; read 1 sector for now, needs to change when we have a 2nd stage
     mov word [lba_packet.segment], 0h
     mov word [lba_packet.offset], 0800h
 
-    mov word [lba_packet.sector0], 89    ; dword (lower 32-bits of the sector num) [sector0][sector1]
-    mov word [lba_packet.sector1], 0
+    mov cx, [stage_2_start]
+    mov word [lba_packet.sector0], cx    ; dword (lower 32-bits of the sector num) [sector0][sector1]
+    mov cx, [stage_2_start + 2]
+    mov word [lba_packet.sector1], cx
     mov word [lba_packet.sector2], 0
     mov word [lba_packet.sector3], 0
 
@@ -132,7 +146,8 @@ printfunc:
 ; variables
 boot_drive:      db 0
 magic_bytes:     db 0F4h, 1Ch          ; 0xF41C
-stage_2_start:   dd 0xFFFFFFFF
+stage2_start:    dd 0xFFFFFFFF
+stage2_len:      dw 0xFFFF
 
 ; error messages
 panic_prefix:   db "B00T PANIC: ",0
