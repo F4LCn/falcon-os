@@ -86,9 +86,9 @@ end if
     mov word [lba_packet.segment], 0h
     mov word [lba_packet.offset], 0800h
 
-    mov cx, [stage_2_start]
+    mov cx, [stage2_start]
     mov word [lba_packet.sector0], cx    ; dword (lower 32-bits of the sector num) [sector0][sector1]
-    mov cx, [stage_2_start + 2]
+    mov cx, [stage2_start + 2]
     mov word [lba_packet.sector1], cx
     mov word [lba_packet.sector2], 0
     mov word [lba_packet.sector3], 0
