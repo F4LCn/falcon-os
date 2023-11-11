@@ -1,6 +1,10 @@
 org 0x600
 use16
 
+; memory map
+;    0x500 - 0x5FF  bootloader stage 1 stack
+;    0x600 - 0x7FF  bootloader stage 1 code
+
 ; LBA Packet struct
 ;Offset	Size	Description
 ; 0	    1	    size of packet (16 bytes)
@@ -86,9 +90,9 @@ end if
     mov word [lba_packet.segment], 0h
     mov word [lba_packet.offset], 0800h
 
-    mov cx, [stage2_start]
+    mov word cx, [stage2_start]
     mov word [lba_packet.sector0], cx    ; dword (lower 32-bits of the sector num) [sector0][sector1]
-    mov cx, [stage2_start + 2]
+    mov word cx, [stage2_start + 2]
     mov word [lba_packet.sector1], cx
     mov word [lba_packet.sector2], 0
     mov word [lba_packet.sector3], 0
@@ -147,7 +151,7 @@ printfunc:
 boot_drive:      db 0
 magic_bytes:     db 0F4h, 1Ch          ; 0xF41C
 stage2_start:    dd 0xFFFFFFFF
-stage2_len:      dw 0xFFFF
+stage2_len:      dw 60
 
 ; error messages
 panic_prefix:   db "B00T PANIC: ",0

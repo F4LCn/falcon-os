@@ -24,6 +24,7 @@
 - bda: http://www.bioscentral.com/misc/bda.htm
 - bios services: http://www.bioscentral.com/misc/biosservices.htm
 - bios interrupts details: https://stanislavs.org/helppc/idx_interrupt.html
+- bios interrupts details (for newer ints): http://www.delorie.com/djgpp/doc/rbinter/ix/
 - memory map: https://wiki.osdev.org/Memory_Map_(x86)
 - read from drive: https://en.wikipedia.org/wiki/INT_13H#INT_13h_AH=42h:_Extended_Read_Sectors_From_Drive
 
