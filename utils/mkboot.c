@@ -74,6 +74,7 @@ int main(int argc, char **argv) {
     }
     close(bootloader_fd);
 
+    // FIXME: there's a bug here
     memcpy((void*)&data + 0xd0, (void*)&second_stage_sector, 4);
     // TODO: Figure out the 2nd stage len in sectors
 
