@@ -19,6 +19,9 @@
 - objdump, objcopy, ... or better yet some sort of gnu env (linux, wsl, cygwin)
 
 ## documentation
+### assembly
+- https://www.felixcloutier.com/x86/
+
 ### bios
 - boot process: http://www.bioscentral.com/misc/biosbasics.htm
 - bda: http://www.bioscentral.com/misc/bda.htm

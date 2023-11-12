@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     close(bootloader_fd);
 
     // FIXME: there's a bug here
-    memcpy((void*)&data + 0xd0, (void*)&second_stage_sector, 4);
+    memcpy((void*)&data + 0xd2, (void*)&second_stage_sector, 4);
     // TODO: Figure out the 2nd stage len in sectors
 
     // need to write 0x1C0 = 448 Bytes to the first sector of our disk

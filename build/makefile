@@ -7,7 +7,7 @@ image:
 	mkdir img
 	mount -t vfat,fat=16 /dev/loop0 img
 	mkdir -p img/BIOS/BOOT
-	cp second.bin img/BIOS/BOOT/STAGE2.BIN
+	cp stage2.bin img/BIOS/BOOT/STAGE2.BIN
 	umount img
 	rmdir img
 	losetup -D
