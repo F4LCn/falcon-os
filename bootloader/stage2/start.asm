@@ -182,6 +182,25 @@ VBE_MODEFLAGS = VBE_SUPPORTED + VBE_COLOR + VBE_GRAPHICS + VBE_LINEAR_FB
     jmp panicfunc
 
 @@:
+    cli
+    lgdt [GDTR]
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+    jmp dword 0x18:(.protected_start - $$ + 0x800)
+
+use32
+.protected_start:
+    mov ax, 0x20
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    mov esp, 0x800
+    mov ebp, 0x800
+    jmp 0x18:forever
+
 forever:
     jmp forever
 
@@ -197,3 +216,51 @@ found_mode:    db "FOUND MODE", 0
 
 required_width = 800
 required_height = 600
+
+use32
+align 8
+stack_ptr:  dd  0
+
+align 16
+GDTR:
+    dw GDT_END - GDT - 1
+    dd GDT
+
+align 16
+GDT:
+NullEntry:
+    dw 0x0      ; Limit [0..15]
+    dw 0x0      ; Base [0..15]
+    db 0x0      ; Base [16..23]
+    db 0x0      ; Access (access bits)
+    db 0x0      ; Flags << 4 | Limit [16..19]
+    db 0x0      ; Base [24..31]
+RealCode:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 0x9A
+    db 0x00
+    db 0x00
+RealData:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 0x92
+    db 0x00
+    db 0x00
+ProtCode:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 0x9A
+    db 0xCF
+    db 0x00
+ProtData:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 0x92
+    db 0xCF
+    db 0x00
+GDT_END:
