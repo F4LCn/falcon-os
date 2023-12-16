@@ -5,12 +5,14 @@ use16
 ; 0x0500 - 0x07FF => stage 2 stack
 ; 0x0800 - 0x9FFF => stage 2 code (loaded by stage 1)
 ; 0xA000 - 0xAFFF => bootinfo (at max)
-; 0xB000 - ?????? => buffers?
+; 0xB000 - 0xBFFF => tmp_buffer for VBE info
+; 0xC000 - ?????? => buffers?
 
 include "macros.inc"
 include "structs.inc"
 
 bootinfo = 0xA000
+tmp_buffer = 0xB000
 
 magic:          db 0F4h, 01Ch
 start:
@@ -78,6 +80,108 @@ mmap:
     jmp panicfunc
 .mmap_end:
 
+.find_video_mode:
+    xor eax, eax
+    mov ax, 04F00h
+    mov di, tmp_buffer
+    mov dword [di], 'VBE2'
+    int 10h
+    cmp ax, 004Fh
+    je .load_mode_ptrs
+.vbe_error:
+    mov si, no_vbe_info
+    jmp panicfunc
+
+.load_mode_ptrs:
+    xor esi, esi
+    xor edi, edi
+    mov si, word [tmp_buffer + 0Eh]
+    mov ax, word [tmp_buffer + 10h]
+    mov ds, ax
+    xor ax, ax
+    mov es, ax
+    mov di, tmp_buffer + 200h
+    xor bx, bx
+.read_next_ptr:
+    lodsw
+    cmp ax, 0FFFFh
+    je @f
+    or ax, ax
+    jz @f
+    stosw
+    inc bx
+    jmp .read_next_ptr
+ @@:
+    xor ax, ax
+    stosw
+
+.loop_modes:
+    mov si, tmp_buffer + 200h
+.next_mode:
+    mov di, tmp_buffer + 400h
+    xor eax, eax
+    lodsw
+    or ax, ax
+    jnz @f
+.mode_error:
+    mov si, mode_not_found
+    jmp panicfunc
+@@:
+    mov cx, ax
+    mov ax, 04F01h
+    int 10h
+    cmp ax, 004Fh
+    jne .mode_error
+
+    mov ax, word [tmp_buffer + 400h + VBE_MODE_ATTRIB_OFFSET]
+VBE_MODEFLAGS = VBE_SUPPORTED + VBE_COLOR + VBE_GRAPHICS + VBE_LINEAR_FB
+    and ax, VBE_MODEFLAGS
+    cmp ax, VBE_MODEFLAGS
+    jne .next_mode
+    cmp byte [tmp_buffer + 400h + VBE_MODE_MEMORY_MODEL_OFFSET], VBE_DIRECT_COLOR
+    jne .next_mode
+    cmp byte [tmp_buffer + 400h + VBE_MODE_BPP_OFFSET], 32
+    jne .next_mode
+    cmp word [tmp_buffer + 400h + VBE_MODE_WIDTH_OFFSET], required_width
+    jb .next_mode
+    cmp word [tmp_buffer + 400h + VBE_MODE_HEIGHT_OFFSET], required_height
+    jb .next_mode
+.found_match:
+    xor edx, edx
+    xor ebx, ebx
+    xor eax, eax
+    mov bx, word [tmp_buffer + 400h + VBE_MODE_SCANLINE_OFFSET]
+    mov word [bootinfo.fb_scanline], bx
+    mov ax, word [tmp_buffer + 400h + VBE_MODE_WIDTH_OFFSET]
+    mov word [bootinfo.fb_width], ax
+    mov ax, word [tmp_buffer + 400h + VBE_MODE_HEIGHT_OFFSET]
+    mov word [bootinfo.fb_width], ax
+    mov eax, dword [tmp_buffer + 400h + VBE_MODE_FB_PHYSADDR_OFFSET]
+    mov dword [bootinfo.fb_ptr], eax
+    mov byte [bootinfo.fb_pixelformat], VBE_FB_ARGB
+    cmp dword [tmp_buffer + 400h + VBE_MODE_BLUE_FIELD_SIZE_OFFSET], 0
+    je .video_mode_selected
+    mov byte [bootinfo.fb_pixelformat], VBE_FB_RGBA
+    cmp dword [tmp_buffer + 400h + VBE_MODE_BLUE_FIELD_SIZE_OFFSET], 8
+    je .video_mode_selected
+    mov byte [bootinfo.fb_pixelformat], VBE_FB_ABGR
+    cmp dword [tmp_buffer + 400h + VBE_MODE_BLUE_FIELD_SIZE_OFFSET], 16
+    je .video_mode_selected
+    mov byte [bootinfo.fb_pixelformat], VBE_FB_BGRA
+.video_mode_selected:
+
+.set_video_mode:
+    mov bx, cx
+    bts bx, 14
+    mov ax, 04F02h
+    int 10h
+    cmp ax, 004Fh
+    je @f
+.set_mode_error:
+    mov si, set_mode_error
+    jmp panicfunc
+
+@@:
 forever:
     jmp forever
 
@@ -86,3 +190,10 @@ include "helpers.inc"
 ; variables
 panic_prefix:   db "FATAL: ",0
 mmap_error:     db "Couldn't map physical memory", 0
+no_vbe_info:    db "Couldn't find vbe info", 0
+mode_not_found:    db "Couldn't find vbe modes", 0
+set_mode_error:    db "Couldn't set vbe mode", 0
+found_mode:    db "FOUND MODE", 0
+
+required_width = 800
+required_height = 600

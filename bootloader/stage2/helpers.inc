@@ -6,7 +6,8 @@ panicfunc:
     print si
     xor ax, ax
     int 16h
-    ; the first instr 0xFFFF00
+    mov al, 0FEh
+    out 64h, al
     jmp far 0FFFFh:0
 
 ;usage

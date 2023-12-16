@@ -31,3 +31,25 @@ virtual at bootinfo
     ; memory map
     bootinfo.mmap:
 end virtual
+
+; ----------------- GRAPHICS ------------------
+VBE_SUPPORTED	equ 1
+VBE_COLOR			equ 8
+VBE_GRAPHICS		equ 16
+VBE_LINEAR_FB		equ 128
+
+VBE_DIRECT_COLOR	equ 6
+
+VBE_MODE_ATTRIB_OFFSET 			equ 0
+VBE_MODE_MEMORY_MODEL_OFFSET 	equ 1Bh
+VBE_MODE_BPP_OFFSET				equ 19h
+VBE_MODE_WIDTH_OFFSET			equ 12h
+VBE_MODE_HEIGHT_OFFSET			equ 14h
+VBE_MODE_SCANLINE_OFFSET		equ 10h
+VBE_MODE_FB_PHYSADDR_OFFSET		equ 28h
+VBE_MODE_BLUE_FIELD_SIZE_OFFSET	equ 24h
+
+VBE_FB_ARGB				equ 0
+VBE_FB_RGBA				equ 1
+VBE_FB_ABGR				equ 2
+VBE_FB_BGRA				equ 3
