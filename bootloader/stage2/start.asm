@@ -155,7 +155,7 @@ VBE_MODEFLAGS = VBE_SUPPORTED + VBE_COLOR + VBE_GRAPHICS + VBE_LINEAR_FB
     mov ax, word [tmp_buffer + 400h + VBE_MODE_WIDTH_OFFSET]
     mov word [bootinfo.fb_width], ax
     mov ax, word [tmp_buffer + 400h + VBE_MODE_HEIGHT_OFFSET]
-    mov word [bootinfo.fb_width], ax
+    mov word [bootinfo.fb_height], ax
     mov eax, dword [tmp_buffer + 400h + VBE_MODE_FB_PHYSADDR_OFFSET]
     mov dword [bootinfo.fb_ptr], eax
     mov byte [bootinfo.fb_pixelformat], VBE_FB_ARGB
@@ -199,10 +199,7 @@ use32
     mov ss, ax
     mov esp, 0x800
     mov ebp, 0x800
-    jmp 0x18:forever
-
-forever:
-    jmp forever
+    jmp 0x18:cmain
 
 include "helpers.inc"
 
@@ -264,3 +261,8 @@ ProtData:
     db 0xCF
     db 0x00
 GDT_END:
+
+align 32
+padding:
+            dq 16 dup 0
+cmain:

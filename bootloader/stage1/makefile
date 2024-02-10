@@ -1,10 +1,10 @@
-output_dir = ../../build
+OUTPUT_DIR = ../../build
 
 all: bootloader.bin
 
 bootloader.bin:
 	fasm bootloader.asm bootloader.bin
-	mv bootloader.bin $(output_dir)/bootloader.bin
+	mv bootloader.bin $(OUTPUT_DIR)/bootloader.bin
 
 clean:
-	rm -f $(output_dir)/bootloader.bin
+	rm -f $(OUTPUT_DIR)/bootloader.bin

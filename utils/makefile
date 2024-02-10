@@ -1,8 +1,8 @@
-output_dir = ../build
+OUTPUT_DIR = ../build
 
 utilities:
 	clang -Wall -Wextra -o mkboot mkboot.c
-	mv mkboot $(output_dir)/mkboot
+	mv mkboot $(OUTPUT_DIR)/mkboot
 
 clean:
-	rm -f $(output_dir)/mkboot
+	rm -f $(OUTPUT_DIR)/mkboot
