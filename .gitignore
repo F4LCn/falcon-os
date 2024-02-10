@@ -4,3 +4,4 @@
 build/mkboot
 build/
 **/*.o
+.gdb_history

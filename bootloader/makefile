@@ -1,5 +1,3 @@
-output_dir = ../build
-
 all: stage1 stage2
 
 stage1:

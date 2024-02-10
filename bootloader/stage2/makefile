@@ -15,12 +15,15 @@ start.bin:
 	fasm start.asm start.bin
 	mv start.bin $(OUTPUT_DIR)/start.bin
 
-main.elf: $(ENTRYPOINT_OBJ) $(ASM_OBJ_FILES) $(C_OBJ_FILES)
+main.elf: $(ENTRYPOINT_OBJ) $(ASM_OBJ_FILES) $(C_OBJ_FILES) font.o
 	@ld -melf_i386 -T linker.ld -nostdlib -o $@ $^
 	mv main.elf $(OUTPUT_DIR)/main.elf
 
+font.o:
+	@objcopy -O elf32-i386 -I binary ../../font/font.psf font.o
+
 %.o: %.c
-	@clang -O3 -ggdb -m32 -march=i386 --target=i686-pc-none-elf -ffreestanding -masm=intel -mno-sse -Wall -Wextra -c $<
+	@clang -O0 -ggdb -m32 -march=i386 --target=i686-pc-none-elf -ffreestanding -masm=intel -mno-sse -Wall -Wextra -c $<
 
 %.o: %.asm
 	@fasm $< $@
