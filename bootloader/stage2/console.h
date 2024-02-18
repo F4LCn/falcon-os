@@ -3,7 +3,9 @@
 #include "bootinfo.h"
 #include "types.h"
 
-void fill();
-void print_char(u32 x, u32 y, u8 c);
+#include <stdarg.h>
+
+void print(i8* str);
+void printf(const i8* format, ...);
 
 #endif

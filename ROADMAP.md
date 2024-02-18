@@ -8,7 +8,7 @@
     - [x] video mode setup
     - [x] switch to protected mode (we might need to switch back and forth between real and prot modes still)
     - [x] Add support for PSF font
-    - [ ] implement printf (roughly)
+    - [x] implement printf (roughly)
     - [ ] init paging (first look at virtual mem mapping)
     - [ ] read some config file
     - [ ] load the kernel executable as defined in config

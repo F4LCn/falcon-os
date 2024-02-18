@@ -1,14 +1,14 @@
+#include "bootinfo.h"
 #include "console.h"
+
 void _cmain(void) {
-  u32 x = 2;
-  u32 y = 2;
-  for (u8 i = 0; i < 255; i++, x++) {
-    print_char(x, y, i);
-    if(x > 50){
-      y += 1;
-      x = 2;
-    }
-  }
+  print("Hello, World\n\tHello Tab\n\t\t:)\n");
+
+  printf("2 + 2 = %d\n", 2 + 2);
+  printf("Hello, %s\n", "World. This is a long line");
+  u32 a = 12345;
+  printf("my pointer address is 0x%x and my value is %d\n", &a, a);
+
   while (1)
     ;
 }
