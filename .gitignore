@@ -5,3 +5,5 @@ build/mkboot
 build/
 **/*.o
 .gdb_history
+compile_commands.json
+.cache/
