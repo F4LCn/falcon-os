@@ -15,10 +15,9 @@
 /* memory map types */
 #define MMAP_USED 0 /* don't use. Reserved or unknown regions */
 #define MMAP_FREE 1 /* usable memory */
-// WARN: There's a gap here
-// TODO: Fix the gap in asm file too
-#define MMAP_ACPI 3        /* acpi memory, volatile and non-volatile as well */
-#define MMAP_RECLAIMABLE 4 /* memory mapped IO region */
+#define MMAP_ACPI 2        /* acpi memory, volatile and non-volatile as well */
+#define MMAP_RECLAIMABLE 3 /* memory mapped IO region */
+#define MMAP_BOOTINFO 4 /* memory used by the bootinfo struct */
 
 /* mmap entry, type is stored in least significant byte of ptr
  * but all map entries should be page aligned (1 << 12)

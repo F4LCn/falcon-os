@@ -10,4 +10,10 @@ typedef int i32;
 typedef unsigned long long u64;
 typedef long long i64;
 
+typedef u8 bool;
+#define FALSE 0
+#define TRUE 1
+
+#define NULL (void*)0
+
 #endif // !_TYPES_

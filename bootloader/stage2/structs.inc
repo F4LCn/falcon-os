@@ -5,8 +5,8 @@ BOOTLOADER_UEFI equ 1
 
 MMAP_USED       equ 0
 MMAP_FREE       equ 1
-MMAP_ACPI       equ 3
-MMAP_RECLAIM    equ 4
+MMAP_ACPI       equ 2
+MMAP_RECLAIM    equ 3
 
 MAX_BOOTINFO_SZ equ 4096
 
@@ -26,7 +26,7 @@ virtual at bootinfo
 
     ; platform dependent stuff (32 bytes)
     bootinfo.acpi_ptr           dq 0
-    bootinfo.unused2            dq 0, 0, 0
+    bootinfo.unused2            db 24 dup 0
 
     ; memory map
     bootinfo.mmap:
