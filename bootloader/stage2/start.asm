@@ -9,6 +9,7 @@ use16
 ; 0xC000 - ?????? => buffers?
 
 include "macros.inc"
+; TODO: MMAP types have wrong indices
 include "structs.inc"
 
 bootinfo = 0xA000
