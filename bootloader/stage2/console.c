@@ -71,7 +71,7 @@ u32 vsprintf(i8 *buffer, const i8 *format, va_list ap) {
   i32 int_arg;
   u32 uint_arg;
   // i64 long_arg;
-  // u64 ulong_arg;
+  u64 ulong_arg;
 
   u32 format_len = __strlen(format);
   u32 buffer_idx = 0;
@@ -100,9 +100,9 @@ u32 vsprintf(i8 *buffer, const i8 *format, va_list ap) {
       } else if (format[i] == 'x') {
         uint_arg = (u32)va_arg(ap, u32);
         buffer_idx += __htoa(uint_arg, buffer + buffer_idx);
-        // } else if (format[i] == 'X') {
-        //   ulong_arg = (u64)va_arg(ap, u64);
-        //   buffer_idx += __htoa(ulong_arg, buffer + buffer_idx);
+        } else if (format[i] == 'X') {
+          ulong_arg = (u64)va_arg(ap, u64);
+          buffer_idx += __hltoa(ulong_arg, buffer + buffer_idx);
       } else if (format[i] == 'f') {
         // TODO: implement this
       } else {

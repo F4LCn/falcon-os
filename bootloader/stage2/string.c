@@ -61,12 +61,6 @@ u32 __itoa(i32 val, i8 *buffer) {
 }
 
 u32 __htoa(u32 val, i8 *buffer) {
-  if (val == 0) {
-    buffer[0] = '0';
-    buffer[1] = '\0';
-    return 1;
-  }
-
   u32 idx = 0;
   u8 remainder;
   while (val > 0) {
@@ -79,7 +73,27 @@ u32 __htoa(u32 val, i8 *buffer) {
     val /= 16;
     idx++;
   }
+  while(idx < 8){
+    buffer[idx++] = '0';
+  }
   buffer[idx] = '\0';
   __strrev(buffer);
   return idx;
 }
+
+typedef union {
+  u64 u64;
+  struct {
+    u32 lo;
+    u32 hi;
+  } u32;
+} u64_word;
+
+u32 __hltoa(u64 val, i8 *buffer){
+  u64_word w = {.u64 = val};
+  u32 written = 0;
+  written += __htoa(w.u32.hi, buffer + written);
+  written += __htoa(w.u32.lo, buffer + written);
+  return written;
+}
+
