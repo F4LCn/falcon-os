@@ -7,6 +7,8 @@ mmap_entry *pm_entries;
 u32 pm_entries_count = 0;
 bool allocation_enabled = FALSE;
 
+bool pm_alloc_range(u64 alloc_start, u32 alloc_size, u8 type, bool force);
+
 i8 *type_to_str(u32 type) {
   switch (type) {
   case 0:
