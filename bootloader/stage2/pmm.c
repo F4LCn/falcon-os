@@ -63,9 +63,20 @@ void sanitize_entries() {
 
   // TODO: check for overlap and resolve
 
+  for (i = 0; i < pm_entries_count; ++i) {
+    if (pm_entry_size(&pm_entries[i]) == 0) {
+      for (j = i; j < pm_entries_count - 1; ++j) {
+        pm_entries[j] = pm_entries[j + 1];
+      }
+      pm_entries_count--;
+      bootinfo.size -= sizeof(mmap_entry);
+      i--;
+    }
+  }
+
   for (i = 0; i < pm_entries_count - 1; ++i) {
-    if (pm_entry_type(&pm_entries[i]) == pm_entry_type(&pm_entries[i + 1]) &&
-        pm_entry_end(&pm_entries[i]) == pm_entry_start(&pm_entries[i + 1])) {
+    if ((pm_entry_type(&pm_entries[i]) == pm_entry_type(&pm_entries[i + 1]) &&
+         pm_entry_end(&pm_entries[i]) == pm_entry_start(&pm_entries[i + 1]))) {
       pm_entries[i].size += pm_entries[i + 1].size;
       for (j = i + 1; j < pm_entries_count - 1; ++j) {
         pm_entries[j] = pm_entries[j + 1];
@@ -87,6 +98,8 @@ void pm_init() {
 
   pm_alloc_range(0x0, 0x500, MMAP_USED, TRUE);
   pm_alloc_range((u64)&bootinfo, ARCH_PAGE_SIZE, MMAP_BOOTINFO, TRUE);
+  pm_alloc_range(0xB000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
+  pm_alloc_range(0xC000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
 
   sanitize_entries();
   allocation_enabled = TRUE;
@@ -146,11 +159,9 @@ bool pm_alloc_range(u64 alloc_start, u32 alloc_size, u8 type, bool force) {
         footer_entry->size = footer_size;
       }
 
-      if (header_size > 0) {
-        entry->size = header_size;
-      }
+      entry->size = header_size;
 
-      sort_entries();
+      sanitize_entries();
       return TRUE;
     }
   }
