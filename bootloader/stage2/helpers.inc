@@ -25,6 +25,7 @@ use16
 
 ;usage
 ; call set_prot_mode
+set_prot_mode:
 use16
     cli
     xor edx, edx
@@ -44,7 +45,6 @@ use32
     mov gs, ax
     mov ss, ax
     mov esp, dword [stack_ptr]
-    sti
     jmp edx
 
 use16
