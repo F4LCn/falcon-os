@@ -18,6 +18,7 @@
 #define MMAP_ACPI 2        /* acpi memory, volatile and non-volatile as well */
 #define MMAP_RECLAIMABLE 3 /* memory mapped IO region */
 #define MMAP_BOOTINFO 4 /* memory used by the bootinfo struct */
+#define MMAP_FRAMEBUFFER 5 /* memory used by the framebuffer */
 
 /* mmap entry, type is stored in least significant byte of ptr
  * but all map entries should be page aligned (1 << 12)
