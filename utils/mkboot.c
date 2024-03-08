@@ -42,7 +42,6 @@ int main(int argc, char **argv) {
 
     // 10 * 1024 * 1024 / SECTOR_SIZE = 20480 sectors
     for (sec = 0; sec < 10 * 1024 * 1024; ++sec) {
-        printf("Checking sector %d\n", sec);
         read_bytes = read(disk_fd, data, SECTOR_SIZE);
         if (read_bytes == -1) {
             close(disk_fd);
