@@ -9,10 +9,12 @@
     - [x] switch to protected mode (we might need to switch back and forth between real and prot modes still)
     - [x] Add support for PSF font
     - [x] implement printf (roughly)
-    - [x] enhance the physical memory map
-    - [ ] init paging (first look at virtual mem mapping)
+    - [x] physical memory allocator
+    - [x] read partition table
+    - [ ] filesystem support
     - [ ] read some config file
     - [ ] load the kernel executable as defined in config
+    - [ ] init paging (first look at virtual mem mapping)
     - [ ] switch to long mode
     - [ ] handoff execution to kernel (send data to kernel somehow)
 

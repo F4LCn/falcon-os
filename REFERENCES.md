@@ -22,3 +22,7 @@
 
 ### PSF:
 - PC Screen font format: https://www.win.tue.nl/~aeb/linux/kbd/font-formats-1.html
+
+### partition table and filesystem
+- GPT: https://en.wikipedia.org/wiki/GUID_Partition_Table
+- FAT: https://www.pjrc.com/tech/8051/ide/fat32.html

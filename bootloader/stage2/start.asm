@@ -13,12 +13,15 @@ include "structs.inc"
 
 bootinfo = 0xA000
 tmp_buffer = 0xB000
+lba_buffer = 0xC000
 
 magic:          db 0F4h, 01Ch
 start:
     xor ax, ax
     mov ds, ax
     mov es, ax
+    cld
+    mov byte [bootdev], dl
 
 init_bootinfo:
     mov dword eax, BOOTINFO_MAGIC
@@ -201,6 +204,57 @@ use32
     mov ebp, 0x800
     jmp 0x18:cmain
 
+; prot_read_sectors
+; eax - start sector
+; edi - dest addr
+; ecx - sectors count
+align 8
+prot_read_sectors:
+    push ebp
+    mov ebp, esp
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+
+; todo check that count is not 0
+    mov word [lba_packet.count], cx
+    mov dword [lba_packet.sector0], eax
+; drop into real mode
+    go_real
+    xor bx, bx
+.try_again:
+    mov dl, byte [bootdev]
+    mov ah, 42h
+    mov si, lba_packet
+    clc
+    int 13h
+    jnc .read_ok
+    inc bx
+    cmp bx, 3
+    jle .try_again
+.read_ok:
+    go_prot
+align 8
+    mov esi, lba_buffer
+    xor ecx, ecx
+    mov cx, word [lba_packet.count]
+    shl ecx, 7
+    repnz movsd
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    mov esp, ebp
+    pop ebp
+    ret
+
+
+
 include "helpers.inc"
 
 ; variables
@@ -211,8 +265,17 @@ mode_not_found:    db "Couldn't find vbe modes", 0
 set_mode_error:    db "Couldn't set vbe mode", 0
 found_mode:    db "FOUND MODE", 0
 
+bootdev: db 80h
+
 required_width = 800
 required_height = 600
+
+lba_packet:
+.size   dw 16
+.count  dw 8 ; 8 sectors is 1 page
+.address dd lba_buffer
+.sector0 dd 0
+.sector1 dd 0
 
 use32
 align 8
@@ -264,5 +327,5 @@ GDT_END:
 
 align 32
 padding:
-            dq 16 dup 0
+            dq 16 dup 0xDEADBEEFDEADBEEF
 cmain:

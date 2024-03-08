@@ -8,6 +8,15 @@ u32 __strlen(const i8 *str) {
   return len;
 }
 
+u32 __strncmp(const i8 *s1, const i8 *s2, u32 n) {
+  for (u32 i = 0; i < n; ++i) {
+    if (s1[i] != s2[i]) {
+      return (u32)s1[i] - (u32)s2[i];
+    }
+  }
+  return 0;
+}
+
 void __memcpy(void *dst, const void *src, u32 len) {
   i8 *d = (i8 *)dst;
   i8 *s = (i8 *)src;
@@ -73,7 +82,7 @@ u32 __htoa(u32 val, i8 *buffer) {
     val /= 16;
     idx++;
   }
-  while(idx < 8){
+  while (idx < 8) {
     buffer[idx++] = '0';
   }
   buffer[idx] = '\0';
@@ -89,11 +98,10 @@ typedef union {
   } u32;
 } u64_word;
 
-u32 __hltoa(u64 val, i8 *buffer){
+u32 __hltoa(u64 val, i8 *buffer) {
   u64_word w = {.u64 = val};
   u32 written = 0;
   written += __htoa(w.u32.hi, buffer + written);
   written += __htoa(w.u32.lo, buffer + written);
   return written;
 }
-
