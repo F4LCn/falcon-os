@@ -24,10 +24,8 @@ void print(i8 *str) {
   u64 fb = bootinfo.fb_ptr;
   u32 glyph_width_bytes = (font->header.width + 7) / 8;
   while (*s) {
-    // handle special characters (CR, TAB)
     if (*s == '\r' && *(s + 1) == '\n')
       s++;
-    // if the character is not the font glyph map
     i8 c = (u8)*s > 0 && (u8)*s < font->header.length ? *s : 0;
     if (c == '\n') {
       __column = 0;
@@ -39,7 +37,6 @@ void print(i8 *str) {
       s++;
       continue;
     } else {
-      // print the characater to screen
       u64 current_fb_line =
           fb + __column * font->header.width * 4 +
           __line * font->header.height * bootinfo.fb_scanline_bytes;
@@ -121,9 +118,7 @@ void printf(const i8 *format, ...) {
   va_list ap;
   char str_buffer[MAX_BUFFER_SIZE];
   va_start(ap, format);
-  // take format and create a string with all the parameters substituted
   vsprintf(str_buffer, format, ap);
   va_end(ap);
-  // print the string to screen
   print(str_buffer);
 }

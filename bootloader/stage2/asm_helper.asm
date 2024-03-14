@@ -7,14 +7,6 @@ section '.text' executable
 public bios_read_sectors
 
 ; void bios_read_sectors(u32 start_sector, u32 dst, u32 count)
-
-; ebx      <- EBP, ESP
-; ecx
-; edi
-; start_sector
-; dst
-; count
-;
 bios_read_sectors:
     push ebp
     mov ebp, esp

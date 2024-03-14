@@ -2,6 +2,8 @@
 #define __FS__
 #include "types.h"
 
+#define SECTOR_SIZE 512
+
 typedef struct {
   u8 signature[8];
   u32 revision;
