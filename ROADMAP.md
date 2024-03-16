@@ -11,8 +11,8 @@
     - [x] implement printf (roughly)
     - [x] physical memory allocator
     - [x] read partition table
-    - [ ] filesystem support
-    - [ ] read some config file
+    - [p] FAT16 filesystem support
+    - [p] read some config file
     - [ ] load the kernel executable as defined in config
     - [ ] init paging (first look at virtual mem mapping)
     - [ ] switch to long mode

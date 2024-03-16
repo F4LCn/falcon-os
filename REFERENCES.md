@@ -27,3 +27,7 @@
 - GPT: https://en.wikipedia.org/wiki/GUID_Partition_Table
 - FAT: https://www.pjrc.com/tech/8051/ide/fat32.html
 - FAT Spec: https://academy.cba.mit.edu/classes/networking_communications/SD/FAT.pdf
+
+### kaitai binary format "explorer"
+- kaitai: https://kaitai.io/
+- kaitai web ide: https://ide.kaitai.io/

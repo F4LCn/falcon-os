@@ -8,6 +8,7 @@ image:
 	mount -t vfat,fat=16 /dev/loop0 img
 	mkdir -p img/BIOS/BOOT
 	cp stage2.bin img/BIOS/BOOT/STAGE2.BIN
+	cp boot.config img/BOOT.CON
 	umount img
 	rmdir img
 	losetup -D
