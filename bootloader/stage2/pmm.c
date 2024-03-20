@@ -4,9 +4,11 @@
 #include "bootinfo.h"
 #include "console.h"
 
-mmap_entry *pm_entries;
-u32 pm_entries_count = 0;
-bool allocation_enabled = FALSE;
+static mmap_entry *pm_entries;
+static u32 pm_entries_count = 0;
+static u64 total_memory = 0;
+static u64 total_free_memory = 0;
+static bool allocation_enabled = FALSE;
 
 bool pm_alloc_range(u64 alloc_start, u32 alloc_size, u8 type, bool force);
 
@@ -28,7 +30,9 @@ i8 *type_to_str(u32 type) {
 }
 
 void pm_print() {
-  printf("Found %d mmap entries.", pm_entries_count);
+  printf("Found %d mmap entries. Total memory: %uGB, Total free memory: %uGB\n",
+         pm_entries_count, (u32)(total_memory / (1024 * 1024 * 1024)),
+         (u32)(total_free_memory / (1024 * 1024 * 1024)));
   printf("Physical memory map:\n");
   for (u32 i = 0; i < pm_entries_count; ++i) {
     mmap_entry *entry = &pm_entries[i];
@@ -103,9 +107,19 @@ void pm_init() {
   pm_alloc_range((u64)&bootinfo, ARCH_PAGE_SIZE, MMAP_BOOTINFO, TRUE);
   pm_alloc_range(0xB000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
   pm_alloc_range(0xC000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
-  pm_alloc_range(bootinfo.fb_ptr, bootinfo.fb_height * bootinfo.fb_scanline_bytes, MMAP_FRAMEBUFFER, TRUE);
+  pm_alloc_range(bootinfo.fb_ptr,
+                 bootinfo.fb_height * bootinfo.fb_scanline_bytes,
+                 MMAP_FRAMEBUFFER, TRUE);
 
   sanitize_entries();
+
+  for (u32 i = 0; i < pm_entries_count; ++i) {
+    total_memory += pm_entry_size(&pm_entries[i]);
+    if (pm_entry_type(&pm_entries[i]) == MMAP_FREE) {
+      total_free_memory += pm_entry_size(&pm_entries[i]);
+    }
+  }
+
   allocation_enabled = TRUE;
 }
 

@@ -219,9 +219,20 @@ prot_read_sectors:
     push esi
     push edi
 
-; todo check that count is not 0
+    mov edx, ecx
+    shr edx, 3
+    cmp edx, 0
+    jbe .zero_pages
+    mov word [lba_packet.count], 8
+    jmp .read_next_page
+.zero_pages:
+    mov edx, 1
     mov word [lba_packet.count], cx
+    
+.read_next_page:
+    dec edx
     mov dword [lba_packet.sector0], eax
+    push edx
 ; drop into real mode
     go_real
     xor bx, bx
@@ -238,11 +249,15 @@ prot_read_sectors:
 .read_ok:
     go_prot
 align 8
+    pop edx
     mov esi, lba_buffer
     xor ecx, ecx
     mov cx, word [lba_packet.count]
     shl ecx, 7
     repnz movsd
+    add eax, 8
+    and edx, edx
+    jnz .read_next_page
     pop edi
     pop esi
     pop edx

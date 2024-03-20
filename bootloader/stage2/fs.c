@@ -10,8 +10,8 @@
 const i8 efi_guid[16] = {0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11,
                          0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b};
 
-partition_info boot_partition;
-fat_info fat_fs_info;
+static partition_info boot_partition;
+static fat_info fat_fs_info;
 
 partition_info get_boot_partition_from_gpt() {
   gpt_header *gpt =
@@ -46,13 +46,13 @@ partition_info get_boot_partition_from_gpt() {
   return result;
 }
 
-inline u16 get_root_directory_sectors(const bios_param_block *bpb) {
+inline static u16 get_root_directory_sectors(const bios_param_block *bpb) {
   u16 root_dir_sectors =
       N_UPPER(bpb->root_entry_count * sizeof(dir_entry), bpb->bytes_per_sector);
   return root_dir_sectors;
 }
 
-inline u32 get_fat_size(const bios_param_block *bpb) {
+inline static u32 get_fat_size(const bios_param_block *bpb) {
   u32 fat_size;
   if (bpb->table_size_16 != 0) {
     fat_size = bpb->table_size_16;
@@ -62,7 +62,7 @@ inline u32 get_fat_size(const bios_param_block *bpb) {
   return fat_size;
 }
 
-inline u32 get_total_sectors(const bios_param_block *bpb) {
+inline static u32 get_total_sectors(const bios_param_block *bpb) {
   u32 total_sectors;
   if (bpb->total_sectors_16 != 0) {
     total_sectors = bpb->total_sectors_16;
@@ -80,17 +80,13 @@ fat_info fat_init(const partition_info *boot_partition) {
   bios_param_block *bpb =
       (bios_param_block *)pm_alloc(sizeof(bios_param_block), MMAP_RECLAIMABLE);
   bios_read_sectors((u32)boot_partition->partition_start_lba, (u32)bpb, 1);
+  printf("BPB: 0x%x (len=%u)\n", (u32)bpb, sizeof(bios_param_block));
   u16 root_dir_sectors = get_root_directory_sectors(bpb);
-  u32 fat_size = get_fat_size(bpb);
-  u32 total_sectors;
-  if (bpb->total_sectors_16 != 0) {
-    total_sectors = bpb->total_sectors_16;
-  } else {
-    total_sectors = bpb->total_sectors_32;
-  }
+  u32 fat_sectors_count = get_fat_size(bpb);
+  u32 total_sectors = get_total_sectors(bpb);
   u32 data_sectors =
-      total_sectors - (bpb->rsrvd_sector_count + fat_size * bpb->table_count +
-                       root_dir_sectors);
+      total_sectors - (bpb->rsrvd_sector_count +
+                       fat_sectors_count * bpb->table_count + root_dir_sectors);
   u32 cluster_count = data_sectors / bpb->sectors_per_cluster;
 
   if (cluster_count < 4085 || cluster_count >= 65525) {
@@ -101,16 +97,20 @@ fat_info fat_init(const partition_info *boot_partition) {
 
   u32 fat_start_lba =
       (u32)boot_partition->partition_start_lba + bpb->rsrvd_sector_count;
-  u16 *fat = (u16 *)pm_alloc(fat_size, MMAP_RECLAIMABLE);
-  bios_read_sectors(fat_start_lba, (u32)fat,
-                    (u16)N_UPPER(fat_size, SECTOR_SIZE));
-  printf("FAT: 0x%x 0x%x 0x%x 0x%x\n", fat[0], fat[1], fat[2], fat[3]);
+  u16 *fat = (u16 *)pm_alloc(fat_sectors_count * SECTOR_SIZE, MMAP_RECLAIMABLE);
+  bios_read_sectors(
+      fat_start_lba, (u32)fat,
+      (u16)ALIGN_UP(fat_sectors_count, ARCH_PAGE_SIZE / SECTOR_SIZE));
+  printf("FAT: 0x%x (len=%u)\n", (u32)fat, fat_sectors_count * SECTOR_SIZE);
 
   u32 root_dir_start = (u32)boot_partition->partition_start_lba +
-                       bpb->rsrvd_sector_count + fat_size * bpb->table_count;
+                       bpb->rsrvd_sector_count +
+                       fat_sectors_count * bpb->table_count;
   dir_entry *root_dir = (dir_entry *)pm_alloc(
       bpb->root_entry_count * sizeof(dir_entry), MMAP_RECLAIMABLE);
   bios_read_sectors(root_dir_start, (u32)root_dir, (u16)root_dir_sectors);
+  printf("ROOT_DIR: 0x%x (len=%u)\n", (u32)root_dir,
+         bpb->root_entry_count * sizeof(dir_entry));
   fat_info result = {.bpb = bpb, .fat = fat, .root_directory = root_dir};
   return result;
 }

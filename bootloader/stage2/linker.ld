@@ -6,8 +6,8 @@ bootinfo = 0xA000;
 
 SECTIONS
 {
-	PROVIDE (__executable_start = 0xc20);
-	. = 0xc20;
+	PROVIDE (__executable_start = 0xc40);
+	. = 0xc40;
 	.text	:
 	{
 		*(.text .stub .text.* .gnu.linkonce.t.*)
