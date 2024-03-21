@@ -14,8 +14,7 @@ static partition_info boot_partition;
 static fat_info fat_fs_info;
 
 partition_info get_boot_partition_from_gpt() {
-  gpt_header *gpt =
-      (gpt_header *)pm_alloc(sizeof(gpt_header), MMAP_RECLAIMABLE);
+  gpt_header *gpt = pm_alloc(sizeof(gpt_header), MMAP_RECLAIMABLE);
   printf("Allocated page at: 0x%X\n", (u64)gpt);
   bios_read_sectors(1, (u32)gpt, 8);
   printf("GPT: Sig=0x%X, PartSt=0x%X, PartCnt=%d\n", *(u64 *)gpt->signature,
@@ -77,8 +76,7 @@ fat_info fat_init(const partition_info *boot_partition) {
     printf("Error: bad partition type\n");
   }
 
-  bios_param_block *bpb =
-      (bios_param_block *)pm_alloc(sizeof(bios_param_block), MMAP_RECLAIMABLE);
+  bios_param_block *bpb = pm_alloc(sizeof(bios_param_block), MMAP_RECLAIMABLE);
   bios_read_sectors((u32)boot_partition->partition_start_lba, (u32)bpb, 1);
   printf("BPB: 0x%x (len=%u)\n", (u32)bpb, sizeof(bios_param_block));
   u16 root_dir_sectors = get_root_directory_sectors(bpb);
@@ -97,7 +95,7 @@ fat_info fat_init(const partition_info *boot_partition) {
 
   u32 fat_start_lba =
       (u32)boot_partition->partition_start_lba + bpb->rsrvd_sector_count;
-  u16 *fat = (u16 *)pm_alloc(fat_sectors_count * SECTOR_SIZE, MMAP_RECLAIMABLE);
+  u16 *fat = pm_alloc(fat_sectors_count * SECTOR_SIZE, MMAP_RECLAIMABLE);
   bios_read_sectors(
       fat_start_lba, (u32)fat,
       (u16)ALIGN_UP(fat_sectors_count, ARCH_PAGE_SIZE / SECTOR_SIZE));
@@ -106,8 +104,8 @@ fat_info fat_init(const partition_info *boot_partition) {
   u32 root_dir_start = (u32)boot_partition->partition_start_lba +
                        bpb->rsrvd_sector_count +
                        fat_sectors_count * bpb->table_count;
-  dir_entry *root_dir = (dir_entry *)pm_alloc(
-      bpb->root_entry_count * sizeof(dir_entry), MMAP_RECLAIMABLE);
+  dir_entry *root_dir =
+      pm_alloc(bpb->root_entry_count * sizeof(dir_entry), MMAP_RECLAIMABLE);
   bios_read_sectors(root_dir_start, (u32)root_dir, (u16)root_dir_sectors);
   printf("ROOT_DIR: 0x%x (len=%u)\n", (u32)root_dir,
          bpb->root_entry_count * sizeof(dir_entry));
@@ -129,7 +127,7 @@ void *read_file_from_root(const i8 *filename) {
         entry->attributes & FILE_ATTRIB_DIR ||
         entry->attributes & FILE_ATTRIB_HIDDEN)
       continue;
-    if (__strncmp((const i8 *)entry->name, filename, 11) == 0) {
+    if (__strncmp((const i8 *)entry->name, filename, filename_len) == 0) {
       found = TRUE;
       break;
     }
