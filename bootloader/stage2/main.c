@@ -1,6 +1,7 @@
 #include "console.h"
 #include "fs.h"
 #include "pmm.h"
+#include "string.h"
 
 void _cmain(void) {
   pm_init();
@@ -8,9 +9,15 @@ void _cmain(void) {
 
   fs_init();
 
-  const i8 *config_filename = "BOOT    CON";
-  u8 *config = read_file_from_root(config_filename);
-  printf("config= %s\n", config);
+  i8 *str = "this is an example";
+  i8 *tok = __strtok(str, " ");
+  do {
+    printf("Tok=%s\n", tok);
+  } while ((tok = __strtok(NULL, " ")) != NULL);
+
+  const i8 *config_path = "/BIOS/BOOT/BOOT    CON";
+  u8 *config = read_file(config_path);
+  printf("config - %s\n", config);
 
   while (1)
     ;

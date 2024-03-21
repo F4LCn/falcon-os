@@ -21,5 +21,6 @@ typedef struct {
 
 void fs_init();
 void *read_file_from_root(const i8 *filename);
+void *read_file(const i8* path);
 
 #endif

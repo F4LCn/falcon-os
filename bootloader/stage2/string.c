@@ -105,3 +105,40 @@ u32 __hltoa(u64 val, i8 *buffer) {
   written += __htoa(w.u32.lo, buffer + written);
   return written;
 }
+
+i8 *__strtok(i8 *str, const i8 *delim) {
+  static i8 *last_str;
+  if (str == NULL && (str = last_str) == NULL) {
+    return NULL;
+  }
+
+cont:
+  for (i8 *dc = (i8 *)delim; *dc != 0; dc++) {
+    if (*str == *dc) {
+      str++;
+      goto cont;
+    }
+  }
+
+  if (*str == 0) {
+    return NULL;
+  }
+  i8 *tok = str;
+
+  for (;;) {
+    i8 *sc = str++;
+    i8 *dc = (i8 *)delim;
+    do {
+      if (*sc == *dc) {
+        if (*dc == 0) {
+          str = NULL;
+        } else {
+          str[-1] = 0;
+        }
+        last_str = str;
+        return tok;
+      }
+      dc++;
+    } while (*dc != 0);
+  }
+}

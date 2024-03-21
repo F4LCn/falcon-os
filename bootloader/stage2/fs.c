@@ -12,6 +12,7 @@ const i8 efi_guid[16] = {0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11,
 
 static partition_info boot_partition;
 static fat_info fat_fs_info;
+static const i8 *path_separator = "/";
 
 partition_info get_boot_partition_from_gpt() {
   gpt_header *gpt = pm_alloc(sizeof(gpt_header), MMAP_RECLAIMABLE);
@@ -113,6 +114,24 @@ fat_info fat_init(const partition_info *boot_partition) {
   return result;
 }
 
+static inline void load_dir_entry(const dir_entry *entry, u32 load_addr) {
+  u32 index = 0;
+  u32 current_cluster = entry->first_cluster;
+  u32 data_start_sector =
+      (u32)boot_partition.partition_start_lba +
+      fat_fs_info.bpb->rsrvd_sector_count +
+      get_fat_size(fat_fs_info.bpb) * fat_fs_info.bpb->table_count +
+      get_root_directory_sectors(fat_fs_info.bpb);
+  do {
+    u32 cluster_sector =
+        data_start_sector +
+        (current_cluster - 2) * fat_fs_info.bpb->sectors_per_cluster;
+    bios_read_sectors(cluster_sector, load_addr + index,
+                      fat_fs_info.bpb->sectors_per_cluster);
+    current_cluster = fat_fs_info.fat[current_cluster];
+  } while (current_cluster < 0xFFF8);
+}
+
 void *read_file_from_root(const i8 *filename) {
   u32 filename_len = __strlen(filename);
   if (filename_len > 11) {
@@ -138,23 +157,48 @@ void *read_file_from_root(const i8 *filename) {
   }
 
   u8 *contents = pm_alloc(entry->file_size, MMAP_RECLAIMABLE);
-  u32 index = 0;
-  u32 current_cluster = entry->first_cluster;
-  u32 data_start_sector =
-      (u32)boot_partition.partition_start_lba +
-      fat_fs_info.bpb->rsrvd_sector_count +
-      get_fat_size(fat_fs_info.bpb) * fat_fs_info.bpb->table_count +
-      get_root_directory_sectors(fat_fs_info.bpb);
-  do {
-    u32 cluster_sector =
-        data_start_sector +
-        (current_cluster - 2) * fat_fs_info.bpb->sectors_per_cluster;
-    bios_read_sectors(cluster_sector, (u32)(contents + index),
-                      fat_fs_info.bpb->sectors_per_cluster);
-    current_cluster = fat_fs_info.fat[current_cluster];
-  } while (current_cluster < 0xFFF8);
-
+  load_dir_entry(entry, (u32)contents);
   return contents;
+}
+
+void *read_file(const i8 *path) {
+  dir_entry *current_dir;
+  if (*path == '/') {
+    current_dir = fat_fs_info.root_directory;
+    path++;
+  } else {
+    printf("Error: relative paths not handled\n");
+    while (1)
+      ;
+  }
+  i8 *path_component = __strtok((i8 *)path, path_separator);
+  void *dir_load_buffer = pm_alloc(4 * ARCH_PAGE_SIZE, MMAP_RECLAIMABLE);
+  do {
+    u32 path_component_len = __strlen(path_component);
+    bool found = FALSE;
+    dir_entry *entry = current_dir;
+    for (; entry->name[0] != 0; entry++) {
+      if (entry->attributes & FILE_ATTRIB_VOLUME)
+        continue;
+      if (__strncmp((const i8 *)entry->name, path_component,
+                    path_component_len) == 0) {
+        found = TRUE;
+        break;
+      }
+    }
+    if (!found) {
+      return NULL;
+    }
+    if (entry->attributes & FILE_ATTRIB_DIR) {
+      load_dir_entry(entry, (u32)dir_load_buffer);
+      current_dir = dir_load_buffer;
+    } else {
+      void *contents = pm_alloc(entry->file_size, MMAP_RECLAIMABLE);
+      load_dir_entry(entry, (u32)contents);
+      return contents;
+    }
+  } while ((path_component = __strtok(NULL, path_separator)) != NULL);
+  return NULL;
 }
 
 void fs_init() {

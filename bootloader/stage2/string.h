@@ -8,5 +8,6 @@ void __memcpy(void *dst, const void *src, u32 len);
 u32 __itoa(i32 val, i8 *buffer);
 u32 __htoa(u32 val, i8 *buffer);
 u32 __hltoa(u64 val, i8 *buffer);
+i8* __strtok(i8* str, const i8* delim);
 
 #endif // !__STRING__
