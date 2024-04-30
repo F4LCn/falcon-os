@@ -19,8 +19,18 @@ typedef struct {
   dir_entry *root_directory;
 } fat_info;
 
+typedef struct {
+  bool found;
+  u16 first_cluster;
+  u32 size;
+} file_info;
+
 void fs_init();
 void *read_file_from_root(const i8 *filename);
-void *read_file(const i8* path);
+bool read_file(const i8* path, void* load_addr);
+
+bool read_file2(const i8* path, void* load_addr);
+bool read_file3(const file_info* file_info, void* load_addr);
+file_info find_file(const i8* path);
 
 #endif

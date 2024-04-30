@@ -5,15 +5,17 @@ use16
 ; 0x0500 - 0x07FF => stage 2 stack
 ; 0x0800 - 0x9FFF => stage 2 code (loaded by stage 1)
 ; 0xA000 - 0xAFFF => bootinfo (at max)
-; 0xB000 - 0xBFFF => tmp_buffer for VBE info
-; 0xC000 - ?????? => buffers?
+; 0xB000 - 0xBFFF => kernel environment config
+; 0xC000 - 0xCFFF => tmp_buffer for VBE info
+; 0xD000 - 0xDFFF => lba tmp buffer
+; 0xE000 - ?????? => buffers?
 
 include "macros.inc"
 include "structs.inc"
 
 bootinfo = 0xA000
-tmp_buffer = 0xB000
-lba_buffer = 0xC000
+tmp_buffer = 0xC000
+lba_buffer = 0xD000
 
 magic:          db 0F4h, 01Ch
 start:

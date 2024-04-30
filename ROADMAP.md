@@ -13,12 +13,12 @@
     - [x] read partition table
     - [x] FAT16 filesystem support
     - [x] read some config file given a path
-    - [ ] parsing config file
-    - [ ] load the kernel executable as defined in config
+    - [x] parsing config file
+    - [x] load the kernel executable as defined in config
     - [ ] elf executable support
     - [ ] init paging (first look at virtual mem mapping)
     - [ ] switch to long mode
-    - [ ] handoff execution to kernel (send data to kernel somehow)
+    - [ ] handoff execution to kernel (send data to kernel somehow, solved)
 
 ## bootloading (UEFI)
 - maybe ?? 

@@ -3,6 +3,7 @@ OUTPUT_ARCH(i386)
 ENTRY(_cmain)
 
 bootinfo = 0xA000;
+environment = 0xB000;
 
 SECTIONS
 {

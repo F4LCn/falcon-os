@@ -114,9 +114,9 @@ fat_info fat_init(const partition_info *boot_partition) {
   return result;
 }
 
-static inline void load_dir_entry(const dir_entry *entry, u32 load_addr) {
+static inline void load_dir_entry(u16 first_cluster, u32 load_addr) {
   u32 index = 0;
-  u32 current_cluster = entry->first_cluster;
+  u32 current_cluster = first_cluster;
   u32 data_start_sector =
       (u32)boot_partition.partition_start_lba +
       fat_fs_info.bpb->rsrvd_sector_count +
@@ -157,11 +157,11 @@ void *read_file_from_root(const i8 *filename) {
   }
 
   u8 *contents = pm_alloc(entry->file_size, MMAP_RECLAIMABLE);
-  load_dir_entry(entry, (u32)contents);
+  load_dir_entry(entry->first_cluster, (u32)contents);
   return contents;
 }
 
-void *read_file(const i8 *path) {
+bool read_file(const i8 *path, void *addr) {
   dir_entry *current_dir;
   if (*path == '/') {
     current_dir = fat_fs_info.root_directory;
@@ -187,18 +187,77 @@ void *read_file(const i8 *path) {
       }
     }
     if (!found) {
-      return NULL;
+      return FALSE;
     }
     if (entry->attributes & FILE_ATTRIB_DIR) {
-      load_dir_entry(entry, (u32)dir_load_buffer);
+      load_dir_entry(entry->first_cluster, (u32)dir_load_buffer);
       current_dir = dir_load_buffer;
     } else {
-      void *contents = pm_alloc(entry->file_size, MMAP_RECLAIMABLE);
-      load_dir_entry(entry, (u32)contents);
-      return contents;
+      void *contents = addr;
+      load_dir_entry(entry->first_cluster, (u32)contents);
+      return TRUE;
     }
   } while ((path_component = __strtok(NULL, path_separator)) != NULL);
-  return NULL;
+  return FALSE;
+}
+
+file_info find_file(const i8 *path) {
+  file_info info = {.found = FALSE};
+  dir_entry *current_dir;
+  if (*path == '/') {
+    current_dir = fat_fs_info.root_directory;
+    path++;
+  } else {
+    printf("Error: relative paths not handled\n");
+    while (1)
+      ;
+  }
+  i8 *path_component = __strtok((i8 *)path, path_separator);
+  void *dir_load_buffer = pm_alloc(4 * ARCH_PAGE_SIZE, MMAP_RECLAIMABLE);
+  do {
+    u32 path_component_len = __strlen(path_component);
+    bool found = FALSE;
+    dir_entry *entry = current_dir;
+    for (; entry->name[0] != 0; entry++) {
+      if (entry->attributes & FILE_ATTRIB_VOLUME)
+        continue;
+      if (__strncmp((const i8 *)entry->name, path_component,
+                    path_component_len) == 0) {
+        found = TRUE;
+        break;
+      }
+    }
+    if (!found) {
+      return info;
+    }
+    if (entry->attributes & FILE_ATTRIB_DIR) {
+      load_dir_entry(entry->first_cluster, (u32)dir_load_buffer);
+      current_dir = dir_load_buffer;
+    } else {
+      info.found = TRUE;
+      info.size = entry->file_size;
+      info.first_cluster = entry->first_cluster;
+      return info;
+    }
+  } while ((path_component = __strtok(NULL, path_separator)) != NULL);
+  return info;
+}
+
+bool read_file2(const i8 *path, void *addr) {
+  file_info info = find_file(path);
+  if (!info.found) {
+    return FALSE;
+  }
+
+  void *contents = addr;
+  load_dir_entry(info.first_cluster, (u32)contents);
+  return TRUE;
+}
+
+bool read_file3(const file_info *file_info, void *addr) {
+  void *contents = addr;
+  load_dir_entry(file_info->first_cluster, (u32)contents);
+  return TRUE;
 }
 
 void fs_init() {

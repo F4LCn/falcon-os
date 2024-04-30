@@ -4,6 +4,8 @@
 #include "bootinfo.h"
 #include "console.h"
 
+extern char environment[ARCH_PAGE_SIZE];
+
 static mmap_entry *pm_entries;
 static u32 pm_entries_count = 0;
 static u64 total_memory = 0;
@@ -103,10 +105,11 @@ void pm_init() {
 
   pm_alloc_range(0x0, 0x500, MMAP_USED, TRUE);
   pm_alloc_range(0x500, 0x800 - 0x500, MMAP_RECLAIMABLE, TRUE);
-  pm_alloc_range(0x800, 60 * ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
+  pm_alloc_range(0x800, 76 * ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
   pm_alloc_range((u64)&bootinfo, ARCH_PAGE_SIZE, MMAP_BOOTINFO, TRUE);
-  pm_alloc_range(0xB000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
+  pm_alloc_range((u64)&environment, ARCH_PAGE_SIZE, MMAP_BOOTINFO, TRUE);
   pm_alloc_range(0xC000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
+  pm_alloc_range(0xD000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
   pm_alloc_range(bootinfo.fb_ptr,
                  bootinfo.fb_height * bootinfo.fb_scanline_bytes,
                  MMAP_FRAMEBUFFER, TRUE);
