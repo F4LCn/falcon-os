@@ -161,46 +161,6 @@ void *read_file_from_root(const i8 *filename) {
   return contents;
 }
 
-bool read_file(const i8 *path, void *addr) {
-  dir_entry *current_dir;
-  if (*path == '/') {
-    current_dir = fat_fs_info.root_directory;
-    path++;
-  } else {
-    printf("Error: relative paths not handled\n");
-    while (1)
-      ;
-  }
-  i8 *path_component = __strtok((i8 *)path, path_separator);
-  void *dir_load_buffer = pm_alloc(4 * ARCH_PAGE_SIZE, MMAP_RECLAIMABLE);
-  do {
-    u32 path_component_len = __strlen(path_component);
-    bool found = FALSE;
-    dir_entry *entry = current_dir;
-    for (; entry->name[0] != 0; entry++) {
-      if (entry->attributes & FILE_ATTRIB_VOLUME)
-        continue;
-      if (__strncmp((const i8 *)entry->name, path_component,
-                    path_component_len) == 0) {
-        found = TRUE;
-        break;
-      }
-    }
-    if (!found) {
-      return FALSE;
-    }
-    if (entry->attributes & FILE_ATTRIB_DIR) {
-      load_dir_entry(entry->first_cluster, (u32)dir_load_buffer);
-      current_dir = dir_load_buffer;
-    } else {
-      void *contents = addr;
-      load_dir_entry(entry->first_cluster, (u32)contents);
-      return TRUE;
-    }
-  } while ((path_component = __strtok(NULL, path_separator)) != NULL);
-  return FALSE;
-}
-
 file_info find_file(const i8 *path) {
   file_info info = {.found = FALSE};
   dir_entry *current_dir;
@@ -243,7 +203,7 @@ file_info find_file(const i8 *path) {
   return info;
 }
 
-bool read_file2(const i8 *path, void *addr) {
+bool read_file(const i8 *path, void *addr) {
   file_info info = find_file(path);
   if (!info.found) {
     return FALSE;
@@ -254,7 +214,7 @@ bool read_file2(const i8 *path, void *addr) {
   return TRUE;
 }
 
-bool read_file3(const file_info *file_info, void *addr) {
+bool read_file_from_info(const file_info *file_info, void *addr) {
   void *contents = addr;
   load_dir_entry(file_info->first_cluster, (u32)contents);
   return TRUE;

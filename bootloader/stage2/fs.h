@@ -27,10 +27,9 @@ typedef struct {
 
 void fs_init();
 void *read_file_from_root(const i8 *filename);
-bool read_file(const i8* path, void* load_addr);
 
-bool read_file2(const i8* path, void* load_addr);
-bool read_file3(const file_info* file_info, void* load_addr);
+bool read_file(const i8* path, void* load_addr);
+bool read_file_from_info(const file_info* file_info, void* load_addr);
 file_info find_file(const i8* path);
 
 #endif

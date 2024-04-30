@@ -8,35 +8,32 @@ const i8 *const KERNEL_ENTRY = "KERNEL=";
 
 extern u8 environment[ARCH_PAGE_SIZE];
 
-void load_kernel_config();
-void *load_kernel();
+void load_kernel_environment();
+void *load_kernel_file();
 
 void _cmain(void) {
   pm_init();
+
+#ifdef DEBUG
   pm_print();
+#endif
 
   fs_init();
 
-  // i8 *str = "this is an example";
-  // i8 *tok = __strtok(str, " ");
-  // do {
-  //   printf("Tok=%s\n", tok);
-  // } while ((tok = __strtok(NULL, " ")) != NULL);
-
-  load_kernel_config();
-  void* kernel_file = load_kernel();
-  printf("kernel file: %x \n", *((u32*)kernel_file));
+  load_kernel_environment();
+  void *kernel_file = load_kernel_file();
+  printf("kernel file: %x \n", *((u32 *)kernel_file));
 
   while (1)
     ;
 }
 
-void load_kernel_config() {
+void load_kernel_environment() {
   read_file(CONFIG_FILE_PATH, (void *)&environment);
   printf("config - %s\n", environment);
 }
 
-void *load_kernel() {
+void *load_kernel_file() {
   u8 *cursor = environment;
 
   u8 kernel_path[256];
@@ -81,6 +78,6 @@ void *load_kernel() {
          kernel_file_info.first_cluster);
 
   void *kernel_file = pm_alloc(kernel_file_info.size, MMAP_RECLAIMABLE);
-  read_file3(&kernel_file_info, kernel_file);
+  read_file_from_info(&kernel_file_info, kernel_file);
   return kernel_file;
 }
