@@ -14,6 +14,9 @@ typedef u8 bool;
 #define FALSE 0
 #define TRUE 1
 
-#define NULL (void*)0
+#define NULL (void *)0
+
+#define KB(x) ((x) * 1024)
+#define MB(x) (KB((x)) * 1024)
 
 #endif // !_TYPES_

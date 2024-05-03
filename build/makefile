@@ -10,7 +10,7 @@ image:
 	mkdir -p img/SYS
 	cp stage2.bin img/BIOS/BOOT/STAGE2.BIN
 	cp boot.config img/SYS/KERNEL.CON
-	cp kernel_placeholder.txt img/SYS/KERNEL64.elf
+	cp kernel64.elf img/SYS/KERNEL64.elf
 	umount img
 	rmdir img
 	losetup -D

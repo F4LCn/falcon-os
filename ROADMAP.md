@@ -15,7 +15,7 @@
     - [x] read some config file given a path
     - [x] parsing config file
     - [x] load the kernel executable as defined in config
-    - [ ] elf executable support
+    - [x] elf executable support
     - [ ] init paging (first look at virtual mem mapping)
     - [ ] switch to long mode
     - [ ] handoff execution to kernel (send data to kernel somehow, solved)
