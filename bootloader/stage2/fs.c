@@ -16,10 +16,17 @@ static const i8 *path_separator = "/";
 
 partition_info get_boot_partition_from_gpt() {
   gpt_header *gpt = pm_alloc(sizeof(gpt_header), MMAP_RECLAIMABLE);
+
+#ifdef DEBUG
   printf("Allocated page at: 0x%X\n", (u64)gpt);
+#endif
+
   bios_read_sectors(1, (u32)gpt, 8);
+
+#ifdef DEBUG
   printf("GPT: Sig=0x%X, PartSt=0x%X, PartCnt=%d\n", *(u64 *)gpt->signature,
          gpt->partition_entries_start, gpt->partition_entries_count);
+#endif
   u32 partition_entries_start = (u32)gpt->partition_entries_start;
   partition_entry *entry =
       (partition_entry *)((u32)gpt +
@@ -39,7 +46,10 @@ partition_info get_boot_partition_from_gpt() {
       ;
   }
 
+#ifdef DEBUG
   printf("Found EFI partition at LBA 0x%X\n", entry->start_lba);
+#endif
+
   partition_info result = {.type = EFI_SYSTEM,
                            .partition_start_lba = entry->start_lba,
                            .partition_end_lba = entry->end_lba};
@@ -79,7 +89,11 @@ fat_info fat_init(const partition_info *boot_partition) {
 
   bios_param_block *bpb = pm_alloc(sizeof(bios_param_block), MMAP_RECLAIMABLE);
   bios_read_sectors((u32)boot_partition->partition_start_lba, (u32)bpb, 1);
+
+#ifdef DEBUG
   printf("BPB: 0x%x (len=%u)\n", (u32)bpb, sizeof(bios_param_block));
+#endif
+
   u16 root_dir_sectors = get_root_directory_sectors(bpb);
   u32 fat_sectors_count = get_fat_size(bpb);
   u32 total_sectors = get_total_sectors(bpb);
@@ -100,7 +114,10 @@ fat_info fat_init(const partition_info *boot_partition) {
   bios_read_sectors(
       fat_start_lba, (u32)fat,
       (u16)ALIGN_UP(fat_sectors_count, ARCH_PAGE_SIZE / SECTOR_SIZE));
+
+#ifdef DEBUG
   printf("FAT: 0x%x (len=%u)\n", (u32)fat, fat_sectors_count * SECTOR_SIZE);
+#endif
 
   u32 root_dir_start = (u32)boot_partition->partition_start_lba +
                        bpb->rsrvd_sector_count +
@@ -108,8 +125,12 @@ fat_info fat_init(const partition_info *boot_partition) {
   dir_entry *root_dir =
       pm_alloc(bpb->root_entry_count * sizeof(dir_entry), MMAP_RECLAIMABLE);
   bios_read_sectors(root_dir_start, (u32)root_dir, (u16)root_dir_sectors);
+
+#ifdef DEBUG
   printf("ROOT_DIR: 0x%x (len=%u)\n", (u32)root_dir,
          bpb->root_entry_count * sizeof(dir_entry));
+#endif
+
   fat_info result = {.bpb = bpb, .fat = fat, .root_directory = root_dir};
   return result;
 }

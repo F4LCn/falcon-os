@@ -35,7 +35,10 @@ void _cmain(void) {
 
 void load_kernel_environment() {
   read_file(CONFIG_FILE_PATH, (void *)&environment);
+
+#ifdef DEBUG
   printf("config - %s\n", environment);
+#endif
 }
 
 void *load_kernel_file() {
@@ -56,7 +59,11 @@ void *load_kernel_file() {
   }
 
   if (*cursor) {
+
+#ifdef DEBUG
     printf("Found kernel file entry in the config\n");
+#endif
+
     cursor += __strlen(KERNEL_ENTRY);
     __memset(kernel_path, 0, 256);
     u32 i = 0;
@@ -69,7 +76,9 @@ void *load_kernel_file() {
     kernel_path[i] = 0;
   }
 
+#ifdef DEBUG
   printf("Loading kernel from path %s\n", kernel_path);
+#endif
 
   const file_info kernel_file_info = find_file((const i8 *)kernel_path);
 
@@ -79,7 +88,7 @@ void *load_kernel_file() {
       ;
   }
 
-  printf("Found kernel file (SZ=%d, FC=%d)\n", kernel_file_info.size,
+  printf("INFO: Found kernel file (SZ=%d, FC=%d)\n", kernel_file_info.size,
          kernel_file_info.first_cluster);
 
   void *kernel_file = pm_alloc(kernel_file_info.size, MMAP_RECLAIMABLE);
