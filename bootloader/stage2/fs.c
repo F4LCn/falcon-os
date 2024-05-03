@@ -129,6 +129,8 @@ static inline void load_dir_entry(u16 first_cluster, u32 load_addr) {
     bios_read_sectors(cluster_sector, load_addr + index,
                       fat_fs_info.bpb->sectors_per_cluster);
     current_cluster = fat_fs_info.fat[current_cluster];
+    index += fat_fs_info.bpb->sectors_per_cluster *
+             fat_fs_info.bpb->bytes_per_sector;
   } while (current_cluster < 0xFFF8);
 }
 
