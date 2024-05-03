@@ -1,4 +1,5 @@
 #ifndef __STRING__
+#define __STRING__
 #include "types.h"
 
 u32 __strlen(const i8 *str);

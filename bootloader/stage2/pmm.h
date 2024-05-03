@@ -1,6 +1,7 @@
 #ifndef __PMM__
-#include "types.h"
+#define __PMM__
 #include "arch/x64.h"
+#include "types.h"
 
 #define PM_PTR_MASK 0xFFFFFFFFFFFFFF00
 #define PM_TYPE_MASK 0xFF
@@ -11,7 +12,7 @@
 #define pm_entry_end(x) (pm_entry_start(x) + pm_entry_size(x))
 
 void pm_init();
-void* pm_alloc(u32 size, u8 type);
+void *pm_alloc(u32 size, u8 type);
 void pm_print();
 
 #endif
