@@ -20,6 +20,7 @@
 #define MMAP_BOOTINFO 4    /* memory used by the bootinfo struct */
 #define MMAP_FRAMEBUFFER 5 /* memory used by the framebuffer */
 #define MMAP_KERNEL_MODULE 6 /* kernel module */
+#define MMAP_PAGING 7 /* kernel module */
 
 /* mmap entry, type is stored in least significant byte of ptr
  * but all map entries should be page aligned (1 << 12)

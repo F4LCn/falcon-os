@@ -3,6 +3,7 @@
 #include "fs.h"
 #include "pmm.h"
 #include "string.h"
+#include "vmm.h"
 
 const i8 *const CONFIG_FILE_PATH = "/SYS/KERNEL  CON";
 const i8 *const KERNEL_ENTRY = "KERNEL=";
@@ -28,6 +29,10 @@ void _cmain(void) {
 
   void *entrypoint = load_kernel_executable(kernel_file);
   printf("Loaded kernel executable to 0x%x\n", entrypoint);
+
+  page_map addr_space = vm_create_address_space();
+  mmap_to_addr(&addr_space, (vaddr){.value = 0xABABABAB},
+               (paddr){.value = 0xDCDCDCDC}, VM_DEFAULT_FLAGS, FALSE);
 
   while (1)
     ;
