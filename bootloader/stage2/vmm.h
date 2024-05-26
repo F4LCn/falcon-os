@@ -89,6 +89,19 @@ typedef struct {
   u8 num_levels;
 } page_map;
 
+typedef struct {
+  paddr phys_addr;
+  vaddr virt_addr;
+  u64 length;
+} mapping_info;
+
+typedef struct {
+#define SEGMENT_MAPPING_COUNT 8
+  mapping_info segment_mappings[SEGMENT_MAPPING_COUNT];
+  u8 segment_mappings_count;
+  u64 entrypoint;
+} kernel_info;
+
 page_map vm_create_address_space();
 void mmap_to_addr(const page_map *page_map, vaddr vaddr, paddr paddr, u32 flags,
                   bool disable_execution);

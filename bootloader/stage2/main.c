@@ -12,7 +12,8 @@ extern u8 environment[ARCH_PAGE_SIZE];
 
 void load_kernel_environment();
 void *load_kernel_file();
-void *load_kernel_executable(void *kernel);
+kernel_info load_kernel_executable(void *kernel);
+void map_kernel_space(const page_map *kernel_space, kernel_info *kernel_info);
 
 void _cmain(void) {
   pm_init();
@@ -27,12 +28,12 @@ void _cmain(void) {
   void *kernel_file = load_kernel_file();
   printf("kernel file: %x \n", *((u32 *)kernel_file));
 
-  void *entrypoint = load_kernel_executable(kernel_file);
-  printf("Loaded kernel executable to 0x%x\n", entrypoint);
+  kernel_info krnl_info = load_kernel_executable(kernel_file);
+  printf("Loaded %d kernel segments\n", krnl_info.segment_mappings_count);
+  printf("Kernel executable entrypoint @ 0x%X\n", krnl_info.entrypoint);
 
-  page_map addr_space = vm_create_address_space();
-  mmap_to_addr(&addr_space, (vaddr){.value = 0xABABABAB},
-               (paddr){.value = 0xDCDCDCDC}, VM_DEFAULT_FLAGS, FALSE);
+  page_map kernel_space = vm_create_address_space();
+  map_kernel_space(&kernel_space, &krnl_info);
 
   while (1)
     ;
@@ -101,7 +102,7 @@ void *load_kernel_file() {
   return kernel_file;
 }
 
-void *load_elf(void *kernel) {
+kernel_info load_elf(void *kernel) {
   elf64_header *elf_header = (elf64_header *)kernel;
   if (elf_header->ident[IDENT_CLASS] != ELF_CLASS_64) {
     printf("ERROR: unsupported elf class\n");
@@ -124,9 +125,10 @@ void *load_elf(void *kernel) {
       ;
   }
 
-  // u64 kernel_start_addr = 0;
-  // u64 kernel_size = 0;
-  void *entrypoint = (void *)elf_header->entry;
+  kernel_info kernel_info;
+  __memset(&kernel_info, 0, sizeof(kernel_info));
+
+  kernel_info.entrypoint = elf_header->entry;
   elf64_phdr *program_headers =
       (elf64_phdr *)((u64)kernel + elf_header->ph_offset);
   for (u32 i = 0; i < elf_header->ph_count; ++i) {
@@ -155,15 +157,17 @@ void *load_elf(void *kernel) {
       __memset(bss_start, 0, (u32)bss_size);
     }
 
-    // if (kernel_start_addr == 0) {
-    //   kernel_start_addr = (u64)load_addr;
-    // }
-    // kernel_size += mem_size;
+    kernel_info.segment_mappings[kernel_info.segment_mappings_count].phys_addr =
+        (paddr){(u64)load_addr};
+    kernel_info.segment_mappings[kernel_info.segment_mappings_count].virt_addr =
+        (vaddr){phdr->vaddr};
+    kernel_info.segment_mappings[kernel_info.segment_mappings_count++].length =
+        mem_size;
   }
-  return entrypoint;
+  return kernel_info;
 }
 
-void *load_kernel_executable(void *kernel) {
+kernel_info load_kernel_executable(void *kernel) {
   u32 *elf_start = (u32 *)kernel;
   if (*elf_start == ELF_MAGIC) {
     return load_elf(kernel);
@@ -172,4 +176,30 @@ void *load_kernel_executable(void *kernel) {
   printf("PANIC: unknown kernel format\n");
   while (1)
     ;
+}
+
+void map_kernel_space(const page_map *kernel_space, kernel_info *kernel_info) {
+  u32 i;
+  u64 core_stack_addr = 0x0 - (u64)ARCH_PAGE_SIZE;
+  printf("Mapping core stacks to 0x%X\n", core_stack_addr);
+  for (i = 0; i < MAX_CORE_COUNT; ++i) {
+    void *core_stack = pm_alloc(ARCH_PAGE_SIZE, MMAP_KERNEL_MODULE);
+    mmap_to_addr(kernel_space, (vaddr){.value = core_stack_addr},
+                 (paddr){.value = (u64)core_stack}, VM_DEFAULT_FLAGS, FALSE);
+    core_stack_addr -= (u64)ARCH_PAGE_SIZE;
+  }
+
+  for (i = 0; i < kernel_info->segment_mappings_count; ++i) {
+    mapping_info *segment_info = &kernel_info->segment_mappings[i];
+    printf("Mapping kernel segment from 0x%X to 0x%X\n",
+           segment_info->phys_addr, segment_info->virt_addr);
+    mmap_to_addr(kernel_space, segment_info->virt_addr, segment_info->phys_addr,
+                 VM_DEFAULT_FLAGS, FALSE);
+  }
+
+  // 64MB identity mapping
+  // virt addr = phys addr
+  for (i = 0; i < MB(64); i += ARCH_PAGE_SIZE) {
+    mmap_to_addr(kernel_space, (vaddr){i}, (paddr){i}, VM_DEFAULT_FLAGS, FALSE);
+  }
 }
