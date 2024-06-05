@@ -4,6 +4,7 @@
 #include "pmm.h"
 #include "string.h"
 #include "vmm.h"
+#include "asm_helper.h"
 
 const i8 *const CONFIG_FILE_PATH = "/SYS/KERNEL  CON";
 const i8 *const KERNEL_ENTRY = "KERNEL=";
@@ -35,6 +36,9 @@ void _cmain(void) {
   page_map kernel_space = vm_create_address_space();
   map_kernel_space(&kernel_space, &krnl_info);
 
+  switch_long_mode(kernel_space.address_space_root, krnl_info.entrypoint);
+
+  printf("Something really bad happened\n");
   while (1)
     ;
 }

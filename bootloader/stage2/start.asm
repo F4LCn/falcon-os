@@ -270,8 +270,6 @@ align 8
     pop ebp
     ret
 
-
-
 include "helpers.inc"
 
 ; variables
@@ -339,6 +337,20 @@ ProtData:
     db 0x00
     db 0x92
     db 0xCF
+    db 0x00
+LongCode:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 0x9A
+    db 0xAF
+    db 0x00
+LongData:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 0x92
+    db 0xAF
     db 0x00
 GDT_END:
 

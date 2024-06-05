@@ -17,7 +17,7 @@
     - [x] load the kernel executable as defined in config
     - [x] elf executable support
     - [x] init paging (first look at virtual mem mapping)
-    - [ ] switch to long mode
+    - [x] switch to long mode
     - [ ] handoff execution to kernel (send data to kernel somehow, solved)
 
 ## bootloading (UEFI)
