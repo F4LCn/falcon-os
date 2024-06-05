@@ -105,14 +105,15 @@ void pm_init() {
 
   pm_alloc_range(0x0, 0x500, MMAP_USED, TRUE);
   pm_alloc_range(0x500, 0x800 - 0x500, MMAP_RECLAIMABLE, TRUE);
-  pm_alloc_range(0x800, 76 * ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
+  pm_alloc_range(0x800, 76 * ARCH_PAGE_SIZE + 0x800, MMAP_RECLAIMABLE, TRUE);
   pm_alloc_range((u64)&bootinfo, ARCH_PAGE_SIZE, MMAP_BOOTINFO, TRUE);
   pm_alloc_range((u64)&environment, ARCH_PAGE_SIZE, MMAP_BOOTINFO, TRUE);
   pm_alloc_range(0xC000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
   pm_alloc_range(0xD000, ARCH_PAGE_SIZE, MMAP_RECLAIMABLE, TRUE);
-  pm_alloc_range(bootinfo.fb_ptr,
-                 bootinfo.fb_height * bootinfo.fb_scanline_bytes,
-                 MMAP_FRAMEBUFFER, TRUE);
+  pm_alloc_range(
+      bootinfo.fb_ptr,
+      ALIGN_UP(bootinfo.fb_height * bootinfo.fb_scanline_bytes, ARCH_PAGE_SIZE),
+      MMAP_FRAMEBUFFER, TRUE);
 
   sanitize_entries();
 
@@ -194,6 +195,8 @@ void *pm_alloc(u32 size, u8 type) {
     printf("Error: allocations are not yet enabled");
     return NULL;
   }
+  if (size == 0)
+    return NULL;
   size = ALIGN_UP(size, ARCH_PAGE_SIZE);
   for (u32 i = 0; i < pm_entries_count; ++i) {
     if (pm_entry_type(&pm_entries[i]) != MMAP_FREE)
