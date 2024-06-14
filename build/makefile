@@ -7,8 +7,10 @@ image:
 	mkdir img
 	mount -t vfat,fat=16 /dev/loop0 img
 	mkdir -p img/BIOS/BOOT
+	mkdir -p img/EFI/BOOT
 	mkdir -p img/SYS
 	cp stage2.bin img/BIOS/BOOT/STAGE2.BIN
+	cp boot.efi img/EFI/BOOT/BOOTx64.EFI
 	cp boot.config img/SYS/KERNEL.CON
 	cp kernel64.elf img/SYS/KERNEL64.elf
 	umount img
