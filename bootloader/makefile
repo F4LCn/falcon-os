@@ -1,11 +1,11 @@
-all: stage1 stage2
+all: bios uefi
 
-stage1:
-	make -C stage1 all
+bios:
+	make -C bios all
 
-stage2:
-	make -C stage2 all
+uefi:
+	make -C uefi all
 
 clean:
-	make -C stage1 clean
-	make -C stage2 clean
+	make -C bios clean
+	make -C uefi clean

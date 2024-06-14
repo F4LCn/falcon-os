@@ -1,4 +1,4 @@
-OUTPUT_DIR = ../../build
+OUTPUT_DIR = ../../../build
 ENTRYPOINT_OBJ = main.o
 C_SRC_FILES = $(wildcard *.c)
 ASM_SRC_FILES = $(wildcard *.asm)
@@ -8,7 +8,7 @@ ASM_OBJ_FILES = $(filter-out start.o, $(notdir $(patsubst %.asm, %.o,$(ASM_SRC_F
 all: stage2.bin
 
 stage2.bin: start.bin main.elf
-	@objcopy -j .text -j .data -j .rodata -j .bss -O binary $(OUTPUT_DIR)/main.elf $(OUTPUT_DIR)/main.bin
+	@llvm-objcopy -j .text -j .data -j .rodata -j .bss -O binary $(OUTPUT_DIR)/main.elf $(OUTPUT_DIR)/main.bin
 	@cat $(OUTPUT_DIR)/start.bin $(OUTPUT_DIR)/main.bin > $(OUTPUT_DIR)/stage2.bin
 
 start.bin:
@@ -20,7 +20,7 @@ main.elf: $(ENTRYPOINT_OBJ) $(ASM_OBJ_FILES) $(C_OBJ_FILES) font.o
 	mv main.elf $(OUTPUT_DIR)/main.elf
 
 font.o:
-	@objcopy -O elf32-i386 -I binary ../../font/font.psf font.o
+	@llvm-objcopy -O elf32-i386 -I binary ../../../font/font.psf font.o
 
 %.o: %.c
 	@clang -O3 -ggdb -m32 -march=i386 --target=i686-pc-none-elf -ffreestanding -masm=intel -mno-sse -Wall -Wextra -c $<

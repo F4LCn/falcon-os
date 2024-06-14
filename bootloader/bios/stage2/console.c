@@ -20,7 +20,7 @@ void fill() {
 
 void print(i8 *str) {
   char *s = str;
-  psf2 *font = (psf2 *)&_binary_______font_font_psf_start;
+  psf2 *font = (psf2 *)&_binary__________font_font_psf_start;
   u64 fb = bootinfo.fb_ptr;
   u32 glyph_width_bytes = (font->header.width + 7) / 8;
   while (*s) {

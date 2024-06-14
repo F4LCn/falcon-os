@@ -33,6 +33,6 @@ typedef struct __attribute((packed)) {
   u8 glyphs;
 } psf2;
 
-extern u32 _binary_______font_font_psf_start;
+extern u32 _binary__________font_font_psf_start;
 
 #endif

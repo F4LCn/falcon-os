@@ -1,4 +1,4 @@
-OUTPUT_DIR = ../../build
+OUTPUT_DIR = ../../../build
 
 all: bootloader.bin
 
