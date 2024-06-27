@@ -1,4 +1,4 @@
-pub fn outb(port: u16, value: u8) void {
+pub inline fn outb(port: u16, value: u8) void {
     return asm volatile (
         \\ outb %[value], %[port]
         :
@@ -7,7 +7,7 @@ pub fn outb(port: u16, value: u8) void {
     );
 }
 
-pub fn inb(port: u16) u8 {
+pub inline fn inb(port: u16) u8 {
     return asm volatile (
         \\ inb %[port], %[value]
         : [value] "={al}" (-> u8),
@@ -15,7 +15,7 @@ pub fn inb(port: u16) u8 {
     );
 }
 
-pub fn outString(port: u16, bytes: []const u8) usize {
+pub inline fn outString(port: u16, bytes: []const u8) usize {
     const unwritten_bytes = asm volatile (
         \\ rep outsb
         : [ret] "={rcx}" (-> usize),
