@@ -1,30 +1,19 @@
 const std = @import("std");
+const serial = @import("serial.zig");
 
-pub fn Logger(comptime WriterType: type, comptime WriterError: type) type {
-    return struct {
-        _writer: WriterType,
+var serial_out: ?serial.SerialWriter = null;
 
-        const Self = @This();
-
-        pub fn init(writer: WriterType) Self {
-            return .{ ._writer = writer };
-        }
-
-        pub fn dbg(self: Self, comptime fmt: []const u8, args: anytype) WriterError!void {
-            const format = "DBG: " ++ fmt;
-            return self._writer.print(format, args);
-        }
-        pub fn inf(self: Self, comptime fmt: []const u8, args: anytype) WriterError!void {
-            const format = "INF: " ++ fmt;
-            return self._writer.print(format, args);
-        }
-        pub fn wrn(self: Self, comptime fmt: []const u8, args: anytype) WriterError!void {
-            const format = "WRN: " ++ fmt;
-            return self._writer.print(format, args);
-        }
-        pub fn err(self: Self, comptime fmt: []const u8, args: anytype) WriterError!void {
-            const format = "ERR: " ++ fmt;
-            return self._writer.print(format, args);
-        }
+pub fn logFn(comptime level: std.log.Level, comptime scope: @Type(.EnumLiteral), comptime format: []const u8, args: anytype) void {
+    const serial_writer = serial_out orelse return;
+    const scope_prefix = switch (scope) {
+        std.log.default_log_scope => "",
+        else => "(" ++ @tagName(scope) ++ ") ",
     };
+    const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
+    const writer = serial_writer.writer();
+    writer.print(prefix ++ format ++ "\n", args) catch return;
+}
+
+pub fn init(comptime port: serial.Port) void {
+    serial_out = serial.SerialWriter.init(port);
 }
