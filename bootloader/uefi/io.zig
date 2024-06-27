@@ -1,0 +1,28 @@
+pub fn outb(port: u16, value: u8) void {
+    return asm volatile (
+        \\ outb %[value], %[port]
+        :
+        : [port] "{dx}" (port),
+          [value] "{al}" (value),
+    );
+}
+
+pub fn inb(port: u16) u8 {
+    return asm volatile (
+        \\ inb %[port], %[value]
+        : [value] "={al}" (-> u8),
+        : [port] "{dx}" (port),
+    );
+}
+
+pub fn outString(port: u16, bytes: []const u8) usize {
+    const unwritten_bytes = asm volatile (
+        \\ rep outsb
+        : [ret] "={rcx}" (-> usize),
+        : [port] "{dx}" (port),
+          [src] "{rsi}" (bytes.ptr),
+          [len] "{rcx}" (bytes.len),
+        : "rcx", "rsi"
+    );
+    return bytes.len - unwritten_bytes;
+}

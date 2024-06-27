@@ -23,6 +23,7 @@
 ## bootloading (UEFI)
 - side quest accepted: make a uefi bootloader
   - [x] introduction to UEFI
+  - [x] logging infrastructure
   - [ ] memory mapping
   - [ ] video modes
   - [ ] load and parse config file

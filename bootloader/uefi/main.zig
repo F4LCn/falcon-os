@@ -1,14 +1,21 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const utf16 = std.unicode.utf8ToUtf16LeStringLiteral;
+const serial = @import("serial.zig");
+const logger = @import("logger.zig");
 
 pub fn main() uefi.Status {
     const sys_table = uefi.system_table;
     const conout = sys_table.con_out.?;
-    _ = conout.clearScreen();
-    _ = conout.outputString(utf16("Hello there !\n"));
-
     const boot_services = sys_table.boot_services.?;
+
+    const serial_writer = serial.SerialWriter.init(serial.Port.COM1).writer();
+    const log = logger.Logger(serial.SerialWriter.Writer, serial.SerialWriter.SerialError).init(serial_writer);
+    const a: u32 = 123;
+    log.dbg("This is a debug message with arg {d}\n", .{a}) catch unreachable;
+    log.inf("Info message\n", .{}) catch unreachable;
+    log.wrn("Warning message\n", .{}) catch unreachable;
+    log.err("Error message\n", .{}) catch unreachable;
 
     const conin = sys_table.con_in.?;
     const input_events = [_]uefi.Event{

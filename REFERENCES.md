@@ -32,6 +32,8 @@
 - kaitai: https://kaitai.io/
 - kaitai web ide: https://ide.kaitai.io/
 
-
 ### uefi
  - specification: https://uefi.org/specs/UEFI/2.10/index.html
+
+### serial
+ - serial: https://wiki.osdev.org/Serial_Ports
