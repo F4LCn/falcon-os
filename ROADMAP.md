@@ -24,12 +24,13 @@
 - side quest accepted: make a uefi bootloader
   - [x] introduction to UEFI
   - [x] logging infrastructure
-  - [ ] memory mapping
+  - [x] memory mapping (phase 1)
   - [ ] video modes
   - [ ] load and parse config file
   - [ ] load kernel
   - [ ] elf support
   - [ ] paging
+  - [ ] memory map (phase 2)
   - [ ] execution handoff to kernel
 
 ## kernel
