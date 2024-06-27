@@ -6,7 +6,6 @@ const logger = @import("logger.zig");
 
 pub fn main() uefi.Status {
     const sys_table = uefi.system_table;
-    const conout = sys_table.con_out.?;
     const boot_services = sys_table.boot_services.?;
 
     const serial_writer = serial.SerialWriter.init(serial.Port.COM1).writer();
@@ -30,8 +29,6 @@ pub fn main() uefi.Status {
                 if (input_key.unicode_char == @as(u16, 'Q')) {
                     return uefi.Status.Success;
                 }
-                const slice: [*:0]const u16 = &[_:0]u16{input_key.unicode_char};
-                _ = conout.outputString(slice);
             }
         }
     }
