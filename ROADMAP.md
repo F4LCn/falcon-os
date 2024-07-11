@@ -26,7 +26,7 @@
   - [x] logging infrastructure
   - [x] memory mapping (phase 1)
   - [x] load config file
-  - [ ] parse config file
+  - [x] parse config file
   - [ ] video modes
   - [ ] load kernel
   - [ ] elf support
