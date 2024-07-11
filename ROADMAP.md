@@ -25,8 +25,9 @@
   - [x] introduction to UEFI
   - [x] logging infrastructure
   - [x] memory mapping (phase 1)
+  - [x] load config file
+  - [ ] parse config file
   - [ ] video modes
-  - [ ] load and parse config file
   - [ ] load kernel
   - [ ] elf support
   - [ ] paging
