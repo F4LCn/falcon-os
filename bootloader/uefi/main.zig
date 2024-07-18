@@ -8,13 +8,15 @@ const BootloaderError = error{
     MemoryMapError,
     ConfigFileLoadError,
     ConfigFileParseError,
+    GraphicOutputDeviceError,
+    EdidNotFoundError,
 };
 
-const VideoResolution = struct { width: u16 = 640, height: u16 = 480 };
+const VideoResolution = struct { width: u16, height: u16 };
 
 const BootloaderConfig = struct {
     kernel: []const u8 = "",
-    video: VideoResolution = .{},
+    video: VideoResolution = .{ .width = 640, .height = 480 },
 };
 
 pub const std_options: std.Options = .{
@@ -45,6 +47,12 @@ pub fn main() uefi.Status {
     };
     std.log.info("Parsed config file\nKernel file: {s}\nVideo resolution: {d} x {d}", .{ bootloader_config.kernel, bootloader_config.video.width, bootloader_config.video.height });
 
+    const preferred_resolution = getPreferredResolution() catch blk: {
+        std.log.warn("Could not resolve display preferred resolution, falling back on config", .{});
+        break :blk bootloader_config.video;
+    };
+    std.log.info("Using resolution {d}x{d}", .{ preferred_resolution.width, preferred_resolution.height });
+
     const conin = sys_table.con_in.?;
     const input_events = [_]uefi.Event{
         conin.wait_for_key,
@@ -63,6 +71,53 @@ pub fn main() uefi.Status {
     }
 
     return uefi.Status.Timeout;
+}
+
+fn getPreferredResolution() BootloaderError!VideoResolution {
+    const log = std.log.scoped(.edid);
+    const sys_table = uefi.system_table;
+    const boot_services = sys_table.boot_services.?;
+    var status: uefi.Status = undefined;
+    var handles_count: usize = 0;
+    var handles: [*]uefi.Handle = undefined;
+    status = boot_services.locateHandleBuffer(.ByProtocol, &uefi.protocol.GraphicsOutput.guid, null, &handles_count, &handles);
+    switch (status) {
+        .Success => log.debug("Found {d} video device handles", .{handles_count}),
+        else => {
+            log.err("Expected Success but got {s} instead", .{@tagName(status)});
+            return BootloaderError.GraphicOutputDeviceError;
+        },
+    }
+
+    var i: usize = 0;
+    while (i < handles_count) : (i += 1) {
+        const device_handle: uefi.Handle = handles[i];
+        var edid_protocol: *uefi.protocol.edid.Discovered = undefined;
+        status = boot_services.handleProtocol(device_handle, &uefi.protocol.edid.Discovered.guid, @as(*?*anyopaque, @ptrCast(&edid_protocol)));
+        switch (status) {
+            .Success => log.debug("Found edid of size {d}", .{edid_protocol.size_of_edid}),
+            .Unsupported => {
+                log.warn("Handle {d} does not support EDID", .{i});
+                continue;
+            },
+            else => {
+                log.err("Expected Success but got {s} instead", .{@tagName(status)});
+                return BootloaderError.GraphicOutputDeviceError;
+            },
+        }
+
+        log.info("Found EDID on handle {d}", .{i});
+
+        if (edid_protocol.edid) |edid| {
+            // TODO: do actual edid block validation
+            const x_res = @as(u16, edid[0x36 + 2]) | (@as(u16, (edid[0x36 + 4] & 0xF0)) << 4);
+            const y_res = @as(u16, edid[0x36 + 5]) | (@as(u16, (edid[0x36 + 7] & 0xF0)) << 4);
+
+            return .{ .width = x_res, .height = y_res };
+        }
+    }
+
+    return BootloaderError.EdidNotFoundError;
 }
 
 fn readConfigFile() BootloaderError![]const u8 {

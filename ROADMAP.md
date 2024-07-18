@@ -27,6 +27,7 @@
   - [x] memory mapping (phase 1)
   - [x] load config file
   - [x] parse config file
+  - [x] get display preferred resolution using EDID (to be tested on real hardware)
   - [ ] video modes
   - [ ] load kernel
   - [ ] elf support
