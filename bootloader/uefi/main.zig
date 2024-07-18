@@ -4,9 +4,17 @@ const utf16 = std.unicode.utf8ToUtf16LeStringLiteral;
 const serial = @import("serial.zig");
 const logger = @import("logger.zig");
 
+const BootloaderError = error{
+    MemoryMapError,
+    ConfigFileLoadError,
+    ConfigFileParseError,
+};
+
+const VideoResolution = struct { width: u16 = 640, height: u16 = 480 };
+
 const BootloaderConfig = struct {
     kernel: []const u8 = "",
-    video: struct { width: u16 = 640, height: u16 = 480 } = .{},
+    video: VideoResolution = .{},
 };
 
 pub const std_options: std.Options = .{
@@ -20,13 +28,22 @@ pub fn main() uefi.Status {
 
     logger.init(serial.Port.COM1);
 
-    getMemMap();
-    const config = readConfigFile();
-    if (config) |conf| std.log.info("Got config:\n{s}", .{conf});
-    const bootloader_config = parseConfig(config);
-    if (bootloader_config) |cfg| {
-        std.log.info("Parsed config file\nKernel file: {s}\nVideo resolution: {d} x {d}", .{ cfg.kernel, cfg.video.width, cfg.video.height });
-    }
+    getMemMap() catch {
+        std.log.err("Failed to get memory map", .{});
+        return uefi.Status.Aborted;
+    };
+
+    const config = readConfigFile() catch {
+        std.log.err("Failed to get memory map", .{});
+        return uefi.Status.Aborted;
+    };
+    std.log.info("Got config:\n{s}", .{config});
+
+    const bootloader_config = parseConfig(config) catch {
+        std.log.err("Failed to get memory map", .{});
+        return uefi.Status.Aborted;
+    };
+    std.log.info("Parsed config file\nKernel file: {s}\nVideo resolution: {d} x {d}", .{ bootloader_config.kernel, bootloader_config.video.width, bootloader_config.video.height });
 
     const conin = sys_table.con_in.?;
     const input_events = [_]uefi.Event{
@@ -48,7 +65,7 @@ pub fn main() uefi.Status {
     return uefi.Status.Timeout;
 }
 
-fn readConfigFile() ?[]const u8 {
+fn readConfigFile() BootloaderError![]const u8 {
     const log = std.log.scoped(.config);
     const sys_table = uefi.system_table;
     const boot_services = sys_table.boot_services.?;
@@ -59,7 +76,7 @@ fn readConfigFile() ?[]const u8 {
         .Success => log.debug("Located the file system protocol", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
@@ -69,7 +86,7 @@ fn readConfigFile() ?[]const u8 {
         .Success => log.debug("Successfully opened the root volume", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
@@ -79,7 +96,7 @@ fn readConfigFile() ?[]const u8 {
         .Success => log.debug("Opened config file", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
@@ -90,7 +107,7 @@ fn readConfigFile() ?[]const u8 {
         .BufferTooSmall => log.debug("Need to allocate {d} bytes for file info", .{file_info_size}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
@@ -100,7 +117,7 @@ fn readConfigFile() ?[]const u8 {
         .Success => log.debug("Allocated {d} bytes for file info", .{file_info_size}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
@@ -109,7 +126,7 @@ fn readConfigFile() ?[]const u8 {
         .Success => log.debug("Got file info: file size is {d} bytes", .{file_info.file_size}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
@@ -120,7 +137,7 @@ fn readConfigFile() ?[]const u8 {
         .Success => log.debug("Allocated {d} pages for config file contents", .{page_count}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
@@ -130,40 +147,38 @@ fn readConfigFile() ?[]const u8 {
         .Success => log.debug("Read file contents", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return null;
+            return BootloaderError.ConfigFileLoadError;
         },
     }
 
     return contents[0..file_info.file_size];
 }
 
-fn parseConfig(config: ?[]const u8) ?BootloaderConfig {
+fn parseConfig(config: []const u8) BootloaderError!BootloaderConfig {
     const log = std.log.scoped(.config_parser);
     var parsed: BootloaderConfig = .{};
-    if (config) |cfg| {
-        // NOTE: every config line is of format: "KEY=VALUE\n"
-        var line_tokenizer = std.mem.tokenizeScalar(u8, cfg, '\n');
-        while (line_tokenizer.next()) |line| {
-            var kv_split_iterator = std.mem.splitScalar(u8, line, '=');
-            if (kv_split_iterator.next()) |key| {
-                const value = kv_split_iterator.rest();
-                if (std.mem.eql(u8, key, "KERNEL")) {
-                    parsed.kernel = value;
-                } else if (std.mem.eql(u8, key, "VIDEO")) {
-                    // NOTE: video resolution should be of format WxH (eg. 600x480)
-                    var vid_resolution_split_iterator = std.mem.splitScalar(u8, value, 'x');
-                    if (vid_resolution_split_iterator.next()) |w| {
-                        const h = vid_resolution_split_iterator.rest();
-                        const width = std.fmt.parseInt(u16, w, 10) catch {
-                            log.err("Error while parsing width ({s}) (should be a valid u16)", .{w});
-                            return null;
-                        };
-                        const height = std.fmt.parseInt(u16, h, 10) catch {
-                            log.err("Error while parsing height ({s}) (should be a valid u16)", .{h});
-                            return null;
-                        };
-                        parsed.video = .{ .width = width, .height = height };
-                    }
+    // NOTE: every config line is of format: "KEY=VALUE\n"
+    var line_tokenizer = std.mem.tokenizeScalar(u8, config, '\n');
+    while (line_tokenizer.next()) |line| {
+        var kv_split_iterator = std.mem.splitScalar(u8, line, '=');
+        if (kv_split_iterator.next()) |key| {
+            const value = kv_split_iterator.rest();
+            if (std.mem.eql(u8, key, "KERNEL")) {
+                parsed.kernel = value;
+            } else if (std.mem.eql(u8, key, "VIDEO")) {
+                // NOTE: video resolution should be of format WxH (eg. 600x480)
+                var vid_resolution_split_iterator = std.mem.splitScalar(u8, value, 'x');
+                if (vid_resolution_split_iterator.next()) |w| {
+                    const h = vid_resolution_split_iterator.rest();
+                    const width = std.fmt.parseInt(u16, w, 10) catch {
+                        log.err("Error while parsing width ({s}) (should be a valid u16)", .{w});
+                        return BootloaderError.ConfigFileParseError;
+                    };
+                    const height = std.fmt.parseInt(u16, h, 10) catch {
+                        log.err("Error while parsing height ({s}) (should be a valid u16)", .{h});
+                        return BootloaderError.ConfigFileParseError;
+                    };
+                    parsed.video = .{ .width = width, .height = height };
                 }
             }
         }
@@ -171,7 +186,7 @@ fn parseConfig(config: ?[]const u8) ?BootloaderConfig {
     return parsed;
 }
 
-fn getMemMap() void {
+fn getMemMap() BootloaderError!void {
     const log = std.log.scoped(.memmap);
     const sys_table = uefi.system_table;
     const boot_services = sys_table.boot_services.?;
@@ -187,7 +202,7 @@ fn getMemMap() void {
         .BufferTooSmall => log.debug("Need {d} bytes for memory map buffer", .{mmap_size}),
         else => {
             log.err("Expected BufferTooSmall but got {s} instead", .{@tagName(status)});
-            return;
+            return BootloaderError.MemoryMapError;
         },
     }
 
@@ -197,7 +212,7 @@ fn getMemMap() void {
         .Success => log.debug("Allocated {d} bytes for memory map at {*}", .{ mmap_size, mmap }),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return;
+            return BootloaderError.MemoryMapError;
         },
     }
 
@@ -206,7 +221,7 @@ fn getMemMap() void {
         .Success => log.debug("Got memory map", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return;
+            return BootloaderError.MemoryMapError;
         },
     }
 
