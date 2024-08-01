@@ -9,10 +9,12 @@ const BootloaderError = error{
     ConfigFileLoadError,
     ConfigFileParseError,
     GraphicOutputDeviceError,
+    LocateGraphicOutputError,
     EdidNotFoundError,
 };
 
 const VideoResolution = struct { width: u16, height: u16 };
+const VideoInfo = struct { device_handle: ?uefi.Handle, resolution: VideoResolution };
 
 const BootloaderConfig = struct {
     kernel: []const u8 = "",
@@ -47,11 +49,16 @@ pub fn main() uefi.Status {
     };
     std.log.info("Parsed config file\nKernel file: {s}\nVideo resolution: {d} x {d}", .{ bootloader_config.kernel, bootloader_config.video.width, bootloader_config.video.height });
 
-    const preferred_resolution = getPreferredResolution() catch blk: {
+    const video_info: VideoInfo = getPreferredResolution() catch blk: {
         std.log.warn("Could not resolve display preferred resolution, falling back on config", .{});
-        break :blk bootloader_config.video;
+        break :blk .{ .device_handle = null, .resolution = bootloader_config.video };
     };
-    std.log.info("Using resolution {d}x{d}", .{ preferred_resolution.width, preferred_resolution.height });
+    std.log.info("Using resolution {d}x{d}", .{ video_info.resolution.width, video_info.resolution.height });
+
+    setVideoMode(video_info) catch {
+        std.log.err("Could not set video mode", .{});
+        return uefi.Status.Aborted;
+    };
 
     const conin = sys_table.con_in.?;
     const input_events = [_]uefi.Event{
@@ -73,7 +80,76 @@ pub fn main() uefi.Status {
     return uefi.Status.Timeout;
 }
 
-fn getPreferredResolution() BootloaderError!VideoResolution {
+fn setVideoMode(video_info: VideoInfo) BootloaderError!void {
+    const log = std.log.scoped(.video_mode);
+    const sys_table = uefi.system_table;
+    const boot_services = sys_table.boot_services.?;
+    var status: uefi.Status = undefined;
+    const GraphicsOutput = uefi.protocol.GraphicsOutput;
+
+    var gop: *GraphicsOutput = undefined;
+    if (video_info.device_handle) |handle| {
+        status = boot_services.handleProtocol(handle, &GraphicsOutput.guid, @as(*?*anyopaque, @ptrCast(&gop)));
+    } else {
+        status = boot_services.locateProtocol(&GraphicsOutput.guid, null, @as(*?*anyopaque, @ptrCast(&gop)));
+    }
+    switch (status) {
+        .Success => log.debug("Located graphics output protocol", .{}),
+        else => {
+            log.err("Expected Success but got {s} instead", .{@tagName(status)});
+            return BootloaderError.LocateGraphicOutputError;
+        },
+    }
+
+    var mode_id: u32 = 0;
+    while (mode_id < gop.mode.max_mode) : (mode_id += 1) {
+        var info_size: usize = 0;
+        var info: *GraphicsOutput.Mode.Info = undefined;
+        status = gop.queryMode(mode_id, &info_size, &info);
+        switch (status) {
+            .Success => log.debug("Successfully queried mode {d}", .{mode_id}),
+            else => {
+                log.err("Expected Success but got {s} instead", .{@tagName(status)});
+                continue;
+            },
+        }
+
+        if (info.vertical_resolution < video_info.resolution.height or info.horizontal_resolution < video_info.resolution.width) continue;
+        switch (info.pixel_format) {
+            GraphicsOutput.PixelFormat.RedGreenBlueReserved8BitPerColor, GraphicsOutput.PixelFormat.BlueGreenRedReserved8BitPerColor => {},
+            else => continue,
+        }
+
+        log.debug(
+            \\GOP Mode info:
+            \\  Framebuffer: 0x{X}
+            \\  Resolution: {d}x{d}
+            \\  scan line: {d}
+            \\  pixel format: {s}
+        , .{
+            gop.mode.frame_buffer_base,
+            info.horizontal_resolution,
+            info.vertical_resolution,
+            info.pixels_per_scan_line,
+            @tagName(info.pixel_format),
+        });
+
+        status = gop.setMode(mode_id);
+        switch (status) {
+            .Success => log.debug("Successfully set mode to {d}", .{mode_id}),
+            else => {
+                log.err("Expected Success but got {s} instead", .{@tagName(status)});
+                continue;
+            },
+        }
+        break;
+    }
+
+    var fillBuffer = [_]GraphicsOutput.BltPixel{.{ .red = 255, .green = 0, .blue = 0 }};
+    status = gop.blt(&fillBuffer, GraphicsOutput.BltOperation.BltVideoFill, 0, 0, 0, 0, 250, 250, 0);
+}
+
+fn getPreferredResolution() BootloaderError!VideoInfo {
     const log = std.log.scoped(.edid);
     const sys_table = uefi.system_table;
     const boot_services = sys_table.boot_services.?;
@@ -113,7 +189,7 @@ fn getPreferredResolution() BootloaderError!VideoResolution {
             const x_res = @as(u16, edid[0x36 + 2]) | (@as(u16, (edid[0x36 + 4] & 0xF0)) << 4);
             const y_res = @as(u16, edid[0x36 + 5]) | (@as(u16, (edid[0x36 + 7] & 0xF0)) << 4);
 
-            return .{ .width = x_res, .height = y_res };
+            return .{ .device_handle = device_handle, .resolution = .{ .width = x_res, .height = y_res } };
         }
     }
 

@@ -28,7 +28,7 @@
   - [x] load config file
   - [x] parse config file
   - [x] get display preferred resolution using EDID
-  - [ ] video modes
+  - [x] change to graphics mode
   - [ ] load kernel
   - [ ] elf support
   - [ ] paging
