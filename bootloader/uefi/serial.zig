@@ -62,8 +62,8 @@ pub const SerialWriter = struct {
         io.outb(port_num + @intFromEnum(Offset.RxTxBuffer), 3);
         io.outb(port_num + @intFromEnum(Offset.IntEnable), 0);
         io.outb(port_num + @intFromEnum(Offset.LineCtrl), @bitCast(LineCtrlReg{ .data = 3 }));
-        io.outb(port_num + @intFromEnum(Offset.FifoCtrl), @bitCast(FifoCtrlReg{ .enable = true, .clear_rx = true, .clear_tx = true }));
-        io.outb(port_num + @intFromEnum(Offset.ModemCtrl), @bitCast(ModemCtrlReg{ .loop = true }));
+        io.outb(port_num + @intFromEnum(Offset.FifoCtrl), @bitCast(FifoCtrlReg{ .enable = true, .clear_rx = true, .clear_tx = true, .int_trigger = 0b11 }));
+        io.outb(port_num + @intFromEnum(Offset.ModemCtrl), @bitCast(ModemCtrlReg{ .out1 = 0, .loop = true }));
         io.outb(port_num + @intFromEnum(Offset.RxTxBuffer), 0xAA);
 
         if (io.inb(port_num) != 0xAA) {
@@ -79,9 +79,15 @@ pub const SerialWriter = struct {
         return .{ .context = self };
     }
 
-    fn write(self: *const Self, bytes: []const u8) SerialError!usize {
+    pub fn write(self: *const Self, bytes: []const u8) SerialError!usize {
         const port = self.port;
         const port_num = @intFromEnum(port);
-        return io.outString(port_num, bytes);
+        for (bytes) |b| {
+            while ((io.inb(port_num + @intFromEnum(Offset.LineStatus)) & 0x20) == 0) {
+                continue;
+            }
+            io.outb(port_num, b);
+        }
+        return bytes.len;
     }
 };
