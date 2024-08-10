@@ -3,6 +3,7 @@ const uefi = std.os.uefi;
 const utf16 = std.unicode.utf8ToUtf16LeStringLiteral;
 const serial = @import("serial.zig");
 const logger = @import("logger.zig");
+const BootInfo = @import("bootinfo.zig").BootInfo;
 
 const BootloaderError = error{
     MemoryMapError,
@@ -32,31 +33,45 @@ pub fn main() uefi.Status {
 
     logger.init(serial.Port.COM1);
 
-    getMemMap() catch {
-        std.log.err("Failed to get memory map", .{});
-        return uefi.Status.Aborted;
-    };
-
     const config = readConfigFile() catch {
         std.log.err("Failed to get memory map", .{});
         return uefi.Status.Aborted;
     };
-    std.log.info("Got config:\n{s}", .{config});
+    std.log.debug(
+        \\Got config:
+        \\{s}"
+    , .{config});
 
     const bootloader_config = parseConfig(config) catch {
         std.log.err("Failed to get memory map", .{});
         return uefi.Status.Aborted;
     };
-    std.log.info("Parsed config file\nKernel file: {s}\nVideo resolution: {d} x {d}", .{ bootloader_config.kernel, bootloader_config.video.width, bootloader_config.video.height });
+    std.log.info(
+        \\Parsed config file
+        \\Kernel file: {s}
+        \\Video resolution: {d} x {d}"
+    , .{
+        bootloader_config.kernel,
+        bootloader_config.video.width,
+        bootloader_config.video.height,
+    });
 
     const video_info: VideoInfo = getPreferredResolution() catch blk: {
         std.log.warn("Could not resolve display preferred resolution, falling back on config", .{});
         break :blk .{ .device_handle = null, .resolution = bootloader_config.video };
     };
-    std.log.info("Using resolution {d}x{d}", .{ video_info.resolution.width, video_info.resolution.height });
+    std.log.info("Using resolution {d}x{d}", .{
+        video_info.resolution.width,
+        video_info.resolution.height,
+    });
 
-    setVideoMode(video_info) catch {
+    getFramebuffer(video_info) catch {
         std.log.err("Could not set video mode", .{});
+        return uefi.Status.Aborted;
+    };
+
+    getMemMap() catch {
+        std.log.err("Failed to get memory map", .{});
         return uefi.Status.Aborted;
     };
 
@@ -80,7 +95,7 @@ pub fn main() uefi.Status {
     return uefi.Status.Timeout;
 }
 
-fn setVideoMode(video_info: VideoInfo) BootloaderError!void {
+fn getFramebuffer(video_info: VideoInfo) BootloaderError!void {
     const log = std.log.scoped(.video_mode);
     const sys_table = uefi.system_table;
     const boot_services = sys_table.boot_services.?;
