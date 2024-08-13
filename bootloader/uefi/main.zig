@@ -1,6 +1,5 @@
 const std = @import("std");
 const uefi = std.os.uefi;
-const utf16 = std.unicode.utf8ToUtf16LeStringLiteral;
 const serial = @import("serial.zig");
 const logger = @import("logger.zig");
 const Globals = @import("globals.zig");
@@ -9,6 +8,7 @@ const Config = @import("config.zig");
 const Video = @import("video.zig");
 const FileSystem = @import("fs.zig");
 const Mmap = @import("mmap.zig");
+const KernelLoader = @import("kernel_loader.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -25,7 +25,7 @@ pub fn main() uefi.Status {
     Video.init();
 
     const config = FileSystem.loadFile("/SYS/KERNEL.CON") catch {
-        std.log.err("Failed to get memory map", .{});
+        std.log.err("Failed to load config file", .{});
         return uefi.Status.Aborted;
     };
     std.log.debug(
@@ -34,7 +34,7 @@ pub fn main() uefi.Status {
     , .{config.getContents()});
 
     const bootloader_config = Config.parseConfig(config.getContents()) catch {
-        std.log.err("Failed to get memory map", .{});
+        std.log.err("Failed to parse config", .{});
         return uefi.Status.Aborted;
     };
     std.log.info(
@@ -51,6 +51,7 @@ pub fn main() uefi.Status {
         std.log.warn("Could not resolve display preferred resolution, falling back on config", .{});
         break :blk .{ .device_handle = null, .resolution = bootloader_config.video };
     };
+
     std.log.info("Using resolution {d}x{d}", .{
         video_info.resolution.width,
         video_info.resolution.height,
@@ -60,7 +61,6 @@ pub fn main() uefi.Status {
         std.log.err("Could not set video mode", .{});
         return uefi.Status.Aborted;
     };
-
     Video.fillRect(255, 8, 4) catch {
         std.log.err("FillRect failed", .{});
         return uefi.Status.Aborted;
@@ -72,10 +72,16 @@ pub fn main() uefi.Status {
     };
     _ = &kernel;
 
-    Mmap.getMemMap() catch {
-        std.log.err("Failed to get memory map", .{});
+    const kernel_info = KernelLoader.loadExecutable(kernel.getContents()) catch {
+        std.log.err("Could not load kernel executable", .{});
         return uefi.Status.Aborted;
     };
+    _ = &kernel_info;
+
+    // Mmap.getMemMap() catch {
+    //     std.log.err("Failed to get memory map", .{});
+    //     return uefi.Status.Aborted;
+    // };
 
     const conin = Globals.sys_table.con_in.?;
     const input_events = [_]uefi.Event{

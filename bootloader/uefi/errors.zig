@@ -6,4 +6,6 @@ pub const BootloaderError = error{
     GraphicOutputDeviceError,
     LocateGraphicOutputError,
     EdidNotFoundError,
+    InvalidKernelExecutable,
+    KernelTooLargeError,
 };
