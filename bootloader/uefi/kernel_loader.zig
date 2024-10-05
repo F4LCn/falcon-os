@@ -3,6 +3,7 @@ const uefi = std.os.uefi;
 const elf = std.elf;
 const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
+const Constants = @import("constants.zig");
 
 const log = std.log.scoped(.kernel_loader);
 
@@ -77,8 +78,8 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
             return BootloaderError.KernelTooLargeError;
         }
 
-        const pages_to_allocate = @divExact(std.mem.alignForward(u64, mem_size, 4096), 4096);
-        var load_buffer: [*]align(4096) u8 = undefined;
+        const pages_to_allocate = @divExact(std.mem.alignForward(u64, mem_size, Constants.ARCH_PAGE_SIZE), Constants.ARCH_PAGE_SIZE);
+        var load_buffer: [*]align(Constants.ARCH_PAGE_SIZE) u8 = undefined;
         status = Globals.boot_services.allocatePages(.AllocateAnyPages, .LoaderData, pages_to_allocate, &load_buffer);
 
         @memcpy(load_buffer[0..file_size], kernel_file[phdr.p_offset..][0..phdr.p_filesz]);

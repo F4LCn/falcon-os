@@ -2,6 +2,7 @@ const std = @import("std");
 const uefi = std.os.uefi;
 const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
+const Constants = @import("constants.zig");
 
 const log = std.log.scoped(.mmap);
 
@@ -49,6 +50,6 @@ pub fn getMemMap() BootloaderError!void {
     const descriptors_count = mmap_size / descriptor_size;
     while (idx < descriptors_count) : (idx += 1) {
         descriptor = @ptrFromInt(idx * descriptor_size + @intFromPtr(mmap));
-        log.info("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor.type), descriptor.physical_start, descriptor.physical_start + 4096 * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
+        log.info("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor.type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
     }
 }

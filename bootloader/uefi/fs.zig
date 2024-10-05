@@ -2,6 +2,7 @@ const std = @import("std");
 const uefi = std.os.uefi;
 const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
+const Constants = @import("constants.zig");
 
 const log = std.log.scoped(.file_system);
 
@@ -88,9 +89,9 @@ pub fn loadFile(path: []const u8) BootloaderError!FileBuffer {
         },
     }
 
-    var file_buffer_size = std.mem.alignForward(usize, @intCast(file_info.file_size), 4096);
-    const pages_to_allocate = @divExact(file_buffer_size, 4096);
-    var contents: [*]align(4096) u8 = undefined;
+    var file_buffer_size = std.mem.alignForward(usize, @intCast(file_info.file_size), Constants.ARCH_PAGE_SIZE);
+    const pages_to_allocate = @divExact(file_buffer_size, Constants.ARCH_PAGE_SIZE);
+    var contents: [*]align(Constants.ARCH_PAGE_SIZE) u8 = undefined;
     status = boot_services.allocatePages(.AllocateAnyPages, .LoaderData, pages_to_allocate, &contents);
     switch (status) {
         .Success => log.debug("Allocated {d} pages for file {s} contents", .{ pages_to_allocate, path }),
