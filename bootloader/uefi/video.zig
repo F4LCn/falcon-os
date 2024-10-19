@@ -1,7 +1,7 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const Globals = @import("globals.zig");
-const BootInfo = @import("bootinfo.zig").BootInfo;
+const BootInfo = @import("bootinfo.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
 const GraphicsOutput = uefi.protocol.GraphicsOutput;
 
@@ -67,7 +67,7 @@ pub fn getPreferredResolution() BootloaderError!VideoInfo {
     return BootloaderError.EdidNotFoundError;
 }
 
-pub fn getFramebuffer(video_info: VideoInfo) BootloaderError!void {
+pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderError!void {
     var status: uefi.Status = undefined;
 
     if (video_info.device_handle) |handle| {
@@ -125,6 +125,17 @@ pub fn getFramebuffer(video_info: VideoInfo) BootloaderError!void {
                 continue;
             },
         }
+
+        bootinfo.fb_ptr = graphics_output.mode.frame_buffer_base;
+        bootinfo.fb_width = info.horizontal_resolution;
+        bootinfo.fb_height = info.vertical_resolution;
+        bootinfo.fb_scanline_bytes = info.pixels_per_scan_line * 4;
+        bootinfo.fb_pixelformat = switch (info.pixel_format) {
+            GraphicsOutput.PixelFormat.RedGreenBlueReserved8BitPerColor => BootInfo.PixelFormat.RGBA,
+            GraphicsOutput.PixelFormat.BlueGreenRedReserved8BitPerColor => BootInfo.PixelFormat.BGRA,
+            else => unreachable,
+        };
+
         break;
     }
 }

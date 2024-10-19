@@ -3,7 +3,7 @@ const uefi = std.os.uefi;
 const serial = @import("serial.zig");
 const logger = @import("logger.zig");
 const Globals = @import("globals.zig");
-const BootInfo = @import("bootinfo.zig").BootInfo;
+const BootInfo = @import("bootinfo.zig");
 const Config = @import("config.zig");
 const Video = @import("video.zig");
 const FileSystem = @import("fs.zig");
@@ -23,6 +23,17 @@ pub fn main() uefi.Status {
         return uefi.Status.Aborted;
     };
     Video.init();
+
+    var bootinfo: *align(Constants.ARCH_PAGE_SIZE) BootInfo = undefined;
+    const status = Globals.boot_services.allocatePages(.AllocateAnyPages, .LoaderData, 1, @ptrCast(&bootinfo));
+    switch (status) {
+        .Success => std.log.debug("Allocated 1 page for bootinfo struct", .{}),
+        else => {
+            std.log.err("Expected Success but got {s} instead", .{@tagName(status)});
+            return uefi.Status.Aborted;
+        },
+    }
+    bootinfo.* = .{ .bootloader_type = .UEFI };
 
     const config = FileSystem.loadFile("/SYS/KERNEL.CON") catch {
         std.log.err("Failed to load config file", .{});
@@ -66,6 +77,8 @@ pub fn main() uefi.Status {
         return uefi.Status.Aborted;
     };
 
+    std.log.debug("Bootinfo struct: {any}", .{bootinfo});
+
     const kernel = FileSystem.loadFile(bootloader_config.kernel) catch {
         std.log.err("Could not load kernel file", .{});
         return uefi.Status.Aborted;
@@ -79,6 +92,7 @@ pub fn main() uefi.Status {
     _ = &kernel_info;
 
     // Mmap.getMemMap() catch {
+    // Mmap.getMemMap(bootinfo) catch {
     //     std.log.err("Failed to get memory map", .{});
     //     return uefi.Status.Aborted;
     // };

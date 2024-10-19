@@ -3,10 +3,12 @@ const uefi = std.os.uefi;
 const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
 const Constants = @import("constants.zig");
+const BootInfo = @import("bootinfo.zig");
 
 const log = std.log.scoped(.mmap);
 
-pub fn getMemMap() BootloaderError!void {
+pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!void {
+    _ = bootinfo; // autofix
     var status: uefi.Status = undefined;
     const boot_services = Globals.boot_services;
 
