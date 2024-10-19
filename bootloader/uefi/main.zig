@@ -9,6 +9,8 @@ const Video = @import("video.zig");
 const FileSystem = @import("fs.zig");
 const Mmap = @import("mmap.zig");
 const KernelLoader = @import("kernel_loader.zig");
+const Constants = @import("constants.zig");
+const AddressSpace = @import("address_space.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -68,7 +70,7 @@ pub fn main() uefi.Status {
         video_info.resolution.height,
     });
 
-    Video.getFramebuffer(video_info) catch {
+    Video.getFramebuffer(video_info, bootinfo) catch {
         std.log.err("Could not set video mode", .{});
         return uefi.Status.Aborted;
     };
@@ -91,7 +93,30 @@ pub fn main() uefi.Status {
     };
     _ = &kernel_info;
 
-    // Mmap.getMemMap() catch {
+    const addr_space = AddressSpace.create() catch {
+        std.log.err("Could not create address space", .{});
+        return uefi.Status.Aborted;
+    };
+
+    for (0..10) |i| {
+        const paddr = 0xC012345000 + i * Constants.ARCH_PAGE_SIZE;
+        const vaddr = 0xC054321000 + i * Constants.ARCH_PAGE_SIZE;
+        addr_space.mmap(.{ .vaddr = @bitCast(vaddr) }, .{ .paddr = @intCast(paddr) }, .{ .present = true, .read_write = .read_write }) catch {
+            std.log.warn("Could not map vaddr 0x{X} to paddr 0x{X}", .{ vaddr, paddr });
+            continue;
+        };
+    }
+
+    for (0..10) |i| {
+        const paddr = 0x1234000 + i * Constants.ARCH_PAGE_SIZE;
+        const vaddr = 0x4321000 + i * Constants.ARCH_PAGE_SIZE;
+        addr_space.mmap(.{ .vaddr = @bitCast(vaddr) }, .{ .paddr = @intCast(paddr) }, .{ .present = true, .read_write = .read_write }) catch {
+            std.log.warn("Could not map vaddr 0x{X} to paddr 0x{X}", .{ vaddr, paddr });
+            continue;
+        };
+    }
+    addr_space.print();
+
     // Mmap.getMemMap(bootinfo) catch {
     //     std.log.err("Failed to get memory map", .{});
     //     return uefi.Status.Aborted;

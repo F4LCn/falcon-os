@@ -29,9 +29,9 @@
   - [x] parse config file
   - [x] get display preferred resolution using EDID
   - [x] change to graphics mode
-  - [ ] load kernel
-  - [ ] elf support
-  - [ ] paging
+  - [x] load kernel
+  - [x] elf support
+  - [x] paging
   - [ ] memory map (phase 2)
   - [ ] execution handoff to kernel
 

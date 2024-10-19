@@ -8,4 +8,6 @@ pub const BootloaderError = error{
     EdidNotFoundError,
     InvalidKernelExecutable,
     KernelTooLargeError,
+    AddressSpaceAllocatePages,
+    BadAddressType,
 };

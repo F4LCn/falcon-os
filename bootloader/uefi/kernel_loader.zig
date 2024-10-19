@@ -4,14 +4,11 @@ const elf = std.elf;
 const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
 const Constants = @import("constants.zig");
+const Address = @import("address_space.zig").Address;
 
 const log = std.log.scoped(.kernel_loader);
 
-pub const Address = union(enum) {
-    paddr: u64,
-    vaddr: u64,
-};
-pub const MappingInfo = struct { paddr: Address = .{ .paddr = 0 }, vaddr: Address = .{ .vaddr = 0 }, len: u64 };
+pub const MappingInfo = struct { paddr: Address = .{ .paddr = 0 }, vaddr: Address = .{ .vaddr = .{} }, len: u64 };
 pub const KernelInfo = struct {
     entrypoint: u64,
     segment_mappings: [8]MappingInfo = undefined,
@@ -90,7 +87,7 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
         }
 
         kernel_info.segment_mappings[mapping_idx].paddr = .{ .paddr = @intFromPtr(load_buffer) };
-        kernel_info.segment_mappings[mapping_idx].vaddr = .{ .vaddr = phdr.p_vaddr };
+        kernel_info.segment_mappings[mapping_idx].vaddr = .{ .vaddr = @bitCast(phdr.p_vaddr) };
         kernel_info.segment_mappings[mapping_idx].len = mem_size;
         log.debug("loaded program to 0x{X}", .{@intFromPtr(load_buffer)});
     }
