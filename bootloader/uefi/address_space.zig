@@ -2,6 +2,7 @@ const std = @import("std");
 const BootloaderError = @import("errors.zig").BootloaderError;
 const Globals = @import("globals.zig");
 const Constants = @import("constants.zig");
+const MemHelper = @import("mem_helper.zig");
 
 const log = std.log.scoped(.vmm);
 
@@ -30,6 +31,11 @@ const MmapFlags = packed struct(u64) {
     global: bool = false,
     _pad: u54 = 0,
     execution_disable: bool = false,
+};
+
+pub const DefaultMmapFlags: MmapFlags = .{
+    .present = true,
+    .read_write = .read_write,
 };
 
 const PageMapping = extern struct {
@@ -68,7 +74,7 @@ const PageMapping = extern struct {
                 2 => vaddr.pd_idx = @intCast(idx),
                 1 => {
                     vaddr.pt_idx = @intCast(idx);
-                    log.info("VAddr: 0x{X}: {any}", .{@as(u64, @bitCast(vaddr.*)), vaddr});
+                    log.info("VAddr: 0x{X}: {any}", .{ @as(u64, @bitCast(vaddr.*)), vaddr });
                     mapping.print();
                     continue;
                 },
@@ -101,19 +107,8 @@ levels: u8 = 4,
 
 const Self = @This();
 
-fn allocatePages(num_pages: u64) BootloaderError![*]align(Constants.ARCH_PAGE_SIZE) u8 {
-    var page_ptr: [*]align(Constants.ARCH_PAGE_SIZE) u8 = undefined;
-    const status = Globals.boot_services.allocatePages(.AllocateAnyPages, .LoaderData, num_pages, &page_ptr);
-    switch (status) {
-        .Success => log.debug("Allocated {d} pages for address space", .{num_pages}),
-        else => return BootloaderError.AddressSpaceAllocatePages,
-    }
-    @memset(page_ptr[0 .. num_pages * Constants.ARCH_PAGE_SIZE], 0);
-    return page_ptr;
-}
-
 pub fn create() BootloaderError!Self {
-    const root_ptr = try allocatePages(1);
+    const root_ptr = try MemHelper.allocatePages(1);
     return .{
         .root = @intFromPtr(root_ptr),
     };
@@ -150,7 +145,7 @@ pub fn mmap(self: *const Self, vaddr: Address, paddr: Address, flags: MmapFlags)
 fn getOrCreateMapping(mapping: *PageMapping, idx: u9) BootloaderError!*PageMapping {
     const next_level: *PageMapping.Entry = &mapping.mappings[idx];
     if (!next_level.present) {
-        const page_ptr = try allocatePages(1);
+        const page_ptr = try MemHelper.allocatePages(1);
         writeEntry(next_level, @intFromPtr(page_ptr), .{ .present = true, .read_write = .read_write });
         return @ptrCast(page_ptr);
     }

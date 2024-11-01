@@ -32,6 +32,7 @@
   - [x] load kernel
   - [x] elf support
   - [x] paging
+  - [x] map kernel address space
   - [ ] memory map (phase 2)
   - [ ] execution handoff to kernel
 

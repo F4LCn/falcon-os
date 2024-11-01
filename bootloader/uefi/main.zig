@@ -11,6 +11,8 @@ const Mmap = @import("mmap.zig");
 const KernelLoader = @import("kernel_loader.zig");
 const Constants = @import("constants.zig");
 const AddressSpace = @import("address_space.zig");
+const BootloaderError = @import("errors.zig").BootloaderError;
+const MemHelper = @import("mem_helper.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -91,36 +93,25 @@ pub fn main() uefi.Status {
         std.log.err("Could not load kernel executable", .{});
         return uefi.Status.Aborted;
     };
-    _ = &kernel_info;
 
-    const addr_space = AddressSpace.create() catch {
+    var addr_space = AddressSpace.create() catch {
         std.log.err("Could not create address space", .{});
         return uefi.Status.Aborted;
     };
 
-    for (0..10) |i| {
-        const paddr = 0xC012345000 + i * Constants.ARCH_PAGE_SIZE;
-        const vaddr = 0xC054321000 + i * Constants.ARCH_PAGE_SIZE;
-        addr_space.mmap(.{ .vaddr = @bitCast(vaddr) }, .{ .paddr = @intCast(paddr) }, .{ .present = true, .read_write = .read_write }) catch {
-            std.log.warn("Could not map vaddr 0x{X} to paddr 0x{X}", .{ vaddr, paddr });
-            continue;
-        };
-    }
+    const fb_ptr = bootinfo.fb_ptr orelse 0;
+    const fb_size = (@as(u64, bootinfo.fb_height orelse 0)) * (@as(u64, bootinfo.fb_scanline_bytes orelse 0));
+    mapKernelSpace(&addr_space, kernel_info, @intFromPtr(bootinfo), fb_ptr, fb_size, @intFromPtr(config.buffer.ptr)) catch {
+        std.log.err("Could not map kernel address space", .{});
+        return uefi.Status.Aborted;
+    };
 
-    for (0..10) |i| {
-        const paddr = 0x1234000 + i * Constants.ARCH_PAGE_SIZE;
-        const vaddr = 0x4321000 + i * Constants.ARCH_PAGE_SIZE;
-        addr_space.mmap(.{ .vaddr = @bitCast(vaddr) }, .{ .paddr = @intCast(paddr) }, .{ .present = true, .read_write = .read_write }) catch {
-            std.log.warn("Could not map vaddr 0x{X} to paddr 0x{X}", .{ vaddr, paddr });
-            continue;
-        };
-    }
     addr_space.print();
 
-    // Mmap.getMemMap(bootinfo) catch {
-    //     std.log.err("Failed to get memory map", .{});
-    //     return uefi.Status.Aborted;
-    // };
+    Mmap.getMemMap(bootinfo) catch {
+        std.log.err("Failed to get memory map", .{});
+        return uefi.Status.Aborted;
+    };
 
     const conin = Globals.sys_table.con_in.?;
     const input_events = [_]uefi.Event{
@@ -140,4 +131,103 @@ pub fn main() uefi.Status {
     }
 
     return uefi.Status.Timeout;
+}
+
+fn mapKernelSpace(
+    addr_space: *AddressSpace,
+    kernel_info: *const KernelLoader.KernelInfo,
+    bootinfo_ptr: u64,
+    fb_ptr: u64,
+    fb_size: u64,
+    env_ptr: u64,
+) BootloaderError!void {
+    const log = std.log.scoped(.KernelSpaceMapper);
+    // core stack
+    var core_stack_vaddr: u64 = @bitCast(@as(i64, -Constants.ARCH_PAGE_SIZE));
+    for (0..Constants.MAX_CPU) |i| {
+        const core_stack_ptr = try MemHelper.allocatePages(1);
+        log.debug("Mapping core[{d}] stack: 0x{X} -> 0x{X}", .{ i, @intFromPtr(core_stack_ptr), core_stack_vaddr });
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(core_stack_vaddr) },
+            .{ .paddr = @intFromPtr(core_stack_ptr) },
+            AddressSpace.DefaultMmapFlags,
+        );
+        core_stack_vaddr -= Constants.ARCH_PAGE_SIZE;
+    }
+    // kernel
+    for (0..kernel_info.segment_count) |idx| {
+        const mapping = &kernel_info.segment_mappings[idx];
+        log.debug("kernel segment: {any}", .{mapping});
+        var mapping_vaddr = switch (mapping.vaddr) {
+            .vaddr => |x| @as(u64, @bitCast(x)),
+            else => unreachable,
+        };
+        var mapping_paddr = switch (mapping.paddr) {
+            .paddr => |x| @as(u64, @bitCast(x)),
+            else => unreachable,
+        };
+        log.debug("Mapping kernel segment 0x{X} -> 0x{X}", .{
+            @as(u64, @bitCast(mapping_paddr)),
+            @as(u64, @bitCast(mapping_vaddr)),
+        });
+        const num_pages = ((mapping.len + Constants.ARCH_PAGE_SIZE - 1) / Constants.ARCH_PAGE_SIZE);
+        for (0..num_pages) |p| {
+            mapping_paddr += Constants.ARCH_PAGE_SIZE;
+            mapping_vaddr += Constants.ARCH_PAGE_SIZE;
+            log.debug("\t kernel segment[{d}] 0x{X} -> 0x{X}", .{
+                p,
+                @as(u64, @bitCast(mapping_paddr)),
+                @as(u64, @bitCast(mapping_vaddr)),
+            });
+            try addr_space.mmap(
+                .{ .vaddr = @bitCast(mapping_vaddr) },
+                .{ .paddr = mapping_paddr },
+                AddressSpace.DefaultMmapFlags,
+            );
+        }
+    }
+    // bootinfo
+    if (kernel_info.bootinfo_addr) |bootinfo_addr| {
+        log.debug("Mapping bootinfo struct 0x{X} -> 0x{X}", .{ bootinfo_ptr, bootinfo_addr });
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(bootinfo_addr) },
+            .{ .paddr = bootinfo_ptr },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+    // fb
+    // TODO: make sure the size is page aligned
+    if (kernel_info.fb_addr) |fb_addr| {
+        log.debug("Mapping framebuffer from 0x{X} -> 0x{X} (0x{X})", .{ fb_ptr, fb_addr, fb_size });
+        var fb_vaddr = fb_addr;
+        var fb_paddr = fb_ptr;
+        while (fb_paddr < fb_ptr + fb_size) : ({
+            fb_paddr += Constants.ARCH_PAGE_SIZE;
+            fb_vaddr += Constants.ARCH_PAGE_SIZE;
+        }) {
+            try addr_space.mmap(
+                .{ .vaddr = @bitCast(fb_vaddr) },
+                .{ .paddr = fb_paddr },
+                AddressSpace.DefaultMmapFlags,
+            );
+        }
+    }
+    // env
+    if (kernel_info.env_addr) |env_addr| {
+        log.debug("Mapping env 0x{X} -> 0x{X}", .{ env_ptr, env_addr });
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(env_addr) },
+            .{ .paddr = env_ptr },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+    // Identity mapping
+    // i = 0;
+    // while (i < MemHelper.mb(64)) : (i += Constants.ARCH_PAGE_SIZE) {
+    //     try addr_space.mmap(
+    //         .{ .vaddr = @bitCast(i) },
+    //         .{ .paddr = @bitCast(i) },
+    //         AddressSpace.DefaultMmapFlags,
+    //     );
+    // }
 }

@@ -10,4 +10,5 @@ pub const BootloaderError = error{
     KernelTooLargeError,
     AddressSpaceAllocatePages,
     BadAddressType,
+    AllocateKernelInfo,
 };

@@ -5,6 +5,7 @@ const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
 const Constants = @import("constants.zig");
 const Address = @import("address_space.zig").Address;
+const MemHelper = @import("mem_helper.zig");
 
 const log = std.log.scoped(.kernel_loader);
 
@@ -12,9 +13,13 @@ pub const MappingInfo = struct { paddr: Address = .{ .paddr = 0 }, vaddr: Addres
 pub const KernelInfo = struct {
     entrypoint: u64,
     segment_mappings: [8]MappingInfo = undefined,
+    segment_count: u8 = 0,
+    bootinfo_addr: ?u64 = null,
+    fb_addr: ?u64 = null,
+    env_addr: ?u64 = null,
 };
 
-pub fn loadExecutable(kernel_file: []const u8) BootloaderError!KernelInfo {
+pub fn loadExecutable(kernel_file: []const u8) BootloaderError!*KernelInfo {
     const kernel_signature = kernel_file[0..4];
     if (std.mem.eql(u8, kernel_signature, elf.MAGIC)) {
         log.info("Kernel matched ELF signature", .{});
@@ -24,13 +29,7 @@ pub fn loadExecutable(kernel_file: []const u8) BootloaderError!KernelInfo {
     return BootloaderError.InvalidKernelExecutable;
 }
 
-fn KB(val: comptime_int) comptime_int {
-    return val * 1024;
-}
-fn MB(val: comptime_int) comptime_int {
-    return KB(val) * 1024;
-}
-fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
+fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
     var status: uefi.Status = undefined;
     const ehdr: *elf.Elf64_Ehdr = @as(*elf.Elf64_Ehdr, @ptrCast(@alignCast(@constCast(kernel_file.ptr))));
     if (ehdr.e_ident[elf.EI_CLASS] != elf.ELFCLASS64) {
@@ -53,7 +52,13 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
         return BootloaderError.InvalidKernelExecutable;
     }
 
-    var kernel_info: KernelInfo = .{ .entrypoint = ehdr.e_entry };
+    var kernel_info: *KernelInfo = undefined;
+    status = Globals.boot_services.allocatePool(.LoaderData, @sizeOf(KernelInfo), @ptrCast(&kernel_info));
+    switch (status) {
+        .Success => log.debug("Allocated kernel info struct at {*}", .{kernel_info}),
+        else => return BootloaderError.AllocateKernelInfo,
+    }
+    kernel_info.* = .{ .entrypoint = ehdr.e_entry };
 
     const pheaders = std.mem.bytesAsSlice(elf.Elf64_Phdr, kernel_file[ehdr.e_phoff .. ehdr.e_phoff + ehdr.e_phnum * ehdr.e_phentsize]);
     var mapping_idx: usize = 0;
@@ -70,7 +75,7 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
 
         const file_size = phdr.p_filesz;
         const mem_size = phdr.p_memsz;
-        if (mem_size > MB(64)) {
+        if (mem_size > MemHelper.mb(64)) {
             log.err("Kernel is too large ({d} bytes)", .{mem_size});
             return BootloaderError.KernelTooLargeError;
         }
@@ -89,8 +94,8 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
         kernel_info.segment_mappings[mapping_idx].paddr = .{ .paddr = @intFromPtr(load_buffer) };
         kernel_info.segment_mappings[mapping_idx].vaddr = .{ .vaddr = @bitCast(phdr.p_vaddr) };
         kernel_info.segment_mappings[mapping_idx].len = mem_size;
-        log.debug("loaded program to 0x{X}", .{@intFromPtr(load_buffer)});
     }
+    kernel_info.segment_count = @intCast(mapping_idx - 1);
     log.debug("loaded all executable program headers", .{});
 
     if (ehdr.e_shstrndx < ehdr.e_shnum) {
@@ -123,12 +128,15 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
                     const symbol_name: []const u8 = strtab[symbol.st_name..];
                     if (std.mem.eql(u8, symbol_name[0..8], "bootinfo")) {
                         log.debug("Found bootinfo symbol with value 0x{X}", .{symbol.st_value});
+                        kernel_info.bootinfo_addr = symbol.st_value;
                     }
                     if (std.mem.eql(u8, symbol_name[0..2], "fb")) {
                         log.debug("Found framebuffer symbol with value 0x{X}", .{symbol.st_value});
+                        kernel_info.fb_addr = symbol.st_value;
                     }
                     if (std.mem.eql(u8, symbol_name[0..3], "env")) {
                         log.debug("Found env config symbol with value 0x{X}", .{symbol.st_value});
+                        kernel_info.env_addr = symbol.st_value;
                     }
                 }
             }
