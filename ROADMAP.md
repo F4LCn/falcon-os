@@ -33,7 +33,7 @@
   - [x] elf support
   - [x] paging
   - [x] map kernel address space
-  - [ ] memory map (phase 2)
+  - [-] putting the memory map in bootinfo (done with uefi memory types, regions of interest (kernel/fb/etc.) not yet clearly identified)
   - [ ] execution handoff to kernel
 
 ## kernel

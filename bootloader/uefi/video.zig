@@ -1,7 +1,7 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const Globals = @import("globals.zig");
-const BootInfo = @import("bootinfo.zig");
+const BootInfo = @import("bootinfo.zig").BootInfo;
 const BootloaderError = @import("errors.zig").BootloaderError;
 const GraphicsOutput = uefi.protocol.GraphicsOutput;
 

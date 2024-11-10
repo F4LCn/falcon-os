@@ -11,4 +11,5 @@ pub const BootloaderError = error{
     AddressSpaceAllocatePages,
     BadAddressType,
     AllocateKernelInfo,
+    MemoryMapTooBig,
 };

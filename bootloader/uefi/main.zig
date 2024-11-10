@@ -3,7 +3,7 @@ const uefi = std.os.uefi;
 const serial = @import("serial.zig");
 const logger = @import("logger.zig");
 const Globals = @import("globals.zig");
-const BootInfo = @import("bootinfo.zig");
+const BootInfo = @import("bootinfo.zig").BootInfo;
 const Config = @import("config.zig");
 const Video = @import("video.zig");
 const FileSystem = @import("fs.zig");
@@ -28,16 +28,18 @@ pub fn main() uefi.Status {
     };
     Video.init();
 
-    var bootinfo: *align(Constants.ARCH_PAGE_SIZE) BootInfo = undefined;
-    const status = Globals.boot_services.allocatePages(.AllocateAnyPages, .LoaderData, 1, @ptrCast(&bootinfo));
-    switch (status) {
-        .Success => std.log.debug("Allocated 1 page for bootinfo struct", .{}),
-        else => {
-            std.log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return uefi.Status.Aborted;
+    const bootinfo_page = MemHelper.allocatePages(1) catch {
+        std.log.err("Could not allocate a page for bootinfo struct", .{});
+        return uefi.Status.Aborted;
+    };
+    var bootinfo: *align(Constants.ARCH_PAGE_SIZE) BootInfo = @ptrCast(bootinfo_page);
+    bootinfo.* = .{
+        .bootloader_type = .UEFI,
+        .mmap = .{
+            .ptr = 0xABABABAB,
+            .size = 12345,
         },
-    }
-    bootinfo.* = .{ .bootloader_type = .UEFI };
+    };
 
     const config = FileSystem.loadFile("/SYS/KERNEL.CON") catch {
         std.log.err("Failed to load config file", .{});
@@ -99,8 +101,8 @@ pub fn main() uefi.Status {
         return uefi.Status.Aborted;
     };
 
-    const fb_ptr = bootinfo.fb_ptr orelse 0;
-    const fb_size = (@as(u64, bootinfo.fb_height orelse 0)) * (@as(u64, bootinfo.fb_scanline_bytes orelse 0));
+    const fb_ptr = bootinfo.fb_ptr;
+    const fb_size = (@as(u64, bootinfo.fb_height)) * (@as(u64, bootinfo.fb_scanline_bytes));
     mapKernelSpace(&addr_space, kernel_info, @intFromPtr(bootinfo), fb_ptr, fb_size, @intFromPtr(config.buffer.ptr)) catch {
         std.log.err("Could not map kernel address space", .{});
         return uefi.Status.Aborted;
@@ -108,10 +110,20 @@ pub fn main() uefi.Status {
 
     addr_space.print();
 
-    Mmap.getMemMap(bootinfo) catch {
-        std.log.err("Failed to get memory map", .{});
+    std.log.debug("bootinfo page: {X}", .{bootinfo_page[0..200]});
+
+    const mmap_entries: [*]BootInfo.MmapEntry = @ptrCast(&bootinfo.mmap);
+    Mmap.getMemMap(bootinfo) catch |e| {
+        std.log.err("Failed to get memory map. Error: {}", .{e});
+        std.log.err("mmap: ", .{});
+        for (mmap_entries[0..5], 0..) |entry, i| {
+            std.log.err("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
+        }
         return uefi.Status.Aborted;
     };
+    for (mmap_entries[0..20], 0..) |entry, i| {
+        std.log.err("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
+    }
 
     const conin = Globals.sys_table.con_in.?;
     const input_events = [_]uefi.Event{
@@ -222,12 +234,12 @@ fn mapKernelSpace(
         );
     }
     // Identity mapping
-    // i = 0;
-    // while (i < MemHelper.mb(64)) : (i += Constants.ARCH_PAGE_SIZE) {
-    //     try addr_space.mmap(
-    //         .{ .vaddr = @bitCast(i) },
-    //         .{ .paddr = @bitCast(i) },
-    //         AddressSpace.DefaultMmapFlags,
-    //     );
-    // }
+    var i: u64 = 0;
+    while (i < MemHelper.mb(64)) : (i += Constants.ARCH_PAGE_SIZE) {
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(i) },
+            .{ .paddr = @bitCast(i) },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
 }
