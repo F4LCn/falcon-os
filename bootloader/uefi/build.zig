@@ -1,6 +1,6 @@
-const Build = @import("std").Build;
-const Target = @import("std").Target;
-const CrossTarget = @import("std").zig.CrossTarget;
+const std = @import("std");
+const Build = std.Build;
+const Target = std.Target;
 const builtin = @import("builtin");
 
 pub fn build(b: *Build) void {

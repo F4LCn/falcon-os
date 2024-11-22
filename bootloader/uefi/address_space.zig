@@ -108,7 +108,7 @@ levels: u8 = 4,
 const Self = @This();
 
 pub fn create() BootloaderError!Self {
-    const root_ptr = try MemHelper.allocatePages(1);
+    const root_ptr = try MemHelper.allocatePages(1, .PAGING);
     return .{
         .root = @intFromPtr(root_ptr),
     };
@@ -145,7 +145,7 @@ pub fn mmap(self: *const Self, vaddr: Address, paddr: Address, flags: MmapFlags)
 fn getOrCreateMapping(mapping: *PageMapping, idx: u9) BootloaderError!*PageMapping {
     const next_level: *PageMapping.Entry = &mapping.mappings[idx];
     if (!next_level.present) {
-        const page_ptr = try MemHelper.allocatePages(1);
+        const page_ptr = try MemHelper.allocatePages(1, .PAGING);
         writeEntry(next_level, @intFromPtr(page_ptr), .{ .present = true, .read_write = .read_write });
         return @ptrCast(page_ptr);
     }

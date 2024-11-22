@@ -3,6 +3,7 @@ const uefi = std.os.uefi;
 const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
 const Constants = @import("constants.zig");
+const MemHelper = @import("mem_helper.zig");
 
 const log = std.log.scoped(.file_system);
 
@@ -40,19 +41,20 @@ pub fn init() BootloaderError!void {
     }
 }
 
-pub fn loadFile(path: []const u8) BootloaderError!FileBuffer {
+// TODO: put all args into args
+pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .RECLAIMABLE }) BootloaderError!FileBuffer {
     var status: uefi.Status = undefined;
 
     var file_handle: *uefi.protocol.File = undefined;
     var utf16_buffer = [_:0]u16{0} ** 265;
-    const len = std.unicode.utf8ToUtf16Le(&utf16_buffer, path[0..]) catch {
+    const len = std.unicode.utf8ToUtf16Le(&utf16_buffer, args.path[0..]) catch {
         return BootloaderError.InvalidPathError;
     };
     std.mem.replaceScalar(u16, &utf16_buffer, '/', '\\');
-    log.debug("Converted str: {s} -> {any} ({d})", .{ path, utf16_buffer, len });
+    log.debug("Converted str: {s} -> {any} ({d})", .{ args.path, utf16_buffer, len });
     status = _root.open(&file_handle, &utf16_buffer, uefi.protocol.File.efi_file_mode_read, 0);
     switch (status) {
-        .Success => log.debug("Opened file {s}", .{path}),
+        .Success => log.debug("Opened file {s}", .{args.path}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;
@@ -91,15 +93,9 @@ pub fn loadFile(path: []const u8) BootloaderError!FileBuffer {
 
     var file_buffer_size = std.mem.alignForward(usize, @intCast(file_info.file_size), Constants.ARCH_PAGE_SIZE);
     const pages_to_allocate = @divExact(file_buffer_size, Constants.ARCH_PAGE_SIZE);
-    var contents: [*]align(Constants.ARCH_PAGE_SIZE) u8 = undefined;
-    status = boot_services.allocatePages(.AllocateAnyPages, .LoaderData, pages_to_allocate, &contents);
-    switch (status) {
-        .Success => log.debug("Allocated {d} pages for file {s} contents", .{ pages_to_allocate, path }),
-        else => {
-            log.err("Expected Success but got {s} instead", .{@tagName(status)});
-            return BootloaderError.FileLoadError;
-        },
-    }
+    const contents = MemHelper.allocatePages(pages_to_allocate, args.type) catch {
+        return BootloaderError.FileLoadError;
+    };
 
     status = file_handle.read(&file_buffer_size, contents);
     switch (status) {

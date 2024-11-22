@@ -17,6 +17,20 @@ const MemHelper = @import("mem_helper.zig");
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
+    .log_scope_levels = &.{
+        .{
+            .scope = .vmm,
+            .level = .info,
+        },
+        .{
+            .scope = .mmap,
+            .level = .info,
+        },
+        .{
+            .scope = .MemHelper,
+            .level = .info,
+        },
+    },
 };
 
 pub fn main() uefi.Status {
@@ -28,7 +42,7 @@ pub fn main() uefi.Status {
     };
     Video.init();
 
-    const bootinfo_page = MemHelper.allocatePages(1) catch {
+    const bootinfo_page = MemHelper.allocatePages(1, .BOOTINFO) catch {
         std.log.err("Could not allocate a page for bootinfo struct", .{});
         return uefi.Status.Aborted;
     };
@@ -41,7 +55,7 @@ pub fn main() uefi.Status {
         },
     };
 
-    const config = FileSystem.loadFile("/SYS/KERNEL.CON") catch {
+    const config = FileSystem.loadFile(.{ .path = "/SYS/KERNEL.CON", .type = .BOOTINFO }) catch {
         std.log.err("Failed to load config file", .{});
         return uefi.Status.Aborted;
     };
@@ -85,7 +99,7 @@ pub fn main() uefi.Status {
 
     std.log.debug("Bootinfo struct: {any}", .{bootinfo});
 
-    const kernel = FileSystem.loadFile(bootloader_config.kernel) catch {
+    const kernel = FileSystem.loadFile(.{ .path = bootloader_config.kernel }) catch {
         std.log.err("Could not load kernel file", .{});
         return uefi.Status.Aborted;
     };
@@ -108,7 +122,7 @@ pub fn main() uefi.Status {
         return uefi.Status.Aborted;
     };
 
-    addr_space.print();
+    // addr_space.print();
 
     std.log.debug("bootinfo page: {X}", .{bootinfo_page[0..200]});
 
@@ -121,8 +135,8 @@ pub fn main() uefi.Status {
         }
         return uefi.Status.Aborted;
     };
-    for (mmap_entries[0..20], 0..) |entry, i| {
-        std.log.err("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
+    for (mmap_entries[0..30], 0..) |entry, i| {
+        std.log.debug("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
     }
 
     const conin = Globals.sys_table.con_in.?;
@@ -157,7 +171,7 @@ fn mapKernelSpace(
     // core stack
     var core_stack_vaddr: u64 = @bitCast(@as(i64, -Constants.ARCH_PAGE_SIZE));
     for (0..Constants.MAX_CPU) |i| {
-        const core_stack_ptr = try MemHelper.allocatePages(1);
+        const core_stack_ptr = try MemHelper.allocatePages(1, .ReservedMemoryType);
         log.debug("Mapping core[{d}] stack: 0x{X} -> 0x{X}", .{ i, @intFromPtr(core_stack_ptr), core_stack_vaddr });
         try addr_space.mmap(
             .{ .vaddr = @bitCast(core_stack_vaddr) },

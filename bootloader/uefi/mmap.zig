@@ -4,6 +4,7 @@ const Globals = @import("globals.zig");
 const BootloaderError = @import("errors.zig").BootloaderError;
 const Constants = @import("constants.zig");
 const BootInfo = @import("bootinfo.zig").BootInfo;
+const MemHelper = @import("mem_helper.zig");
 
 const log = std.log.scoped(.mmap);
 
@@ -60,15 +61,19 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!void {
             return BootloaderError.MemoryMapTooBig;
         }
         descriptor = @ptrFromInt(idx * descriptor_size + @intFromPtr(mmap));
-        log.info("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor.type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
+        const descriptor_type = MemHelper.MemoryType.fromUefi(descriptor.type);
+        log.info("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor_type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
 
-        const entry_type: BootInfo.MmapEntry.Type = switch (descriptor.type) {
+        const entry_type: BootInfo.MmapEntry.Type = switch (descriptor_type) {
             .LoaderCode, .LoaderData, .BootServicesCode, .BootServicesData, .ConventionalMemory => .FREE,
             .ACPIReclaimMemory, .ACPIMemoryNVS => .ACPI,
+            .PAGING => .PAGING,
+            .RECLAIMABLE => .RECLAIMABLE,
+            .BOOTINFO => .BOOTINFO,
+            .KERNEL_MODULE => .KERNEL_MODULE,
+            .FRAMEBUFFER => .FRAMEBUFFER,
             else => .USED,
         };
-
-        // TODO: Mark kernel/fb/env/bootinfo with the appropriate type
 
         const mmap_entry = &mmap_entries[mmap_idx];
         mmap_entry.* = BootInfo.MmapEntry.create(descriptor.physical_start, descriptor.number_of_pages * Constants.ARCH_PAGE_SIZE, entry_type);
