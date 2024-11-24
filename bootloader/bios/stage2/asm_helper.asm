@@ -30,28 +30,28 @@ bios_read_sectors:
 switch_long_mode:
     push ebp
     mov ebp, esp
-    mov eax, cr0
+    mov eax, cr0                            ; disable paging
     and eax, 0x7FFFFFFF
     mov cr0, eax
-    mov eax, cr4
+    mov eax, cr4                            ; enabling fpu/sse
     or eax, 0x620
     mov cr4, eax
     mov eax, dword [ebp+0x8]
-    mov cr3, eax
-    mov ecx, 0xC0000080
+    mov cr3, eax                            ; set the page map
+    mov ecx, 0xC0000080                     ; EFER, enable long mode
     rdmsr
     or eax, 0x101
     wrmsr
-    mov eax, cr0
+    mov eax, cr0                            ; enable paging
     or eax, 0xE000000E
     mov cr0, eax
-    mov ebx, dword [ebp + 0xc]
+    mov ebx, dword [ebp + 0xc]              ; push entrypoint to stack
     mov edx, dword [ebp + 0x10]
     push edx
     push ebx
-    jmp 0x28:.long_mode
+    jmp 0x28:.long_mode                     ; change code segment to 64bits
 .long_mode:
 USE64
-    pop rax
-    jmp rax
-    jmp $
+    pop rax                                 ; pop entrypoint from stack
+    jmp rax                                 ; handoff exec to kernel
+    jmp $                                   ; catch-all in case the kernel returns

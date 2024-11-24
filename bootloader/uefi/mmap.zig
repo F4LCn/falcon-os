@@ -8,7 +8,7 @@ const MemHelper = @import("mem_helper.zig");
 
 const log = std.log.scoped(.mmap);
 
-pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!void {
+pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
     var status: uefi.Status = undefined;
     const boot_services = Globals.boot_services;
 
@@ -45,7 +45,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!void {
         },
     }
 
-    log.info("descriptor size: expected={d}, actual={d}", .{ @sizeOf(uefi.tables.MemoryDescriptor), descriptor_size });
+    log.debug("descriptor size: expected={d}, actual={d}", .{ @sizeOf(uefi.tables.MemoryDescriptor), descriptor_size });
 
     const mmap_entries: [*]BootInfo.MmapEntry = @ptrCast(&bootinfo.mmap);
     var mmap_idx: u64 = 0;
@@ -62,7 +62,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!void {
         }
         descriptor = @ptrFromInt(idx * descriptor_size + @intFromPtr(mmap));
         const descriptor_type = MemHelper.MemoryType.fromUefi(descriptor.type);
-        log.info("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor_type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
+        log.debug("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor_type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
 
         const entry_type: BootInfo.MmapEntry.Type = switch (descriptor_type) {
             .LoaderCode, .LoaderData, .BootServicesCode, .BootServicesData, .ConventionalMemory => .FREE,
@@ -97,4 +97,5 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!void {
         bootinfo.size += @sizeOf(BootInfo.MmapEntry);
         mmap_idx += 1;
     }
+    return mapKey;
 }

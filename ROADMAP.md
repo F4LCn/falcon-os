@@ -34,12 +34,12 @@
   - [x] paging
   - [x] map kernel address space
   - [x] putting the memory map in bootinfo (done with uefi memory types, regions of interest (kernel/fb/etc.) not yet clearly identified)
-  - [ ] execution handoff to kernel
+  - [x] execution handoff to kernel
 
 ## kernel
 - Actual kernel
-    - threading
-    - smp
-    - fs
-    - fun stuff ??
+  - threading
+  - smp
+  - fs
+  - fun stuff ??
 

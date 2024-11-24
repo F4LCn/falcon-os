@@ -2,8 +2,9 @@ OUTPUT_FORMAT("elf64-x86-64", "elf64-x86-64", "elf64-x86-64")
 OUTPUT_ARCH(i386:x86-64)
 ENTRY(_kernel_entry)
 
-fb          = 0xfffffffffc000000;
-bootinfo    = 0xffffffffffe00000;
+fb          = 0xffffffffc0000000;
+bootinfo    = 0xfffffffffc000000;
+env	    = 0xfffffffffc001000;
 
 SECTIONS
 {

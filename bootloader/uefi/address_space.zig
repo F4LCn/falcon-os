@@ -137,6 +137,9 @@ pub fn mmap(self: *const Self, vaddr: Address, paddr: Address, flags: MmapFlags)
         @panic("large pages unhandled");
     }
     const entry = &pt_mapping.mappings[virtual_addr.pt_idx];
+    if (entry.present) {
+        log.warn("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(physical_addr)) });
+    }
 
     writeEntry(entry, physical_addr, flags);
     log.debug("entry after mapping({*}): 0x{X}", .{ entry, @as(u64, @bitCast(entry.*)) });

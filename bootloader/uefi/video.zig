@@ -142,7 +142,7 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
 pub fn fillRect(red: u8, green: u8, blue: u8) BootloaderError!void {
     var fillBuffer = [_]GraphicsOutput.BltPixel{.{ .red = red, .green = green, .blue = blue }};
     if (gop) |graphics_output| {
-        const status = graphics_output.blt(&fillBuffer, GraphicsOutput.BltOperation.BltVideoFill, 0, 0, 0, 0, 250, 250, 0);
+        const status = graphics_output.blt(&fillBuffer, GraphicsOutput.BltOperation.BltVideoFill, 0, 0, 0, 0, 10, 10, 0);
         switch (status) {
             .Success => log.debug("Located graphics output protocol", .{}),
             else => {

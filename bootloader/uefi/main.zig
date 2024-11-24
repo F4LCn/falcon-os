@@ -16,21 +16,7 @@ const MemHelper = @import("mem_helper.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
-    .log_level = .debug,
-    .log_scope_levels = &.{
-        .{
-            .scope = .vmm,
-            .level = .info,
-        },
-        .{
-            .scope = .mmap,
-            .level = .info,
-        },
-        .{
-            .scope = .MemHelper,
-            .level = .info,
-        },
-    },
+    .log_level = .info,
 };
 
 pub fn main() uefi.Status {
@@ -127,7 +113,7 @@ pub fn main() uefi.Status {
     std.log.debug("bootinfo page: {X}", .{bootinfo_page[0..200]});
 
     const mmap_entries: [*]BootInfo.MmapEntry = @ptrCast(&bootinfo.mmap);
-    Mmap.getMemMap(bootinfo) catch |e| {
+    const map_key = Mmap.getMemMap(bootinfo) catch |e| {
         std.log.err("Failed to get memory map. Error: {}", .{e});
         std.log.err("mmap: ", .{});
         for (mmap_entries[0..5], 0..) |entry, i| {
@@ -139,22 +125,31 @@ pub fn main() uefi.Status {
         std.log.debug("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
     }
 
-    const conin = Globals.sys_table.con_in.?;
-    const input_events = [_]uefi.Event{
-        conin.wait_for_key,
-    };
-
-    var index: usize = undefined;
-    while (Globals.boot_services.waitForEvent(input_events.len, &input_events, &index) == uefi.Status.Success) {
-        if (index == 0) {
-            var input_key: uefi.protocol.SimpleTextInputEx.Key.Input = undefined;
-            if (conin.readKeyStroke(&input_key) == uefi.Status.Success) {
-                if (input_key.unicode_char == @as(u16, 'Q')) {
-                    return uefi.Status.Success;
-                }
-            }
-        }
+    // TODO: exit boot services
+    const status = Globals.boot_services.exitBootServices(uefi.handle, map_key);
+    switch (status) {
+        .Success => {},
+        else => {
+            std.log.err("Could not exit boot services, bad map key", .{});
+            return uefi.Status.Aborted;
+        },
     }
+
+    // WARN: Don't use boot_services after this line
+    asm volatile (
+        \\ mov %cr4, %rax
+        \\ or $0x620, %rax
+        \\ mov %rax, %cr4
+        \\ mov %[page_map], %cr3
+        \\ mov %[kernel_entry], %rax
+        \\ jmp *%rax
+        \\ _catch:
+        \\ jmp _catch
+        :
+        : [page_map] "r" (addr_space.root),
+          [kernel_entry] "r" (kernel_info.entrypoint),
+        : "rax"
+    );
 
     return uefi.Status.Timeout;
 }
@@ -198,9 +193,9 @@ fn mapKernelSpace(
         });
         const num_pages = ((mapping.len + Constants.ARCH_PAGE_SIZE - 1) / Constants.ARCH_PAGE_SIZE);
         for (0..num_pages) |p| {
-            mapping_paddr += Constants.ARCH_PAGE_SIZE;
-            mapping_vaddr += Constants.ARCH_PAGE_SIZE;
-            log.debug("\t kernel segment[{d}] 0x{X} -> 0x{X}", .{
+            defer mapping_paddr += Constants.ARCH_PAGE_SIZE;
+            defer mapping_vaddr += Constants.ARCH_PAGE_SIZE;
+            log.info("\t kernel segment[{d}] 0x{X} -> 0x{X}", .{
                 p,
                 @as(u64, @bitCast(mapping_paddr)),
                 @as(u64, @bitCast(mapping_vaddr)),
@@ -223,6 +218,7 @@ fn mapKernelSpace(
     }
     // fb
     // TODO: make sure the size is page aligned
+    log.info("Mapping fb", .{});
     if (kernel_info.fb_addr) |fb_addr| {
         log.debug("Mapping framebuffer from 0x{X} -> 0x{X} (0x{X})", .{ fb_ptr, fb_addr, fb_size });
         var fb_vaddr = fb_addr;
@@ -248,8 +244,9 @@ fn mapKernelSpace(
         );
     }
     // Identity mapping
+    log.info("Mapping identity", .{});
     var i: u64 = 0;
-    while (i < MemHelper.mb(64)) : (i += Constants.ARCH_PAGE_SIZE) {
+    while (i < MemHelper.mb(512)) : (i += Constants.ARCH_PAGE_SIZE) {
         try addr_space.mmap(
             .{ .vaddr = @bitCast(i) },
             .{ .paddr = @bitCast(i) },
