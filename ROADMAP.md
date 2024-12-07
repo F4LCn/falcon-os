@@ -37,9 +37,33 @@
   - [x] execution handoff to kernel
 
 ## kernel
-- Actual kernel
-  - threading
-  - smp
-  - fs
-  - fun stuff ??
+  - Early init
+    * [ ] GDT redefinition
+    * [ ] Hardware exceptions & interrupts
+    * [ ] CPU resolution & init
+    * [ ] Synchronization (Mutex, lock, ...)
+    * [ ] Early heap allocation
+
+  - Core features
+    * [ ] Allocators hierarchy
+      * [ ] Physical memory manager / Frame allocator
+      * [ ] Virtual memory manager / Page allocator
+      * [ ] General purpose heap allocator
+    * [ ] Advanced interrupt handling (IRQ allocation, ...)
+    * [ ] SMP
+    * [ ] Processes, Threads & context switching
+    * [ ] Task / Task queues ?
+    * [ ] Scheduling
+    * [ ] Timers
+    * [ ] Basic graphics (Console + basic font rendering)
+
+  - Nice to haves
+    * [ ] PCI enumeration
+    * [ ] a few PCI drivers (NVMe/ATA/USB)
+    * [ ] USB (a few usb drivers, maybe HID, mass storage)
+    * [ ] File system (physical fs (ext2/fat32) and virtual (root) fs)
+    * [ ] In kernel debugging (gdb server)
+    * [ ] Networking (NIC driver, DHCP client, TCP, HTTP)
+    * [ ] Userspace
+    * [ ] Graphics (graphic context, windows & compositing) or (consoles, tmux like panes)
 
