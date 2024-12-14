@@ -96,6 +96,21 @@ pub fn main() uefi.Status {
         return uefi.Status.Aborted;
     };
 
+    std.log.debug("Kernel info: ", .{});
+    std.log.debug("  entrypoint: 0x{X}", .{kernel_info.entrypoint});
+    std.log.debug("  entry count: {d}", .{kernel_info.segment_count});
+    for (kernel_info.segment_mappings, 0..kernel_info.segment_count) |mapping, idx| {
+        const mapping_vaddr = switch (mapping.vaddr) {
+            .vaddr => |x| @as(u64, @bitCast(x)),
+            else => unreachable,
+        };
+        const mapping_paddr = switch (mapping.paddr) {
+            .paddr => |x| @as(u64, @bitCast(x)),
+            else => unreachable,
+        };
+        std.log.debug("  mapping[{d}]: p=0x{X} v=0x{X} l={d}", .{ idx, @as(u64, mapping_paddr), @as(u64, mapping_vaddr), mapping.len });
+    }
+
     var addr_space = AddressSpace.create() catch {
         std.log.err("Could not create address space", .{});
         return uefi.Status.Aborted;
@@ -128,7 +143,9 @@ pub fn main() uefi.Status {
     // TODO: exit boot services
     const status = Globals.boot_services.exitBootServices(uefi.handle, map_key);
     switch (status) {
-        .Success => {},
+        .Success => {
+            std.log.info("Exited boot services. Handling execution to kernel ...", .{});
+        },
         else => {
             std.log.err("Could not exit boot services, bad map key", .{});
             return uefi.Status.Aborted;
@@ -163,6 +180,7 @@ fn mapKernelSpace(
     env_ptr: u64,
 ) BootloaderError!void {
     const log = std.log.scoped(.KernelSpaceMapper);
+    log.info("Mapping kernel space", .{});
     // core stack
     var core_stack_vaddr: u64 = @bitCast(@as(i64, -Constants.ARCH_PAGE_SIZE));
     for (0..Constants.MAX_CPU) |i| {
@@ -195,7 +213,7 @@ fn mapKernelSpace(
         for (0..num_pages) |p| {
             defer mapping_paddr += Constants.ARCH_PAGE_SIZE;
             defer mapping_vaddr += Constants.ARCH_PAGE_SIZE;
-            log.info("\t kernel segment[{d}] 0x{X} -> 0x{X}", .{
+            log.debug("\t kernel segment[{d}] 0x{X} -> 0x{X}", .{
                 p,
                 @as(u64, @bitCast(mapping_paddr)),
                 @as(u64, @bitCast(mapping_vaddr)),
@@ -218,7 +236,7 @@ fn mapKernelSpace(
     }
     // fb
     // TODO: make sure the size is page aligned
-    log.info("Mapping fb", .{});
+    log.debug("Mapping fb", .{});
     if (kernel_info.fb_addr) |fb_addr| {
         log.debug("Mapping framebuffer from 0x{X} -> 0x{X} (0x{X})", .{ fb_ptr, fb_addr, fb_size });
         var fb_vaddr = fb_addr;
@@ -244,9 +262,11 @@ fn mapKernelSpace(
         );
     }
     // Identity mapping
-    log.info("Mapping identity", .{});
+    const identity_map_size: u64 = MemHelper.mb(512);
+    log.debug("Mapping identity 512mb 0x{X}", .{identity_map_size});
     var i: u64 = 0;
-    while (i < MemHelper.mb(512)) : (i += Constants.ARCH_PAGE_SIZE) {
+    while (i < identity_map_size) : (i += Constants.ARCH_PAGE_SIZE) {
+        log.debug("Mapping identity 0x{X}", .{i});
         try addr_space.mmap(
             .{ .vaddr = @bitCast(i) },
             .{ .paddr = @bitCast(i) },

@@ -65,7 +65,6 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
     var ph_idx: usize = 0;
     while (ph_idx < ehdr.e_phnum) : ({
         ph_idx += 1;
-        mapping_idx += 1;
     }) {
         const phdr = pheaders[ph_idx];
 
@@ -93,8 +92,10 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
         kernel_info.segment_mappings[mapping_idx].paddr = .{ .paddr = @intFromPtr(load_buffer) };
         kernel_info.segment_mappings[mapping_idx].vaddr = .{ .vaddr = @bitCast(phdr.p_vaddr) };
         kernel_info.segment_mappings[mapping_idx].len = mem_size;
+
+        mapping_idx += 1;
     }
-    kernel_info.segment_count = @intCast(mapping_idx - 1);
+    kernel_info.segment_count = @intCast(mapping_idx);
     log.debug("loaded all executable program headers", .{});
 
     if (ehdr.e_shstrndx < ehdr.e_shnum) {
