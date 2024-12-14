@@ -1,6 +1,6 @@
 OUTPUT_FORMAT("elf64-x86-64", "elf64-x86-64", "elf64-x86-64")
 OUTPUT_ARCH(i386:x86-64)
-ENTRY(_kernel_entry)
+ENTRY(_start)
 
 fb          = 0xffffffffc0000000;
 bootinfo    = 0xfffffffffc000000;
@@ -9,12 +9,12 @@ env	    = 0xfffffffffc001000;
 SECTIONS
 {
   . = 0xFFFFFFFFFC002000;
-	.text ALIGN(0x1000):
+	.text ALIGN(4K):
 	{
 		*(.text .stub .text.* .gnu.linkonce.t.*)
 	} = 0x90909090
 
-  .init.text ALIGN(0x1000): {
+  .init.text ALIGN(4K): {
    *(.init.text)
   }
 
@@ -27,8 +27,7 @@ SECTIONS
 		*(.rodata1)
 	}
 
-	. = ALIGN(512);
-
+	. = ALIGN(4K);
 	.data		:
 	{
 		*(.data .data.* .gnu.linkonce.d.*)
@@ -129,21 +128,8 @@ SECTIONS
   .tbss		  : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) }
   .ctors          :
   {
-    /* gcc uses crtbegin.o to find the start of
-       the constructors, so we make sure it is
-       first.  Because this is a wildcard, it
-       doesn't matter if the user does not
-       actually link against crtbegin.o; the
-       linker won't look for a file to match a
-       wildcard.  The wildcard also means that it
-       doesn't matter which directory crtbegin.o
-       is in.  */
     KEEP (*crtbegin.o(.ctors))
     KEEP (*crtbegin?.o(.ctors))
-    /* We don't want to include the .ctor section from
-       the crtend.o file until after the sorted ctors.
-       The .ctor section from the crtend file contains the
-       end of ctors marker and it must be last */
     KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .ctors))
     KEEP (*(SORT(.ctors.*)))
     KEEP (*(.ctors))
@@ -162,8 +148,9 @@ SECTIONS
   .got            : { *(.got) }
 
   .got.plt        : { *(.got.plt) }
-  .eh_frame_hdr : { *(.eh_frame_hdr) }
-  .eh_frame       : ONLY_IF_RO { KEEP (*(.eh_frame)) }
+  . = ALIGN(4K);
+  /* .eh_frame_hdr : { *(.eh_frame_hdr) } */
+  /* .eh_frame       : ONLY_IF_RO { KEEP (*(.eh_frame)) } */
   /* Exception handling  */
   .gcc_except_table   : ONLY_IF_RO { *(.gcc_except_table .gcc_except_table.*) }
   .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) }
@@ -206,7 +193,7 @@ SECTIONS
   .debug_pubtypes 0 : { *(.debug_pubtypes) }
   .debug_ranges   0 : { *(.debug_ranges) }
   .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
-/DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.exitcall.exit) *(.exit.data) *(.exit.text)}
+/DISCARD/ : { *(.eh_frame) *(.eh_frame_hdr) *(.note.GNU-stack) *(.gnu_debuglink) *(.exitcall.exit) *(.exit.data) *(.exit.text)}
 }
 
 
