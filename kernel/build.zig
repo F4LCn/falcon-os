@@ -13,8 +13,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/main.zig"),
-        .omit_frame_pointer = true,
-        .sanitize_thread = false,
+        .pic = true,
+        .code_model = .kernel,
     });
     kernel_exe.setLinkerScript(b.path("linker.ld"));
     b.installArtifact(kernel_exe);

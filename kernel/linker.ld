@@ -18,6 +18,7 @@ SECTIONS
    *(.init.text)
   }
 
+	. = ALIGN(4K);
 	.rodata		:
 	{
 		*(.rodata .rodata.* .gnu.linkonce.r.*)

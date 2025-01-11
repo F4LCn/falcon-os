@@ -1,16 +1,26 @@
-extern var bootinfo: [*]u64;
+const std = @import("std");
+const BootInfo = @import("bootinfo.zig").BootInfo;
+const logger = @import("log/logger.zig");
+const cpu = @import("cpu.zig");
+const serial = @import("log/serial.zig");
 
-export fn _start() callconv(.C) noreturn {
-    // asm volatile (
-    //     \\ call kernelMain
-    // );
-    kernelMain(12, 13, 14, 15);
+extern var bootinfo: *const BootInfo;
+
+pub const std_options: std.Options = .{
+    .logFn = logger.logFn,
+    .log_level = .debug,
+};
+
+export fn _start() callconv(.naked) noreturn {
+    asm volatile (
+        \\ .extern kernelMain
+        \\ call kernelMain
+    );
+
     while (true) {}
 }
 
-export fn kernelMain(a: u32, b: u32, c: u32, d: u32) callconv(.C) void {
-    var idx: u64 = 0;
-    while (true) : (idx += 1) {
-        bootinfo[idx] += @intCast(a + b + c + d);
-    }
+pub export fn kernelMain() callconv(.c) void {
+    cpu.init();
+    std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str});
 }

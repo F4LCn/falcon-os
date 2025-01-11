@@ -38,6 +38,7 @@
 
 ## kernel
   - Early init
+    * [x] Cpu identification and capabilities (initial setup)
     * [ ] GDT redefinition
     * [ ] Hardware exceptions & interrupts
     * [ ] CPU resolution & init
