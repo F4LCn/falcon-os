@@ -31,7 +31,7 @@ pub fn init() BootloaderError!void {
             return BootloaderError.FileLoadError;
         },
     }
-    status = _file_system.openVolume(&_root);
+    status = _file_system.openVolume(@ptrCast(&_root));
     switch (status) {
         .Success => log.debug("Successfully opened the root volume", .{}),
         else => {
@@ -52,7 +52,7 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
     };
     std.mem.replaceScalar(u16, &utf16_buffer, '/', '\\');
     log.debug("Converted str: {s} -> {any} ({d})", .{ args.path, utf16_buffer, len });
-    status = _root.open(&file_handle, &utf16_buffer, uefi.protocol.File.efi_file_mode_read, 0);
+    status = _root.open(@ptrCast(&file_handle), &utf16_buffer, uefi.protocol.File.efi_file_mode_read, 0);
     switch (status) {
         .Success => log.debug("Opened file {s}", .{args.path}),
         else => {
