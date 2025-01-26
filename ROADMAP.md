@@ -39,11 +39,12 @@
 ## kernel
   - Early init
     * [x] Cpu identification and capabilities (initial setup)
+    * [x] Setup serial logger
+    * [-] Early heap allocation
     * [ ] GDT redefinition
     * [ ] Hardware exceptions & interrupts
     * [ ] CPU resolution & init
     * [ ] Synchronization (Mutex, lock, ...)
-    * [ ] Early heap allocation
 
   - Core features
     * [ ] Allocators hierarchy

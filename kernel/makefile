@@ -3,7 +3,7 @@ OUTPUT_DIR = ../build
 all: kernel64.elf
 
 kernel64.elf:
-	zig build
+	zig build --release=fast
 	cp zig-out/bin/kernel64.elf $(OUTPUT_DIR)/kernel64.elf
 
 clean:
