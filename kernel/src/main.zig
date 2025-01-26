@@ -22,6 +22,7 @@ export fn _start() callconv(.naked) noreturn {
 }
 
 pub export fn kernelMain() callconv(.c) void {
+    logger.init(serial.Port.COM1);
     cpu.init();
     std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str});
 }
