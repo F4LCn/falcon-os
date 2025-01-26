@@ -13,10 +13,11 @@ pub const std_options: std.Options = .{
 
 export fn _start() callconv(.naked) noreturn {
     asm volatile (
-        \\ .extern kernelMain
+        \\ .global kernelMain
+        \\ mov $0, %rbp
+        \\ mov %rbp, %rsp
         \\ call kernelMain
     );
-
     while (true) {}
 }
 
