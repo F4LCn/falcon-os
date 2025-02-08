@@ -37,3 +37,7 @@
 
 ### serial
  - serial: https://wiki.osdev.org/Serial_Ports
+
+### Ziglang
+ - Zig language documentation: https://ziglang.org/documentation/master
+ - Zig language standard library: https://ziglang.org/documentation/master/std

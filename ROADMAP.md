@@ -41,6 +41,7 @@
     * [x] Cpu identification and capabilities (initial setup)
     * [x] Setup serial logger
     * [-] Early heap allocation
+    * [x] Linked list implementation
     * [ ] GDT redefinition
     * [ ] Hardware exceptions & interrupts
     * [ ] CPU resolution & init
