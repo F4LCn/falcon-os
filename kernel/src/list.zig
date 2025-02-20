@@ -197,7 +197,22 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
     };
 }
 
+pub const ListLink = struct {
+    const Self = @This();
+    prev: ?*Self,
+    next: ?*Self,
+
+    pub fn create() Self {
+        return .{
+            .prev = null,
+            .next = null,
+        };
+    }
+};
+pub const List = DoublyLinkedList(ListLink, .prev, .next);
+
 test {
     _ = @import("tests/list/singly_linked.zig");
     _ = @import("tests/list/doubly_linked.zig");
+    _ = @import("tests/list/list.zig");
 }
