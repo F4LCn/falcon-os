@@ -4,8 +4,7 @@ const logger = @import("log/logger.zig");
 const cpu = @import("cpu.zig");
 const serial = @import("log/serial.zig");
 const heap = @import("heap.zig");
-
-extern var bootinfo: *const BootInfo;
+const pmem = @import("pmem.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -25,7 +24,9 @@ export fn _start() callconv(.naked) noreturn {
 pub export fn kernelMain() callconv(.c) void {
     logger.init(serial.Port.COM1);
     cpu.init();
-    std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str});
+    std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str[0..12]});
+
+    pmem.init();
 
     failableMain() catch |e| {
         std.log.err("Failed with error: {any}", .{e});

@@ -97,5 +97,6 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
         bootinfo.size += @sizeOf(BootInfo.MmapEntry);
         mmap_idx += 1;
     }
+    log.info("Created {d} mmap entries, bootinfo size: {d}", .{mmap_idx, bootinfo.size});
     return mapKey;
 }

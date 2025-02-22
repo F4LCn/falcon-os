@@ -19,10 +19,10 @@ pub fn build(b: *std.Build) void {
         .code_model = .kernel,
     });
 
-    switch (optimize) {
-        .Debug => kernel_exe.root_module.strip = false,
-        else => kernel_exe.root_module.strip = true,
-    }
+    // switch (optimize) {
+    //     .Debug => kernel_exe.root_module.strip = false,
+    //     else => kernel_exe.root_module.strip = true,
+    // }
 
     kernel_exe.setLinkerScript(b.path("linker.ld"));
     b.installArtifact(kernel_exe);

@@ -30,6 +30,7 @@ SECTIONS
 	.data	ALIGN(4K)	:
 	{
 		*(.data .data.* .gnu.linkonce.d.*)
+		*(.got)
 	}
 	.data1		:
 	{
