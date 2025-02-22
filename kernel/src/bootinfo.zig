@@ -1,4 +1,4 @@
-pub const BootInfo = packed struct {
+pub const BootInfo = extern struct {
     pub const BootloaderType = enum(u8) {
         BIOS = 0,
         UEFI = 1,
@@ -54,17 +54,17 @@ pub const BootInfo = packed struct {
         }
     };
 
-    magic: u32 = 0x464C434E,
-    size: u32 = 96,
+    magic: [4]u8,
+    size: u32,
     bootloader_type: BootloaderType,
-    unused0: u24 = undefined,
-    fb_ptr: u64 = 0,
-    fb_width: u32 = 0,
-    fb_height: u32 = 0,
-    fb_scanline_bytes: u32 = 0,
-    fb_pixelformat: PixelFormat = @enumFromInt(0),
-    unused1: u248 = undefined,
-    acpi_ptr: u64 = 0,
-    unused2: u192 = undefined,
-    mmap: MmapEntry = undefined,
+    unused0: [3]u8,
+    fb_ptr: u64 align(1),
+    fb_width: u32,
+    fb_height: u32,
+    fb_scanline_bytes: u32,
+    fb_pixelformat: PixelFormat,
+    unused1: [31]u8,
+    acpi_ptr: u64,
+    unused2: [24]u8,
+    mmap: MmapEntry,
 };
