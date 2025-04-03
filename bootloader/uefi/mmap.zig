@@ -19,7 +19,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
     var desscriptor_version: u32 = undefined;
     status = boot_services.getMemoryMap(&mmap_size, mmap, &mapKey, &descriptor_size, &desscriptor_version);
     switch (status) {
-        .BufferTooSmall => log.debug("Need {d} bytes for memory map buffer", .{mmap_size}),
+        .buffer_too_small => log.debug("Need {d} bytes for memory map buffer", .{mmap_size}),
         else => {
             log.err("Expected BufferTooSmall but got {s} instead", .{@tagName(status)});
             return BootloaderError.MemoryMapError;
@@ -27,9 +27,9 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
     }
 
     mmap_size += 2 * descriptor_size;
-    status = boot_services.allocatePool(.LoaderData, mmap_size, @ptrCast(&mmap));
+    status = boot_services.allocatePool(.loader_data, mmap_size, @ptrCast(&mmap));
     switch (status) {
-        .Success => log.debug("Allocated {d} bytes for memory map at {*}", .{ mmap_size, mmap }),
+        .success => log.debug("Allocated {d} bytes for memory map at {*}", .{ mmap_size, mmap }),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.MemoryMapError;
@@ -38,7 +38,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
 
     status = boot_services.getMemoryMap(&mmap_size, mmap, &mapKey, &descriptor_size, &desscriptor_version);
     switch (status) {
-        .Success => log.debug("Got memory map", .{}),
+        .success => log.debug("Got memory map", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.MemoryMapError;
@@ -65,7 +65,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
         log.debug("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor_type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
 
         const entry_type: BootInfo.MmapEntry.Type = switch (descriptor_type) {
-            .LoaderCode, .LoaderData, .BootServicesCode, .BootServicesData, .ConventionalMemory => .FREE,
+            .LoaderCode, .loader_data, .BootServicesCode, .BootServicesData, .ConventionalMemory => .FREE,
             .ACPIReclaimMemory, .ACPIMemoryNVS => .ACPI,
             .PAGING => .PAGING,
             .RECLAIMABLE => .RECLAIMABLE,

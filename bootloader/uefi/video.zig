@@ -27,9 +27,9 @@ pub fn getPreferredResolution() BootloaderError!VideoInfo {
     var status: uefi.Status = undefined;
     var handles_count: usize = 0;
     var handles: [*]uefi.Handle = undefined;
-    status = boot_services.locateHandleBuffer(.ByProtocol, &GraphicsOutput.guid, null, &handles_count, &handles);
+    status = boot_services.locateHandleBuffer(.by_protocol, &GraphicsOutput.guid, null, &handles_count, &handles);
     switch (status) {
-        .Success => log.debug("Found {d} video device handles", .{handles_count}),
+        .success => log.debug("Found {d} video device handles", .{handles_count}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.GraphicOutputDeviceError;
@@ -42,8 +42,8 @@ pub fn getPreferredResolution() BootloaderError!VideoInfo {
         var edid_protocol: *uefi.protocol.edid.Discovered = undefined;
         status = boot_services.handleProtocol(device_handle, &uefi.protocol.edid.Discovered.guid, @as(*?*anyopaque, @ptrCast(&edid_protocol)));
         switch (status) {
-            .Success => log.debug("Found edid of size {d}", .{edid_protocol.size_of_edid}),
-            .Unsupported => {
+            .success => log.debug("Found edid of size {d}", .{edid_protocol.size_of_edid}),
+            .unsupported => {
                 log.warn("Handle {d} does not support EDID", .{i});
                 continue;
             },
@@ -76,7 +76,7 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
         status = boot_services.locateProtocol(&GraphicsOutput.guid, null, @as(*?*anyopaque, @ptrCast(&gop)));
     }
     switch (status) {
-        .Success => log.debug("Located graphics output protocol", .{}),
+        .success => log.debug("Located graphics output protocol", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.LocateGraphicOutputError;
@@ -88,9 +88,9 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
     while (mode_id < graphics_output.mode.max_mode) : (mode_id += 1) {
         var info_size: usize = 0;
         var info: *GraphicsOutput.Mode.Info = undefined;
-        status = graphics_output.queryMode(mode_id, &info_size, &info);
+        status = graphics_output._query_mode(graphics_output, mode_id, &info_size, &info);
         switch (status) {
-            .Success => log.debug("Successfully queried mode {d}", .{mode_id}),
+            .success => log.debug("Successfully queried mode {d}", .{mode_id}),
             else => {
                 log.err("Expected Success but got {s} instead", .{@tagName(status)});
                 continue;
@@ -99,7 +99,7 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
 
         if (info.vertical_resolution < video_info.resolution.height or info.horizontal_resolution < video_info.resolution.width) continue;
         switch (info.pixel_format) {
-            GraphicsOutput.PixelFormat.RedGreenBlueReserved8BitPerColor, GraphicsOutput.PixelFormat.BlueGreenRedReserved8BitPerColor => {},
+            GraphicsOutput.PixelFormat.red_green_blue_reserved_8_bit_per_color, GraphicsOutput.PixelFormat.blue_green_red_reserved_8_bit_per_color => {},
             else => continue,
         }
 
@@ -117,9 +117,9 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
             @tagName(info.pixel_format),
         });
 
-        status = graphics_output.setMode(mode_id);
+        status = graphics_output._set_mode(graphics_output, mode_id);
         switch (status) {
-            .Success => log.debug("Successfully set mode to {d}", .{mode_id}),
+            .success => log.debug("Successfully set mode to {d}", .{mode_id}),
             else => {
                 log.err("Expected Success but got {s} instead", .{@tagName(status)});
                 continue;
@@ -131,8 +131,8 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
         bootinfo.fb_height = info.vertical_resolution;
         bootinfo.fb_scanline_bytes = info.pixels_per_scan_line * 4;
         bootinfo.fb_pixelformat = switch (info.pixel_format) {
-            GraphicsOutput.PixelFormat.RedGreenBlueReserved8BitPerColor => BootInfo.PixelFormat.RGBA,
-            GraphicsOutput.PixelFormat.BlueGreenRedReserved8BitPerColor => BootInfo.PixelFormat.BGRA,
+            GraphicsOutput.PixelFormat.red_green_blue_reserved_8_bit_per_color => BootInfo.PixelFormat.RGBA,
+            GraphicsOutput.PixelFormat.blue_green_red_reserved_8_bit_per_color => BootInfo.PixelFormat.BGRA,
             else => unreachable,
         };
 
@@ -142,9 +142,9 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
 pub fn fillRect(red: u8, green: u8, blue: u8) BootloaderError!void {
     var fillBuffer = [_]GraphicsOutput.BltPixel{.{ .red = red, .green = green, .blue = blue }};
     if (gop) |graphics_output| {
-        const status = graphics_output.blt(&fillBuffer, GraphicsOutput.BltOperation.BltVideoFill, 0, 0, 0, 0, 10, 10, 0);
+        const status = graphics_output._blt(graphics_output, &fillBuffer, GraphicsOutput.BltOperation.blt_video_fill, 0, 0, 0, 0, 10, 10, 0);
         switch (status) {
-            .Success => log.debug("Located graphics output protocol", .{}),
+            .success => log.debug("Located graphics output protocol", .{}),
             else => {
                 log.err("Expected Success but got {s} instead", .{@tagName(status)});
                 return BootloaderError.LocateGraphicOutputError;
