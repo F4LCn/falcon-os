@@ -12,7 +12,7 @@ pub const BootInfo = packed struct {
     };
 
     pub const MmapEntry = packed struct {
-        pub const Type = enum(u3) {
+        pub const Type = enum(u12) {
             USED,
             FREE,
             ACPI,
