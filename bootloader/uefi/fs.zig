@@ -25,15 +25,15 @@ pub fn init() BootloaderError!void {
     boot_services = Globals.boot_services;
     status = boot_services.locateProtocol(&uefi.protocol.SimpleFileSystem.guid, null, @as(*?*anyopaque, @ptrCast(&_file_system)));
     switch (status) {
-        .Success => log.debug("Located the file system protocol", .{}),
+        .success => log.debug("Located the file system protocol", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;
         },
     }
-    status = _file_system.openVolume(@ptrCast(&_root));
+    status = _file_system._open_volume(_file_system, @ptrCast(&_root));
     switch (status) {
-        .Success => log.debug("Successfully opened the root volume", .{}),
+        .success => log.debug("Successfully opened the root volume", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;
@@ -52,9 +52,9 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
     };
     std.mem.replaceScalar(u16, &utf16_buffer, '/', '\\');
     log.debug("Converted str: {s} -> {any} ({d})", .{ args.path, utf16_buffer, len });
-    status = _root.open(@ptrCast(&file_handle), &utf16_buffer, uefi.protocol.File.efi_file_mode_read, 0);
+    status = _root._open(_root, @ptrCast(&file_handle), &utf16_buffer, @intFromEnum(uefi.protocol.File.OpenMode.read), 0);
     switch (status) {
-        .Success => log.debug("Opened file {s}", .{args.path}),
+        .success => log.debug("Opened file {s}", .{args.path}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;
@@ -62,29 +62,29 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
     }
 
     var file_info_size: usize = 0;
-    var file_info: *uefi.FileInfo = undefined;
-    status = file_handle.getInfo(&uefi.FileInfo.guid, &file_info_size, @as([*]u8, @ptrCast(file_info)));
+    var file_info: *uefi.protocol.File.Info.File = undefined;
+    status = file_handle._get_info(file_handle,&uefi.protocol.File.Info.File.guid, &file_info_size, @as([*]u8, @ptrCast(file_info)));
     switch (status) {
-        .BufferTooSmall => log.debug("Need to allocate {d} bytes for file info", .{file_info_size}),
+        .buffer_too_small => log.debug("Need to allocate {d} bytes for file info", .{file_info_size}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;
         },
     }
 
-    status = boot_services.allocatePool(.LoaderData, file_info_size, @as(*[*]align(8) u8, @ptrCast(@alignCast(&file_info))));
+    status = boot_services.allocatePool(.loader_data, file_info_size, @as(*[*]align(8) u8, @ptrCast(@alignCast(&file_info))));
     defer _ = boot_services.freePool(@as([*]align(8) u8, @ptrCast(@alignCast(file_info))));
     switch (status) {
-        .Success => log.debug("Allocated {d} bytes for file info", .{file_info_size}),
+        .success => log.debug("Allocated {d} bytes for file info", .{file_info_size}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;
         },
     }
 
-    status = file_handle.getInfo(&uefi.FileInfo.guid, &file_info_size, @as([*]u8, @ptrCast(file_info)));
+    status = file_handle._get_info(file_handle, &uefi.protocol.File.Info.File.guid, &file_info_size, @as([*]u8, @ptrCast(file_info)));
     switch (status) {
-        .Success => log.debug("Got file info: file size is {d} bytes", .{file_info.file_size}),
+        .success => log.debug("Got file info: file size is {d} bytes", .{file_info.file_size}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;
@@ -97,9 +97,9 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
         return BootloaderError.FileLoadError;
     };
 
-    status = file_handle.read(&file_buffer_size, contents);
+    status = file_handle._read(file_handle, &file_buffer_size, contents);
     switch (status) {
-        .Success => log.debug("Read file contents", .{}),
+        .success => log.debug("Read file contents", .{}),
         else => {
             log.err("Expected Success but got {s} instead", .{@tagName(status)});
             return BootloaderError.FileLoadError;

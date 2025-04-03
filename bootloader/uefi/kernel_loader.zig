@@ -53,9 +53,9 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
     }
 
     var kernel_info: *KernelInfo = undefined;
-    status = Globals.boot_services.allocatePool(.LoaderData, @sizeOf(KernelInfo), @ptrCast(&kernel_info));
+    status = Globals.boot_services.allocatePool(.loader_data, @sizeOf(KernelInfo), @ptrCast(&kernel_info));
     switch (status) {
-        .Success => log.debug("Allocated kernel info struct at {*}", .{kernel_info}),
+        .success => log.debug("Allocated kernel info struct at {*}", .{kernel_info}),
         else => return BootloaderError.AllocateKernelInfo,
     }
     kernel_info.* = .{ .entrypoint = ehdr.e_entry };

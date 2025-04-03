@@ -16,7 +16,7 @@ pub fn mb(val: comptime_int) comptime_int {
 pub const MemoryType = enum(u32) {
     ReservedMemoryType,
     LoaderCode,
-    LoaderData,
+    loader_data,
     BootServicesCode,
     BootServicesData,
     RuntimeServicesCode,
@@ -47,9 +47,9 @@ pub const MemoryType = enum(u32) {
 
 pub fn allocatePages(num_pages: u64, typ: MemoryType) BootloaderError![*]align(Constants.ARCH_PAGE_SIZE) u8 {
     var page_ptr: [*]align(Constants.ARCH_PAGE_SIZE) u8 = undefined;
-    const status = Globals.boot_services.allocatePages(.AllocateAnyPages, typ.toUefi(), num_pages, &page_ptr);
+    const status = Globals.boot_services.allocatePages(.allocate_any_pages, typ.toUefi(), num_pages, &page_ptr);
     switch (status) {
-        .Success => log.debug("Allocated {d} pages at 0x{X}", .{ num_pages, @intFromPtr(page_ptr) }),
+        .success => log.debug("Allocated {d} pages at 0x{X}", .{ num_pages, @intFromPtr(page_ptr) }),
         else => return BootloaderError.AddressSpaceAllocatePages,
     }
     @memset(page_ptr[0 .. num_pages * Constants.ARCH_PAGE_SIZE], 0);
@@ -68,8 +68,8 @@ test "MemoryType to UEFI" {
 }
 
 test "UEFI to MemoryType" {
-    var uefi_value: std.os.uefi.tables.MemoryType = .LoaderData;
-    try std.testing.expectEqual(MemoryType.LoaderData, MemoryType.fromUefi(uefi_value));
+    var uefi_value: std.os.uefi.tables.MemoryType = .loader_data;
+    try std.testing.expectEqual(MemoryType.loader_data, MemoryType.fromUefi(uefi_value));
     uefi_value = @enumFromInt(0x80000001);
     try std.testing.expectEqual(MemoryType.BOOTINFO, MemoryType.fromUefi(uefi_value));
 }

@@ -24,13 +24,13 @@ pub fn main() uefi.Status {
     Globals.init();
     FileSystem.init() catch {
         std.log.err("Failed to initialize filesystem subsystem", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
     Video.init();
 
     const bootinfo_page = MemHelper.allocatePages(1, .BOOTINFO) catch {
         std.log.err("Could not allocate a page for bootinfo struct", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
     var bootinfo: *align(Constants.ARCH_PAGE_SIZE) BootInfo = @ptrCast(bootinfo_page);
     bootinfo.* = .{
@@ -43,7 +43,7 @@ pub fn main() uefi.Status {
 
     const config = FileSystem.loadFile(.{ .path = "/SYS/KERNEL.CON", .type = .BOOTINFO }) catch {
         std.log.err("Failed to load config file", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
     std.log.debug(
         \\Got config:
@@ -52,7 +52,7 @@ pub fn main() uefi.Status {
 
     const bootloader_config = Config.parseConfig(config.getContents()) catch {
         std.log.err("Failed to parse config", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
     std.log.info(
         \\Parsed config file
@@ -76,24 +76,24 @@ pub fn main() uefi.Status {
 
     Video.getFramebuffer(video_info, bootinfo) catch {
         std.log.err("Could not set video mode", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
     Video.fillRect(255, 8, 4) catch {
         std.log.err("FillRect failed", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
 
     std.log.debug("Bootinfo struct: {any}", .{bootinfo});
 
     const kernel = FileSystem.loadFile(.{ .path = bootloader_config.kernel }) catch {
         std.log.err("Could not load kernel file", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
     _ = &kernel;
 
     const kernel_info = KernelLoader.loadExecutable(kernel.getContents()) catch {
         std.log.err("Could not load kernel executable", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
 
     std.log.debug("Kernel info: ", .{});
@@ -113,14 +113,14 @@ pub fn main() uefi.Status {
 
     var addr_space = AddressSpace.create() catch {
         std.log.err("Could not create address space", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
 
     const fb_ptr = bootinfo.fb_ptr;
     const fb_size = (@as(u64, bootinfo.fb_height)) * (@as(u64, bootinfo.fb_scanline_bytes));
     mapKernelSpace(&addr_space, kernel_info, @intFromPtr(bootinfo), fb_ptr, fb_size, @intFromPtr(config.buffer.ptr)) catch {
         std.log.err("Could not map kernel address space", .{});
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
 
     // addr_space.print();
@@ -134,7 +134,7 @@ pub fn main() uefi.Status {
         for (mmap_entries[0..5], 0..) |entry, i| {
             std.log.err("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
         }
-        return uefi.Status.Aborted;
+        return uefi.Status.aborted;
     };
     for (mmap_entries[0..30], 0..) |entry, i| {
         std.log.debug("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
@@ -143,12 +143,12 @@ pub fn main() uefi.Status {
     // TODO: exit boot services
     const status = Globals.boot_services.exitBootServices(uefi.handle, map_key);
     switch (status) {
-        .Success => {
+        .success => {
             std.log.info("Exited boot services. Handling execution to kernel ...", .{});
         },
         else => {
             std.log.err("Could not exit boot services, bad map key", .{});
-            return uefi.Status.Aborted;
+            return uefi.Status.aborted;
         },
     }
 
@@ -168,7 +168,7 @@ pub fn main() uefi.Status {
         : "rax"
     );
 
-    return uefi.Status.Timeout;
+    return uefi.Status.timeout;
 }
 
 fn mapKernelSpace(
