@@ -162,14 +162,17 @@ pub fn main() uefi.Status {
     }
 
     // WARN: Don't use boot_services after this line
+
+    // NOTE: We currently randomly page fault on setting the new page map to CR3
+    // if UEFI chooses to load the bootloader too high in memory (around 3G)
+    // this means that we need to keep about 4Gb identity mapped and pray
+    // FIXME: This needs to be written to a trampoline page we are SURE stays (identity) mapped
     asm volatile (
         \\ mov %cr4, %rax
         \\ or $0x620, %rax
         \\ mov %rax, %cr4
         \\ mov %[kernel_entry], %rax
-        \\ mov %[page_map], %cr3
-        \\ jmp _new_addr_space
-        \\ _new_addr_space:
+        \\ mov %[page_map], %cr3  // <- this causes the problem
         \\ jmp *%rax
         \\ _catch:
         \\ jmp _catch
