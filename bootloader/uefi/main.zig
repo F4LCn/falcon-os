@@ -32,7 +32,7 @@ pub fn main() uefi.Status {
         std.log.err("Could not allocate a page for bootinfo struct", .{});
         return uefi.Status.aborted;
     };
-    var bootinfo: *align(Constants.ARCH_PAGE_SIZE) BootInfo = @ptrCast(bootinfo_page);
+    const bootinfo: *align(Constants.ARCH_PAGE_SIZE) BootInfo = @ptrCast(bootinfo_page);
     bootinfo.* = .{
         .bootloader_type = .UEFI,
         .mmap = .{
@@ -99,7 +99,8 @@ pub fn main() uefi.Status {
     std.log.debug("Kernel info: ", .{});
     std.log.debug("  entrypoint: 0x{X}", .{kernel_info.entrypoint});
     std.log.debug("  entry count: {d}", .{kernel_info.segment_count});
-    for (kernel_info.segment_mappings, 0..kernel_info.segment_count) |mapping, idx| {
+    for (0..kernel_info.segment_count) |idx| {
+        const mapping = kernel_info.segment_mappings[idx];
         const mapping_vaddr = switch (mapping.vaddr) {
             .vaddr => |x| @as(u64, @bitCast(x)),
             else => unreachable,
@@ -108,7 +109,7 @@ pub fn main() uefi.Status {
             .paddr => |x| @as(u64, @bitCast(x)),
             else => unreachable,
         };
-        std.log.debug("  mapping[{d}]: p=0x{X} v=0x{X} l={d}", .{ idx, @as(u64, mapping_paddr), @as(u64, mapping_vaddr), mapping.len });
+        std.log.info("  mapping[{d}]: p=0x{X} v=0x{X} l={d}", .{ idx, @as(u64, mapping_paddr), @as(u64, mapping_vaddr), mapping.len });
     }
 
     var addr_space = AddressSpace.create() catch {
@@ -182,16 +183,21 @@ fn mapKernelSpace(
     const log = std.log.scoped(.KernelSpaceMapper);
     log.info("Mapping kernel space", .{});
     // core stack
-    var core_stack_vaddr: u64 = @bitCast(@as(i64, -Constants.ARCH_PAGE_SIZE));
+    var core_stack_vaddr: u64 = -% @as(u64, Constants.ARCH_PAGE_SIZE);
     for (0..Constants.MAX_CPU) |i| {
         const core_stack_ptr = try MemHelper.allocatePages(1, .ReservedMemoryType);
-        log.debug("Mapping core[{d}] stack: 0x{X} -> 0x{X}", .{ i, @intFromPtr(core_stack_ptr), core_stack_vaddr });
+        log.debug("Mapping core[{d}] stack: 0x{X} -> [0x{X} -> 0x{X}]", .{
+            i,
+            @intFromPtr(core_stack_ptr),
+            core_stack_vaddr,
+            core_stack_vaddr +% Constants.ARCH_PAGE_SIZE,
+        });
         try addr_space.mmap(
             .{ .vaddr = @bitCast(core_stack_vaddr) },
             .{ .paddr = @intFromPtr(core_stack_ptr) },
             AddressSpace.DefaultMmapFlags,
         );
-        core_stack_vaddr -= Constants.ARCH_PAGE_SIZE;
+        core_stack_vaddr -%= Constants.ARCH_PAGE_SIZE;
     }
     // kernel
     for (0..kernel_info.segment_count) |idx| {
@@ -205,9 +211,10 @@ fn mapKernelSpace(
             .paddr => |x| @as(u64, @bitCast(x)),
             else => unreachable,
         };
-        log.debug("Mapping kernel segment 0x{X} -> 0x{X}", .{
+        log.info("Mapping kernel segment 0x{X} -> 0x{X} {X}", .{
             @as(u64, @bitCast(mapping_paddr)),
             @as(u64, @bitCast(mapping_vaddr)),
+            mapping.len,
         });
         const num_pages = ((mapping.len + Constants.ARCH_PAGE_SIZE - 1) / Constants.ARCH_PAGE_SIZE);
         for (0..num_pages) |p| {
@@ -227,7 +234,7 @@ fn mapKernelSpace(
     }
     // bootinfo
     if (kernel_info.bootinfo_addr) |bootinfo_addr| {
-        log.debug("Mapping bootinfo struct 0x{X} -> 0x{X}", .{ bootinfo_ptr, bootinfo_addr });
+        log.info("Mapping bootinfo struct 0x{X} -> 0x{X}", .{ bootinfo_ptr, bootinfo_addr });
         try addr_space.mmap(
             .{ .vaddr = @bitCast(bootinfo_addr) },
             .{ .paddr = bootinfo_ptr },
@@ -238,7 +245,7 @@ fn mapKernelSpace(
     // TODO: make sure the size is page aligned
     log.debug("Mapping fb", .{});
     if (kernel_info.fb_addr) |fb_addr| {
-        log.debug("Mapping framebuffer from 0x{X} -> 0x{X} (0x{X})", .{ fb_ptr, fb_addr, fb_size });
+        log.info("Mapping framebuffer from 0x{X} -> 0x{X} (0x{X})", .{ fb_ptr, fb_addr, fb_size });
         var fb_vaddr = fb_addr;
         var fb_paddr = fb_ptr;
         while (fb_paddr < fb_ptr + fb_size) : ({

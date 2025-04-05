@@ -1,3 +1,4 @@
+const std = @import("std");
 pub const BootInfo = extern struct {
     pub const BootloaderType = enum(u8) {
         BIOS = 0,

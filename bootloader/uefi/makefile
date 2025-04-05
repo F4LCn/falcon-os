@@ -3,7 +3,7 @@ OUTPUT_DIR = ../../build
 all: boot
 
 boot:
-	zig build --release=fast
+	zig build --release=safe
 	cp zig-out/bin/boot.efi $(OUTPUT_DIR)/boot.efi
 
 clean:
