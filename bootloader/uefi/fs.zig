@@ -52,7 +52,7 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
     };
     std.mem.replaceScalar(u16, &utf16_buffer, '/', '\\');
     log.debug("Converted str: {s} -> {any} ({d})", .{ args.path, utf16_buffer, len });
-    status = _root._open(_root, @ptrCast(&file_handle), &utf16_buffer, @intFromEnum(uefi.protocol.File.OpenMode.read), 0);
+    status = _root._open(_root, @ptrCast(&file_handle), &utf16_buffer, uefi.protocol.File.OpenMode.read, .{});
     switch (status) {
         .success => log.debug("Opened file {s}", .{args.path}),
         else => {

@@ -141,6 +141,14 @@ pub fn main() uefi.Status {
         std.log.debug("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
     }
 
+    const _marker: u64 = 32;
+    std.log.info(
+        \\ preparing to exit boot services
+        \\ page map -> 0x{X}
+        \\ kernel_entry -> 0x{X}
+        \\ current addr -> 0x{X}
+    , .{ addr_space.root, kernel_info.entrypoint, &_marker });
+
     // TODO: exit boot services
     const status = Globals.boot_services.exitBootServices(uefi.handle, map_key);
     switch (status) {
@@ -158,8 +166,10 @@ pub fn main() uefi.Status {
         \\ mov %cr4, %rax
         \\ or $0x620, %rax
         \\ mov %rax, %cr4
-        \\ mov %[page_map], %cr3
         \\ mov %[kernel_entry], %rax
+        \\ mov %[page_map], %cr3
+        \\ jmp _new_addr_space
+        \\ _new_addr_space:
         \\ jmp *%rax
         \\ _catch:
         \\ jmp _catch
@@ -183,7 +193,7 @@ fn mapKernelSpace(
     const log = std.log.scoped(.KernelSpaceMapper);
     log.info("Mapping kernel space", .{});
     // core stack
-    var core_stack_vaddr: u64 = -% @as(u64, Constants.ARCH_PAGE_SIZE);
+    var core_stack_vaddr: u64 = -%@as(u64, Constants.ARCH_PAGE_SIZE);
     for (0..Constants.MAX_CPU) |i| {
         const core_stack_ptr = try MemHelper.allocatePages(1, .ReservedMemoryType);
         log.debug("Mapping core[{d}] stack: 0x{X} -> [0x{X} -> 0x{X}]", .{
@@ -269,7 +279,7 @@ fn mapKernelSpace(
         );
     }
     // Identity mapping
-    const identity_map_size: u64 = MemHelper.mb(512);
+    const identity_map_size: u64 = MemHelper.gb(4);
     log.debug("Mapping identity 512mb 0x{X}", .{identity_map_size});
     var i: u64 = 0;
     while (i < identity_map_size) : (i += Constants.ARCH_PAGE_SIZE) {
