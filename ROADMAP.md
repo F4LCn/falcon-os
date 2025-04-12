@@ -49,8 +49,8 @@
 
   - Core features
     * [ ] Allocators hierarchy
-      * [ ] Virtual memory manager / Page allocator
       * [-] Physical memory manager / Frame allocator
+      * [-] Virtual memory manager / Page allocator
       * [ ] General purpose heap allocator
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] SMP

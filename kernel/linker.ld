@@ -51,7 +51,7 @@ SECTIONS
     *(.kernel_heap)
 	}
 
-	. = ALIGN(8);
+	. = ALIGN(4K);
 	_kernel_end = .;
 	PROVIDE(_kernel_end = .);
 
