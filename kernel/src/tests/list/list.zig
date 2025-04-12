@@ -13,7 +13,6 @@ test "use link in list and retrieve parent type" {
     var list = List{};
     var item1 = TestType{};
 
-    std.debug.print("{any}", .{item1});
     list.append(&item1.link);
 
     const popped_item1 = list.pop();

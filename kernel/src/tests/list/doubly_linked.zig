@@ -211,3 +211,28 @@ test "removing node" {
     try std.testing.expectEqual(&node3, @field(node4, "next"));
     try std.testing.expectEqual(&node4, @field(node3, "prev"));
 }
+
+test "iter" {
+    var list = TestTypeList{};
+    var node1 = TestType{ .value = 123 };
+    var node2 = TestType{ .value = 321 };
+    var node3 = TestType{ .value = 456 };
+    var node4 = TestType{ .value = 654 };
+    list.append(&node1);
+    list.append(&node2);
+    list.append(&node3);
+    list.append(&node4);
+
+    var iter = list.iter();
+
+    const first_node = iter.next();
+    try std.testing.expectEqual(&node1, first_node.?);
+    const second_node = iter.next();
+    try std.testing.expectEqual(&node2, second_node.?);
+    const third_node = iter.next();
+    try std.testing.expectEqual(&node3, third_node.?);
+    const fourth_node = iter.next();
+    try std.testing.expectEqual(&node4, fourth_node.?);
+    const null_node = iter.next();
+    try std.testing.expectEqual(null, null_node);
+}

@@ -16,8 +16,8 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
     var mmap: ?[*]uefi.tables.MemoryDescriptor = null;
     var mapKey: usize = undefined;
     var descriptor_size: usize = undefined;
-    var desscriptor_version: u32 = undefined;
-    status = boot_services.getMemoryMap(&mmap_size, mmap, &mapKey, &descriptor_size, &desscriptor_version);
+    var descriptor_version: u32 = undefined;
+    status = boot_services.getMemoryMap(&mmap_size, mmap, &mapKey, &descriptor_size, &descriptor_version);
     switch (status) {
         .buffer_too_small => log.debug("Need {d} bytes for memory map buffer", .{mmap_size}),
         else => {
@@ -36,7 +36,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
         },
     }
 
-    status = boot_services.getMemoryMap(&mmap_size, mmap, &mapKey, &descriptor_size, &desscriptor_version);
+    status = boot_services.getMemoryMap(&mmap_size, mmap, &mapKey, &descriptor_size, &descriptor_version);
     switch (status) {
         .success => log.debug("Got memory map", .{}),
         else => {
@@ -53,7 +53,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
 
     var descriptor: *uefi.tables.MemoryDescriptor = undefined;
     var idx: usize = 0;
-    const descriptors_count = mmap_size / descriptor_size;
+    const descriptors_count = @divExact(mmap_size, descriptor_size);
     while (idx < descriptors_count) : (idx += 1) {
         log.debug("bootinfo.size = {d}", .{bootinfo.size});
         if (bootinfo.size > Constants.ARCH_PAGE_SIZE - @sizeOf(BootInfo.MmapEntry)) {
@@ -61,6 +61,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
             return BootloaderError.MemoryMapTooBig;
         }
         descriptor = @ptrFromInt(idx * descriptor_size + @intFromPtr(mmap));
+        if (@as(u64, @bitCast(descriptor.attribute)) == 0) continue;
         const descriptor_type = MemHelper.MemoryType.fromUefi(descriptor.type);
         log.debug("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor_type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
 
@@ -97,6 +98,6 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
         bootinfo.size += @sizeOf(BootInfo.MmapEntry);
         mmap_idx += 1;
     }
-    log.info("Created {d} mmap entries, bootinfo size: {d}", .{mmap_idx, bootinfo.size});
+    log.info("Created {d} mmap entries, bootinfo size: {d}", .{ mmap_idx, bootinfo.size });
     return mapKey;
 }

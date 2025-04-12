@@ -53,6 +53,15 @@ pub const BootInfo = extern struct {
             const type_mask: u64 = 0xfff;
             return @enumFromInt(self.ptr & type_mask);
         }
+
+        pub fn format(
+            self: *const @This(),
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) {s}", .{ self, self.getPtr(), self.getEnd(), self.getSize(), @tagName(self.getType()) });
+        }
     };
 
     magic: [4]u8,

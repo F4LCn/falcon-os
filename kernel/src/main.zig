@@ -4,7 +4,7 @@ const logger = @import("log/logger.zig");
 const cpu = @import("cpu.zig");
 const serial = @import("log/serial.zig");
 const heap = @import("heap.zig");
-const pmem = @import("pmem.zig");
+const pmem = @import("memory/pmem.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -25,8 +25,6 @@ pub export fn kernelMain() callconv(.c) void {
     logger.init(serial.Port.COM1);
     cpu.init();
     std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str[0..12]});
-
-    pmem.init();
 
     failableMain() catch |e| {
         std.log.err("Failed with error: {any}", .{e});
@@ -53,4 +51,9 @@ pub fn failableMain() !void {
     for (list2.items, 0..) |item, i| {
         std.log.info("item[{d}] = {d}", .{ i, item });
     }
+
+    try pmem.init(heap.permanentAllocator());
+    const range = pmem.allocatePage(10, .{});
+    std.log.info("Allocated range: {any}", .{range});
+    pmem.printFreeRanges();
 }

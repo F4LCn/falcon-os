@@ -62,6 +62,23 @@ pub fn SinglyLinkedList(comptime T: anytype, comptime next_field: std.meta.Field
     };
 }
 
+pub fn Iterator(comptime T: anytype, field: std.meta.FieldEnum(T)) type {
+    return struct {
+        const Self = @This();
+        const next_item = std.meta.fieldInfo(T, field).name;
+
+        current: ?*T,
+
+        pub fn next(self: *Self) ?*T {
+            const current_val = self.current;
+            if (current_val) |cv| {
+                self.current = @field(cv, next_item);
+            }
+            return current_val;
+        }
+    };
+}
+
 pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), next_field: std.meta.FieldEnum(T)) type {
     return struct {
         const Self = @This();
@@ -70,6 +87,14 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
 
         head: ?*T = null,
         tail: ?*T = null,
+
+        pub fn iter(self: Self) Iterator(T, next_field) {
+            return .{ .current = self.head };
+        }
+
+        pub fn revIter(self: Self) Iterator(T, prev_field) {
+            return .{ .current = self.tail };
+        }
 
         pub fn prepend(self: *Self, new_node: *T) void {
             if (self.head) |h| {

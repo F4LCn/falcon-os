@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const log = std.log.scoped(.spin_lock);
+
 const INVALID_CPU_ID = std.math.maxInt(u32);
 pub const SpinLock = struct {
     const Self = @This();
@@ -19,9 +21,11 @@ pub const SpinLock = struct {
 
     pub fn lock(self: Self) void {
         _ = self;
+        log.debug("Locking", .{});
     }
 
     pub fn unlock(self: Self) void {
         _ = self;
+        log.debug("Unlocking", .{});
     }
 };
