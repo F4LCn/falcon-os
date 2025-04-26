@@ -91,8 +91,8 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
         },
     }
 
-    var file_buffer_size = std.mem.alignForward(usize, @intCast(file_info.file_size), Constants.ARCH_PAGE_SIZE);
-    const pages_to_allocate = @divExact(file_buffer_size, Constants.ARCH_PAGE_SIZE);
+    var file_buffer_size = std.mem.alignForward(usize, @intCast(file_info.file_size), Constants.arch_page_size);
+    const pages_to_allocate = @divExact(file_buffer_size, Constants.arch_page_size);
     const contents = MemHelper.allocatePages(pages_to_allocate, args.type) catch {
         return BootloaderError.FileLoadError;
     };

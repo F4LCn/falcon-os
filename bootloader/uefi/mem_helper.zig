@@ -49,14 +49,14 @@ pub const MemoryType = enum(u32) {
     }
 };
 
-pub fn allocatePages(num_pages: u64, typ: MemoryType) BootloaderError![*]align(Constants.ARCH_PAGE_SIZE) u8 {
-    var page_ptr: [*]align(Constants.ARCH_PAGE_SIZE) u8 = undefined;
+pub fn allocatePages(num_pages: u64, typ: MemoryType) BootloaderError![*]align(Constants.arch_page_size) u8 {
+    var page_ptr: [*]align(Constants.arch_page_size) u8 = undefined;
     const status = Globals.boot_services.allocatePages(.allocate_any_pages, typ.toUefi(), num_pages, &page_ptr);
     switch (status) {
         .success => log.debug("Allocated {d} pages at 0x{X}", .{ num_pages, @intFromPtr(page_ptr) }),
         else => return BootloaderError.AddressSpaceAllocatePages,
     }
-    @memset(page_ptr[0 .. num_pages * Constants.ARCH_PAGE_SIZE], 0);
+    @memset(page_ptr[0 .. num_pages * Constants.arch_page_size], 0);
     return page_ptr;
 }
 

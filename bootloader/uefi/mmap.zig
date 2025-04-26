@@ -56,14 +56,14 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
     const descriptors_count = @divExact(mmap_size, descriptor_size);
     while (idx < descriptors_count) : (idx += 1) {
         log.debug("bootinfo.size = {d}", .{bootinfo.size});
-        if (bootinfo.size > Constants.ARCH_PAGE_SIZE - @sizeOf(BootInfo.MmapEntry)) {
+        if (bootinfo.size > Constants.arch_page_size - @sizeOf(BootInfo.MmapEntry)) {
             log.err("Memory map is too big", .{});
             return BootloaderError.MemoryMapTooBig;
         }
         descriptor = @ptrFromInt(idx * descriptor_size + @intFromPtr(mmap));
         if (@as(u64, @bitCast(descriptor.attribute)) == 0) continue;
         const descriptor_type = MemHelper.MemoryType.fromUefi(descriptor.type);
-        log.debug("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor_type), descriptor.physical_start, descriptor.physical_start + Constants.ARCH_PAGE_SIZE * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
+        log.debug("- Type={s}; {X} -> {X} (size: {X} pages); attr={X}", .{ @tagName(descriptor_type), descriptor.physical_start, descriptor.physical_start + Constants.arch_page_size * descriptor.number_of_pages, descriptor.number_of_pages, @as(u64, @bitCast(descriptor.attribute)) });
 
         const entry_type: BootInfo.MmapEntry.Type = switch (descriptor_type) {
             .LoaderCode, .loader_data, .BootServicesCode, .BootServicesData, .ConventionalMemory => .FREE,
@@ -77,7 +77,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!usize {
         };
 
         const mmap_entry = &mmap_entries[mmap_idx];
-        mmap_entry.* = BootInfo.MmapEntry.create(descriptor.physical_start, descriptor.number_of_pages * Constants.ARCH_PAGE_SIZE, entry_type);
+        mmap_entry.* = BootInfo.MmapEntry.create(descriptor.physical_start, descriptor.number_of_pages * Constants.arch_page_size, entry_type);
 
         if (last_mmap_idx) |last_idx| {
             const last_mmap_entry = &mmap_entries[last_idx];

@@ -32,7 +32,7 @@ pub fn main() uefi.Status {
         std.log.err("Could not allocate a page for bootinfo struct", .{});
         return uefi.Status.aborted;
     };
-    const bootinfo: *align(Constants.ARCH_PAGE_SIZE) BootInfo = @ptrCast(bootinfo_page);
+    const bootinfo: *align(Constants.arch_page_size) BootInfo = @ptrCast(bootinfo_page);
     bootinfo.* = .{
         .bootloader_type = .UEFI,
         .mmap = .{
@@ -193,23 +193,24 @@ fn mapKernelSpace(
     const log = std.log.scoped(.KernelSpaceMapper);
     log.info("Mapping kernel space", .{});
     // core stack
-    var core_stack_vaddr: u64 = -%@as(u64, Constants.ARCH_PAGE_SIZE);
-    for (0..Constants.MAX_CPU) |i| {
+    var core_stack_vaddr: u64 = -%@as(u64, Constants.arch_page_size);
+    for (0..Constants.max_cpu) |i| {
         const core_stack_ptr = try MemHelper.allocatePages(1, .ReservedMemoryType);
         log.debug("Mapping core[{d}] stack: 0x{X} -> [0x{X} -> 0x{X}]", .{
             i,
             @intFromPtr(core_stack_ptr),
             core_stack_vaddr,
-            core_stack_vaddr +% Constants.ARCH_PAGE_SIZE,
+            core_stack_vaddr +% Constants.arch_page_size,
         });
         try addr_space.mmap(
             .{ .vaddr = @bitCast(core_stack_vaddr) },
             .{ .paddr = @intFromPtr(core_stack_ptr) },
             AddressSpace.DefaultMmapFlags,
         );
-        core_stack_vaddr -%= Constants.ARCH_PAGE_SIZE;
+        core_stack_vaddr -%= Constants.arch_page_size;
     }
     // kernel
+    var kernel_end: u64 = 0;
     for (0..kernel_info.segment_count) |idx| {
         const mapping = &kernel_info.segment_mappings[idx];
         log.debug("kernel segment: {any}", .{mapping});
@@ -226,10 +227,10 @@ fn mapKernelSpace(
             @as(u64, @bitCast(mapping_vaddr)),
             mapping.len,
         });
-        const num_pages = ((mapping.len + Constants.ARCH_PAGE_SIZE - 1) / Constants.ARCH_PAGE_SIZE);
+        const num_pages = ((mapping.len + Constants.arch_page_size - 1) / Constants.arch_page_size);
         for (0..num_pages) |p| {
-            defer mapping_paddr += Constants.ARCH_PAGE_SIZE;
-            defer mapping_vaddr += Constants.ARCH_PAGE_SIZE;
+            defer mapping_paddr += Constants.arch_page_size;
+            defer mapping_vaddr += Constants.arch_page_size;
             log.debug("\t kernel segment[{d}] 0x{X} -> 0x{X}", .{
                 p,
                 @as(u64, @bitCast(mapping_paddr)),
@@ -240,8 +241,55 @@ fn mapKernelSpace(
                 .{ .paddr = mapping_paddr },
                 AddressSpace.DefaultMmapFlags,
             );
+            kernel_end = mapping_vaddr;
         }
     }
+    kernel_end += Constants.arch_page_size;
+
+    const quickmap_start = kernel_end + 2 * Constants.arch_page_size;
+    log.info("Kernel end found @ 0x{X}", .{kernel_end});
+    const quickmap_pages = Constants.max_cpu;
+    var quickmap_page = quickmap_start;
+    const placeholder_addr: u64 = 0xDEADBEEF;
+    for (0..quickmap_pages) |p| {
+        defer quickmap_page += Constants.arch_page_size;
+        log.info("\t Quickmap page[{d}] 0x{X} -> 0x{X}", .{
+            p,
+            @as(u64, @bitCast(placeholder_addr)),
+            @as(u64, @bitCast(quickmap_page)),
+        });
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(quickmap_page) },
+            .{ .paddr = placeholder_addr },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+
+    const quickmap_pt_entry_length = std.mem.alignForward(u64, Constants.max_cpu * @sizeOf(AddressSpace.PageMapping.Entry), Constants.arch_page_size);
+    const quickmap_pt_entry_pages = @divFloor(quickmap_pt_entry_length + Constants.arch_page_size - 1, Constants.arch_page_size);
+    const quickmap_pt_entry_start = -%(@as(u64, Constants.arch_page_size) * Constants.max_cpu) - quickmap_pt_entry_length - 2 * Constants.arch_page_size;
+    var quickmap_pt_entry_page = quickmap_pt_entry_start;
+    quickmap_page = quickmap_start;
+    for (0..quickmap_pt_entry_pages) |p| {
+        defer quickmap_pt_entry_page += Constants.arch_page_size;
+        defer quickmap_page += Constants.arch_page_size;
+
+        const quickmap_page_addr: AddressSpace.Pml4VirtualAddress = @bitCast(quickmap_page);
+        const pte_addr = try addr_space.getPageTableEntry(quickmap_page_addr, AddressSpace.DefaultMmapFlags);
+        log.info("Quickmap PTE 0x{X} paddr=0x{X}", .{ @intFromPtr(pte_addr), pte_addr.getAddr() });
+        const pte_page_addr = std.mem.alignBackward(u64, @intFromPtr(pte_addr), Constants.arch_page_size);
+        log.info("\t Quickmap pte page[{d}] 0x{X} -> 0x{X}", .{
+            p,
+            @as(u64, @bitCast(pte_page_addr)),
+            @as(u64, @bitCast(quickmap_pt_entry_page)),
+        });
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(quickmap_pt_entry_page) },
+            .{ .paddr = pte_page_addr },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+
     // bootinfo
     if (kernel_info.bootinfo_addr) |bootinfo_addr| {
         log.info("Mapping bootinfo struct 0x{X} -> 0x{X}", .{ bootinfo_ptr, bootinfo_addr });
@@ -259,8 +307,8 @@ fn mapKernelSpace(
         var fb_vaddr = fb_addr;
         var fb_paddr = fb_ptr;
         while (fb_paddr < fb_ptr + fb_size) : ({
-            fb_paddr += Constants.ARCH_PAGE_SIZE;
-            fb_vaddr += Constants.ARCH_PAGE_SIZE;
+            fb_paddr += Constants.arch_page_size;
+            fb_vaddr += Constants.arch_page_size;
         }) {
             try addr_space.mmap(
                 .{ .vaddr = @bitCast(fb_vaddr) },
@@ -282,7 +330,7 @@ fn mapKernelSpace(
     const identity_map_size: u64 = MemHelper.gb(4);
     log.debug("Mapping identity 512mb 0x{X}", .{identity_map_size});
     var i: u64 = 0;
-    while (i < identity_map_size) : (i += Constants.ARCH_PAGE_SIZE) {
+    while (i < identity_map_size) : (i += Constants.arch_page_size) {
         log.debug("Mapping identity 0x{X}", .{i});
         try addr_space.mmap(
             .{ .vaddr = @bitCast(i) },

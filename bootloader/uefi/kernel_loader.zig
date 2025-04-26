@@ -79,7 +79,7 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
             return BootloaderError.KernelTooLargeError;
         }
 
-        const pages_to_allocate = @divExact(std.mem.alignForward(u64, mem_size, Constants.ARCH_PAGE_SIZE), Constants.ARCH_PAGE_SIZE);
+        const pages_to_allocate = @divExact(std.mem.alignForward(u64, mem_size, Constants.arch_page_size), Constants.arch_page_size);
         const load_buffer = try MemHelper.allocatePages(pages_to_allocate, .KERNEL_MODULE);
 
         @memcpy(load_buffer[0..file_size], kernel_file[phdr.p_offset..][0..phdr.p_filesz]);

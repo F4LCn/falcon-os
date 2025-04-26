@@ -38,8 +38,8 @@ pub const DefaultMmapFlags: MmapFlags = .{
     .read_write = .read_write,
 };
 
-const PageMapping = extern struct {
-    const Entry = packed struct(u64) {
+pub const PageMapping = extern struct {
+    pub const Entry = packed struct(u64) {
         present: bool = false,
         read_write: ReadWrite = .read_write,
         user_supervisor: UserSupervisor = .supervisor,
@@ -63,7 +63,7 @@ const PageMapping = extern struct {
             log.info("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
-    mappings: [@divExact(Constants.ARCH_PAGE_SIZE, @sizeOf(Entry))]Entry,
+    mappings: [@divExact(Constants.arch_page_size, @sizeOf(Entry))]Entry,
 
     pub fn print(self: *const PageMapping, lvl: u8, vaddr: *Pml4VirtualAddress) void {
         for (&self.mappings, 0..) |*mapping, idx| {
@@ -88,7 +88,7 @@ const PageMapping = extern struct {
     }
 };
 
-const Pml4VirtualAddress = packed struct(u64) {
+pub const Pml4VirtualAddress = packed struct(u64) {
     offset: u12 = 0,
     pt_idx: u9 = 0,
     pd_idx: u9 = 0,
@@ -116,7 +116,7 @@ pub fn create() BootloaderError!Self {
 
 pub fn mmap(self: *const Self, vaddr: Address, paddr: Address, flags: MmapFlags) BootloaderError!void {
     const physical_addr = switch (paddr) {
-        .paddr => |x| std.mem.alignBackward(u64, x, Constants.ARCH_PAGE_SIZE),
+        .paddr => |x| std.mem.alignBackward(u64, x, Constants.arch_page_size),
         else => return BootloaderError.BadAddressType,
     };
     const virtual_addr = switch (vaddr) {
@@ -124,25 +124,30 @@ pub fn mmap(self: *const Self, vaddr: Address, paddr: Address, flags: MmapFlags)
         else => return BootloaderError.BadAddressType,
     };
 
-    const pml4_mapping: *PageMapping = @ptrFromInt(self.root);
-    log.debug("PML4: {*}", .{pml4_mapping});
-    const pdp_mapping = try getOrCreateMapping(pml4_mapping, virtual_addr.pml4_idx);
-    log.debug("PDP: {*}", .{pdp_mapping});
-    const pd_mapping = try getOrCreateMapping(pdp_mapping, virtual_addr.pdp_idx);
-    log.debug("PD: {*}", .{pd_mapping});
-    const pt_mapping = try getOrCreateMapping(pd_mapping, virtual_addr.pd_idx);
-    log.debug("PT: {*}", .{pt_mapping});
-    if (flags.page_size == .large) {
-        // TODO: handle large pages here
-        @panic("large pages unhandled");
-    }
-    const entry = &pt_mapping.mappings[virtual_addr.pt_idx];
+    const entry = try self.getPageTableEntry(virtual_addr, flags);
     if (entry.present) {
         log.warn("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(physical_addr)) });
     }
 
     writeEntry(entry, physical_addr, flags);
     log.debug("entry after mapping({*}): 0x{X}", .{ entry, @as(u64, @bitCast(entry.*)) });
+}
+
+pub fn getPageTableEntry(self: *const Self, vaddr: Pml4VirtualAddress, flags: MmapFlags) BootloaderError!*PageMapping.Entry {
+    const pml4_mapping: *PageMapping = @ptrFromInt(self.root);
+    log.debug("PML4: {*}", .{pml4_mapping});
+    const pdp_mapping = try getOrCreateMapping(pml4_mapping, vaddr.pml4_idx);
+    log.debug("PDP: {*}", .{pdp_mapping});
+    const pd_mapping = try getOrCreateMapping(pdp_mapping, vaddr.pdp_idx);
+    log.debug("PD: {*}", .{pd_mapping});
+    const pt_mapping = try getOrCreateMapping(pd_mapping, vaddr.pd_idx);
+    log.debug("PT: {*}", .{pt_mapping});
+    if (flags.page_size == .large) {
+        // TODO: handle large pages here
+        @panic("large pages unhandled");
+    }
+    const entry = &pt_mapping.mappings[vaddr.pt_idx];
+    return entry;
 }
 
 fn getOrCreateMapping(mapping: *PageMapping, idx: u9) BootloaderError!*PageMapping {
