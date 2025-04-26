@@ -5,6 +5,7 @@ const cpu = @import("cpu.zig");
 const serial = @import("log/serial.zig");
 const heap = @import("heap.zig");
 const pmem = @import("memory/pmem.zig");
+const vmem = @import("memory/vmem.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -56,4 +57,23 @@ pub fn failableMain() !void {
     const range = pmem.allocatePage(10, .{});
     std.log.info("Allocated range: {any}", .{range});
     pmem.printFreeRanges();
+
+    var kernel_vmem = try vmem.init(heap.permanentAllocator());
+    kernel_vmem.printFreeRanges();
+    kernel_vmem.printReservedRanges();
+    std.log.info("Quick mapping", .{});
+
+    const addr = kernel_vmem.quickMap(0x14000);
+    const v_id_mapped: *u64 = @ptrFromInt(0x14000);
+    v_id_mapped.* = 456;
+    const v: *u64 = @ptrFromInt(addr);
+    v.* = 123;
+    std.log.info("quick mapped value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
+    kernel_vmem.quickUnmap();
+
+    v_id_mapped.* = 654;
+    std.log.info("value @ {d}", .{v_id_mapped.*});
+
+    v.* = 321;
+    std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
 }

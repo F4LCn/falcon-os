@@ -2,6 +2,8 @@ const std = @import("std");
 const SpinLock = @import("../synchronization.zig").SpinLock;
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
 const Constants = @import("../constants.zig");
+const Registers = @import("../registers.zig");
+const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.vmem);
 
@@ -86,9 +88,20 @@ const PageMapping = extern struct {
     }
 };
 
-const VirtRangeType = enum(u8) { _ };
+const VirtRangeType = enum(u8) {
+    quickmap,
+    quickmap_pte,
+    framebuffer,
+};
 
-const VAddr = packed struct(u64) {};
+const VAddr = packed struct(u64) {
+    offset: u12 = 0,
+    pt_idx: u9 = 0,
+    pd_idx: u9 = 0,
+    pdp_idx: u9 = 0,
+    pml4_idx: u9 = 0,
+    _pad: u16 = 0,
+};
 const VirtMemRange = struct {
     start: VAddr,
     length: u64,
@@ -100,7 +113,12 @@ const VirtMemRange = struct {
         _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) {any}]", .{ self, self.start, self.start + self.length, self.length, self.type });
+        const start_addr = @as(u64, @bitCast(self.start));
+        if (self.type) |typ| {
+            try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) {s}]", .{ self, start_addr, start_addr + self.length, self.length, @tagName(typ) });
+        } else {
+            try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) free]", .{ self, start_addr, start_addr + self.length, self.length });
+        }
     }
 };
 const VirtMemRangeListItem = struct {
@@ -121,28 +139,88 @@ const VirtMemRangeListItem = struct {
 const VirtMemRangeList = DoublyLinkedList(VirtMemRangeListItem, .prev, .next);
 const VirtualMemoryManager = struct {
     const Self = @This();
+    alloc: Allocator,
     lock: SpinLock,
     free_ranges: VirtMemRangeList,
     reserved_ranges: VirtMemRangeList,
     quickmap_pt_entry: VirtMemRange,
     quickmap: VirtMemRange,
 
-    pub fn init() Self {
+    pub fn init(alloc: Allocator) Self {
+        const zero: u64 = 0;
         return .{
             .lock = .create(),
+            .alloc = alloc,
             .free_ranges = VirtMemRangeList{},
             .reserved_ranges = VirtMemRangeList{},
-            .quickmap_pt_entry = .{ .start = @bitCast(0), .length = 0, .typ = .quickmap_pte },
-            .quickmap = .{ .start = @bitCast(0), .length = 0, .typ = .quickmap },
+            .quickmap_pt_entry = .{ .start = @bitCast(zero), .length = 0, .type = .quickmap_pte },
+            .quickmap = .{ .start = @bitCast(zero), .length = 0, .type = .quickmap },
         };
     }
 
     pub fn registerRange(self: *Self, start: u64, length: u64, args: struct { typ: ?VirtRangeType = null }) !void {
-        _ = self;
-        _ = start;
-        _ = length;
-        _ = args;
+        const end = start + length;
         // if reserved add range to reserved_ranges otherwise add it to free_ranges
+        if (args.typ) |typ| {
+            // register a new reserved range of type typ
+            log.info("Registering range with type: {s}", .{@tagName(typ)});
+            var iter = self.reserved_ranges.iter();
+            var current_range: ?*VirtMemRange = null;
+            while (iter.next()) |item| {
+                const range = &item.range;
+                log.info("checking range: {any}", .{range});
+                const range_start = @as(u64, @bitCast(range.start));
+                const range_end = range_start + range.length;
+                if (typ == range.type and ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end))) {
+                    current_range = range;
+                    break;
+                }
+            }
+
+            if (current_range) |cr| {
+                const current_start = @as(u64, @bitCast(cr.start));
+                const current_end = current_start + cr.length;
+                const new_start = @min(current_start, start);
+                const new_end = @max(current_end, end);
+                cr.start = @bitCast(new_start);
+                cr.length = new_end - new_start;
+            } else {
+                log.debug("No current range", .{});
+                const reserved_range_item = try self.alloc.create(VirtMemRangeListItem);
+                reserved_range_item.* = .{ .range = .{ .start = @bitCast(start), .length = length, .type = typ } };
+                self.reserved_ranges.append(reserved_range_item);
+            }
+        } else {
+            log.info("Registering free range 0x{X} -> 0x{X}", .{ start, end });
+            var iter = self.free_ranges.iter();
+            var current_range: ?*VirtMemRange = null;
+            while (iter.next()) |item| {
+                const range = &item.range;
+                log.info("checking range: {any}", .{range});
+                const range_start = @as(u64, @bitCast(range.start));
+                const range_end = range_start + range.length;
+                if ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end)) {
+                    current_range = range;
+                    break;
+                }
+            }
+
+            log.info("Current range: {any}", .{current_range});
+
+            if (current_range) |cr| {
+                const current_start = @as(u64, @bitCast(cr.start));
+                const current_end = current_start + cr.length;
+                const new_start = @min(current_start, start);
+                const new_end = @max(current_end, end);
+                cr.start = @bitCast(new_start);
+                cr.length = new_end - new_start;
+            } else {
+                log.debug("No current range", .{});
+                const free_range_item = try self.alloc.create(VirtMemRangeListItem);
+                free_range_item.* = .{ .range = .{ .start = @bitCast(start), .length = length } };
+                self.free_ranges.append(free_range_item);
+            }
+        }
     }
 };
 
@@ -152,19 +230,31 @@ vmm: VirtualMemoryManager,
 
 extern const _kernel_end: u64;
 
-pub fn init() @This() {
-    // TODO: read current page map addr (CR3)
-    const root = 0x1234;
-    const vmm = .{};
+pub fn init(alloc: Allocator) !@This() {
+    const root = Registers.readCR(.cr3);
+    log.info("Got current pagemap: 0x{X}", .{root});
+    var vmm = VirtualMemoryManager.init(alloc);
+    log.info("after init. kernel_end 0x{X}", .{&_kernel_end});
 
-    const quickmap_start = _kernel_end + 2 * Constants.arch_page_size;
+    const quickmap_start = @intFromPtr(&_kernel_end) + 2 * Constants.arch_page_size;
     const quickmap_length = Constants.arch_page_size * Constants.max_cpu;
+    vmm.quickmap.start = @bitCast(quickmap_start);
+    vmm.quickmap.length = quickmap_length;
 
     const quickmap_pt_entry_length = std.mem.alignForward(u64, Constants.max_cpu * @sizeOf(PageMapping.Entry), Constants.arch_page_size);
-    const quickmap_pt_entry_start = -%@as(u64, Constants.arch_page_size) * Constants.max_cpu - quickmap_pt_entry_length - 2 * Constants.arch_page_size;
+    const quickmap_pt_entry_start = -%(@as(u64, Constants.arch_page_size) * Constants.max_cpu) - quickmap_pt_entry_length - 2 * Constants.arch_page_size;
+    vmm.quickmap_pt_entry.start = @bitCast(quickmap_pt_entry_start);
+    vmm.quickmap_pt_entry.length = quickmap_pt_entry_length;
 
-    vmm.registerRange(quickmap_start, quickmap_length, .{ .typ = .quickmap });
-    vmm.registerRange(quickmap_pt_entry_start, quickmap_pt_entry_length, .{ .typ = .quickmap_pte });
+    log.info("Try to reg ranges", .{});
+    try vmm.registerRange(quickmap_start, quickmap_length, .{ .typ = .quickmap });
+    try vmm.registerRange(quickmap_pt_entry_start, quickmap_pt_entry_length, .{ .typ = .quickmap_pte });
+    try vmm.registerRange(0x1000, 0x9000, .{});
+    try vmm.registerRange(0x3000, 0x5000, .{});
+    try vmm.registerRange(0x9000, 0x19000, .{});
+    try vmm.registerRange(0xB0000, 0x10000, .{});
+    try vmm.registerRange(0x22000, 0xB0000 - 0x22000, .{});
+    try vmm.registerRange(0xffffffffc0000000, 64 * 1024 * 1024, .{ .typ = .framebuffer });
 
     return .{
         .root = root,
@@ -173,25 +263,99 @@ pub fn init() @This() {
     };
 }
 
+pub fn printFreeRanges(self: *const @This()) void {
+    var iter = self.vmm.free_ranges.iter();
+    log.debug("Free virtual ranges", .{});
+    while (iter.next()) |list_item| {
+        log.debug("{any}", .{list_item});
+    }
+}
+
+pub fn printReservedRanges(self: *const @This()) void {
+    var iter = self.vmm.reserved_ranges.iter();
+    log.debug("Reserved virtual ranges", .{});
+    while (iter.next()) |list_item| {
+        log.debug("{any}", .{list_item});
+    }
+}
+
 fn invalidate_tlb(addr: u64) void {
-    _ = addr; // autofix
     // call instruction to invalidate the tbl cache for addr
+    asm volatile ("invlpg (%[addr])"
+        :
+        : [addr] "r" (addr),
+        : "memory"
+    );
 }
 
 pub fn reserveRange(self: *@This(), start: u64, length: u64, typ: VirtRangeType) !void {
-    _ = self; // autofix
-    _ = typ; // autofix
-    _ = start; // autofix
-    _ = length; // autofix
     // reserved a free range (moves the range from free_ranges to reserved_ranges)
+    const end = start + length;
+    var iter = self.vmm.free_ranges.iter();
+    while (iter.next()) |item| {
+        const range = &item.range;
+        const range_start = @as(u64, @bitCast(range.start));
+        const range_end = range_start + range.length;
+        if ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end)) {
+            const start_diff = range_start - start;
+            const end_diff = range_end - end;
+
+            if (start_diff <= 0 and end_diff >= 0) {
+                // resize the existing range to [S1 S2]
+                range.length = start - range_start;
+                // create a new range for [E2 E1]
+                const free_range_item = try self.alloc.create(VirtMemRangeListItem);
+                free_range_item.* = .{ .range = .{ .start = @bitCast(end), .length = range_end - end } };
+                self.vmm.free_ranges.insertAfter(item, free_range_item);
+            } else if (start_diff <= 0) {
+                range.length -= range_end - start;
+            } else if (start_diff > 0) {
+                range.start += start_diff;
+                range.length -= start_diff;
+            }
+            break;
+        }
+    }
     // or create a new reserved range if it doesn't exist already
+    const reserved_range_item = try self.alloc.create(VirtMemRangeListItem);
+    reserved_range_item.* = .{ .range = .{ .start = @bitCast(start), .length = length, .type = typ } };
+    self.reserved_ranges.append(reserved_range_item);
 }
 
 pub fn allocateRange(self: *@This(), length: u64, args: struct { typ: ?VirtRangeType = null }) VirtMemRange {
-    _ = self; // autofix
-    _ = length; // autofix
-    _ = args; // autofix
     // allocate a range either from free_ranges (typ is null) or reserved_ranges
+    if (args.typ) |typ| {
+        var iter = self.vmm.reserved_ranges.iter();
+        while (iter.next()) |item| {
+            var range = &item.range;
+            if (range.type != typ) continue;
+            if (range.length == length) {
+                self.vmm.reserved_ranges.remove(item);
+                defer self.vmm.alloc.destroy(item);
+                return range;
+            } else if (range.length > length) {
+                range.start += length;
+                range.length -= length;
+                const new_range = VirtMemRange{ .start = range.start, .length = length, .type = typ };
+                return new_range;
+            }
+        }
+    } else {
+        var iter = self.vmm.free_ranges.iter();
+        while (iter.next()) |item| {
+            var range = &item.range;
+            if (range.length == length) {
+                self.vmm.free_ranges.remove(item);
+                defer self.vmm.alloc.destroy(item);
+                return range;
+            } else if (range.length > length) {
+                range.start += length;
+                range.length -= length;
+                const new_range = VirtMemRange{ .start = range.start, .length = length };
+                return new_range;
+            }
+        }
+    }
 }
 
 pub fn freeRange(self: *@This(), range: *VirtMemRange) void {
@@ -201,18 +365,21 @@ pub fn freeRange(self: *@This(), range: *VirtMemRange) void {
 }
 
 pub fn quickMap(self: *@This(), addr: u64) u64 {
-    const entry: *PageMapping.Entry = @ptrFromInt(self.quickmap_pt_entry.start);
+    const quickmap = self.vmm.quickmap.start;
+    const quickmap_addr: u64 = @bitCast(quickmap);
+    const entry: *PageMapping.Entry = @ptrFromInt(@as(u64, @bitCast(self.vmm.quickmap_pt_entry.start)) + @sizeOf(PageMapping.Entry) * @as(u64, quickmap.pt_idx));
     writeEntry(entry, addr, DefaultMmapFlags);
-    const quickmap_addr = ??;
+    log.info("quickmap {*} 0x{X} -> 0x{X}", .{ entry, quickmap_addr, entry.getAddr() });
     invalidate_tlb(quickmap_addr);
     return quickmap_addr;
 }
 
-pub fn quickUnmap(self: *@This(), addr: u64) void {
-    _ = addr; // autofix
-
-    const entry: *PageMapping.Entry = @ptrFromInt(self.quickmap_pt_entry.start);
+pub fn quickUnmap(self: *@This()) void {
+    const quickmap = self.vmm.quickmap.start;
+    const quickmap_addr: u64 = @bitCast(quickmap);
+    const entry: *PageMapping.Entry = @ptrFromInt(@as(u64, @bitCast(self.vmm.quickmap_pt_entry.start)) + @sizeOf(PageMapping.Entry) * @as(u64, quickmap.pt_idx));
     writeEntry(entry, 0, .{});
+    log.info("quickmap {*} 0x{X} -> 0x{X}", .{ entry, quickmap_addr, entry.getAddr() });
     invalidate_tlb(quickmap_addr);
 }
 
