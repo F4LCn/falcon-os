@@ -279,7 +279,7 @@ pub fn printReservedRanges(self: *const @This()) void {
     }
 }
 
-fn invalidate_tlb(addr: u64) void {
+fn invalidateTLB(addr: u64) void {
     // call instruction to invalidate the tbl cache for addr
     asm volatile ("invlpg (%[addr])"
         :
@@ -370,7 +370,7 @@ pub fn quickMap(self: *@This(), addr: u64) u64 {
     const entry: *PageMapping.Entry = @ptrFromInt(@as(u64, @bitCast(self.vmm.quickmap_pt_entry.start)) + @sizeOf(PageMapping.Entry) * @as(u64, quickmap.pt_idx));
     writeEntry(entry, addr, DefaultMmapFlags);
     log.info("quickmap {*} 0x{X} -> 0x{X}", .{ entry, quickmap_addr, entry.getAddr() });
-    invalidate_tlb(quickmap_addr);
+    invalidateTLB(quickmap_addr);
     return quickmap_addr;
 }
 
@@ -380,7 +380,7 @@ pub fn quickUnmap(self: *@This()) void {
     const entry: *PageMapping.Entry = @ptrFromInt(@as(u64, @bitCast(self.vmm.quickmap_pt_entry.start)) + @sizeOf(PageMapping.Entry) * @as(u64, quickmap.pt_idx));
     writeEntry(entry, 0, .{});
     log.info("quickmap {*} 0x{X} -> 0x{X}", .{ entry, quickmap_addr, entry.getAddr() });
-    invalidate_tlb(quickmap_addr);
+    invalidateTLB(quickmap_addr);
 }
 
 fn writeEntry(entry: *PageMapping.Entry, paddr: u64, flags: MmapFlags) void {
