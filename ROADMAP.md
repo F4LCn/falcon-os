@@ -51,6 +51,7 @@
     * [ ] Allocators hierarchy
       * [-] Physical memory manager / Frame allocator
       * [-] Virtual memory manager / Page allocator
+      * [-] Buddy allocator
       * [ ] General purpose heap allocator
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] SMP
