@@ -26,4 +26,13 @@ pub fn build(b: *std.Build) void {
 
     kernel_exe.setLinkerScript(b.path("linker.ld"));
     b.installArtifact(kernel_exe);
+
+    const test_step = b.step("test", "Run tests");
+
+    const tests = b.addTest(.{
+        .root_source_file = b.path("src/tests.zig"),
+        .name = "all_tests",
+    });
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
 }
