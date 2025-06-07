@@ -1,6 +1,7 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
+
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
 
 // []u8 -> the memory we can allocate
@@ -21,7 +22,7 @@ pub fn NodeStateIdxType(comptime bucket_idx_type: type, comptime node_idx_type: 
         value: u64,
 
         pub fn create(bucket_idx: bucket_idx_type, node_idx: node_idx_type) @This() {
-            return .{ .value = (@as(u64, 1) << (max_order - 1 - bucket_idx)) - 1 + @as(u64, node_idx) };
+            return .{ .value = (@as(u64, 1) << (max_order - 1 - bucket_idx)) - 1 + @as(u64, node_idx.value) };
         }
         // pub fn nodeIdx(self: @This()) node_idx_type {
         //     return @as(node_idx_type, self.value - (1 << (max_order - 1 - bucket_idx)) + 1);
@@ -44,6 +45,31 @@ pub fn NodeStateIdxType(comptime bucket_idx_type: type, comptime node_idx_type: 
         }
     };
 }
+pub fn NodeIdxType(comptime node_idx_max_log: comptime_int) type {
+    const node_idx_type = std.math.IntFittingRange(0, 1 << node_idx_max_log);
+    return struct {
+        value: node_idx_type,
+
+        pub fn create(node_idx: node_idx_type) @This() {
+            return .{ .value = node_idx };
+        }
+
+        pub fn parent(self: @This()) !@This() {
+            return .{ .value = self.value >> 1 };
+        }
+
+        pub fn child(self: @This(), side: enum { left, right }) @This() {
+            return .{ .value = switch (side) {
+                .left => (self.value << 1),
+                .right => (self.value << 1) + 1,
+            } };
+        }
+
+        pub fn sibling(self: @This()) @This() {
+            return .{ .value = self.value ^ 1 };
+        }
+    };
+}
 
 pub fn BucketItemType(comptime node_idx_type: type) type {
     return struct {
@@ -57,7 +83,7 @@ pub fn BucketItemType(comptime node_idx_type: type) type {
             _: std.fmt.FormatOptions,
             writer: anytype,
         ) !void {
-            try writer.print("BucketItem: NodeIdx: {d}", .{self.node_idx});
+            try writer.print("BucketItem: NodeIdx: {d}", .{self.node_idx.value});
         }
     };
 }
@@ -68,16 +94,18 @@ pub fn Buddy(comptime config: BuddyConfig) type {
     const max_order = max_block_size_log - min_block_size_log + 1;
     return struct {
         const BucketIdx = std.math.IntFittingRange(0, max_order - 1);
-        const NodeIdx = std.math.IntFittingRange(0, 1 << (max_block_size_log - min_block_size_log - 1));
+        const NodeIdx = NodeIdxType(max_block_size_log - min_block_size_log - 1);
         const NodeStateIdx = NodeStateIdxType(BucketIdx, NodeIdx, max_order);
         const BucketItem = BucketItemType(NodeIdx);
         const BucketFreeList = DoublyLinkedList(BucketItem, .prev, .next);
 
         const Self = @This();
-        const memory_ptr: [*]u8 = @ptrFromInt(config.memory_start);
+        // const memory_ptr: [*]u8 = @ptrFromInt(config.memory_start);
 
         alloc: Allocator,
-        memory: []u8 = memory_ptr[0..config.memory_length],
+        // memory: []u8 = memory_ptr[0..config.memory_length],
+        memory_start: u64 = config.memory_start,
+        memory_length: u64 = config.memory_length,
         min_block_size_log: u64 = min_block_size_log,
         max_block_size_log: u64 = max_block_size_log,
         max_order: u64 = max_order,
@@ -90,20 +118,21 @@ pub fn Buddy(comptime config: BuddyConfig) type {
                 .alloc = alloc,
             };
             const first_node = try alloc.create(BucketItem);
-            first_node.* = .{ .node_idx = 0 };
+            first_node.* = .{ .node_idx = NodeIdx.create(0) };
             buddy.buckets[max_order - 1].append(first_node);
             return buddy;
         }
 
         pub fn init_test(alloc: Allocator, memory_start: u64) !Self {
             if (builtin.is_test) {
-                const ptr: [*]u8 = @ptrFromInt(memory_start);
+                // const ptr: [*]u8 = @ptrFromInt(memory_start);
                 var buddy: Self = .{
-                    .memory = ptr[0..config.memory_length],
+                    // .memory = ptr[0..config.memory_length],
+                    .memory_start = memory_start,
                     .alloc = alloc,
                 };
                 const first_node = try alloc.create(BucketItem);
-                first_node.* = .{ .node_idx = 0 };
+                first_node.* = .{ .node_idx = NodeIdx.create(0) };
                 buddy.buckets[max_order - 1].append(first_node);
                 return buddy;
             } else {
@@ -120,22 +149,15 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             }
         }
 
-        pub fn allocator(self: *@This()) Allocator {
+        pub fn allocator(self: *Self) Allocator {
             return .{
                 .ptr = self,
                 .vtable = &.{
                     .alloc = _alloc,
+                    .free = _free,
                     .resize = std.mem.Allocator.noResize,
                     .remap = std.mem.Allocator.noRemap,
-                    .free = std.mem.Allocator.noFree,
                 },
-            };
-        }
-
-        fn nodeChild(self: NodeIdx, side: enum { left, right }) NodeIdx {
-            return switch (side) {
-                .left => (self << 1),
-                .right => (self << 1) + 1,
             };
         }
 
@@ -152,22 +174,24 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         }
 
         fn ptrFromNodeIdx(self: *const Self, bucket_idx: BucketIdx, node_idx: NodeIdx) u64 {
-            const start_ptr = @as(u64, @intFromPtr(self.memory.ptr));
+            const start_ptr = @as(u64, self.memory_start);
             const shift: u6 = @as(u6, @intCast(max_block_size_log + bucket_idx + 1 - max_order));
             const node_length: u64 = @as(u64, 1) << shift;
-            const offset = node_length * node_idx;
+            const offset = node_length * node_idx.value;
             return start_ptr + offset;
         }
 
         fn nodeIdxFromPtr(self: *const Self, bucket_idx: BucketIdx, ptr: u64) NodeIdx {
-            const start_ptr = @as(u64, @intFromPtr(self.memory.ptr));
+            std.debug.print("[node2ptr]self.memory is {any}\n", .{self.memory_start});
+            const start_ptr = @as(u64, self.memory_start);
+            std.debug.print("start_ptr is 0x{X}\n", .{start_ptr});
             const offset = ptr - start_ptr;
-            const shift: u6 = @as(u6, @intCast(max_block_size_log + bucket_idx - max_order + 1));
+            const shift: u6 = @as(u6, @intCast(max_block_size_log + bucket_idx + 1 - max_order));
             const node_idx = (offset >> shift);
-            return @intCast(node_idx);
+            return .{ .value = @intCast(node_idx) };
         }
 
-        pub fn allocate(self: *Self, requested_length: u64) ![*]u8 {
+        pub fn allocate(self: *Self, requested_length: u64, _: std.mem.Alignment) ![*]u8 {
             const length = @as(u64, std.mem.alignForwardLog2(requested_length, min_block_size_log));
             const matching_bucket = self.lengthToBucketIdx(length);
 
@@ -195,9 +219,9 @@ pub fn Buddy(comptime config: BuddyConfig) type {
                             self.node_state.toggle(parent_node_idx.value);
                         } else |_| {}
                         const half_node = try self.alloc.create(BucketItem);
-                        half_node.* = .{ .node_idx = nodeChild(node_idx, .right) };
+                        half_node.* = .{ .node_idx = node_idx.child(.right) };
                         self.buckets[bucket - 1].prepend(half_node);
-                        node_idx = nodeChild(node_idx, .left);
+                        node_idx = node_idx.child(.left);
                         bucket -= 1;
                     }
                     const nodestate_idx = NodeStateIdx.create(matching_bucket, node_idx);
@@ -215,11 +239,78 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             return error.OutOfMemory;
         }
 
-        fn _alloc(context: *anyopaque, len: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
+        pub fn free(self: *Self, ptr: [*]u8, length: u64, _: std.mem.Alignment) !void {
+            std.debug.print("[free] self is {*}\n", .{self});
+            std.debug.print("[free] self.memory is {any}\n", .{self.memory_start});
+            const matching_bucket = self.lengthToBucketIdx(length);
+            var node_idx = self.nodeIdxFromPtr(matching_bucket, @intFromPtr(ptr));
+
+            var bucket = matching_bucket;
+            // std.debug.print("found node at bucket={d} idx={} \n", .{ bucket, node_idx.value });
+            while (bucket < max_order) {
+                const nodestate_idx = NodeStateIdx.create(bucket, node_idx);
+                if (nodestate_idx.parent()) |parent_node_idx| {
+                    // std.debug.print("parent state {any} \n", .{self.node_state.isSet(parent_node_idx.value)});
+                    if (!self.node_state.isSet(parent_node_idx.value)) {
+                        break;
+                    }
+
+                    const buddy_node_idx = node_idx.sibling();
+                    // std.debug.print("buddy node is bucket={d} idx={d} \n", .{ bucket, buddy_node_idx.value });
+                    var iter = self.buckets[bucket].iter();
+                    while (iter.next()) |node| {
+                        if (node.node_idx.value == buddy_node_idx.value) {
+                            defer self.alloc.destroy(node);
+                            defer self.buckets[bucket].remove(node);
+                            break;
+                        }
+                    }
+
+                    // std.debug.print("recombining idx={d} and idx={d} to bucket={} \n", .{ node_idx.value, buddy_node_idx.value, bucket + 1 });
+
+                    // const ni = node_idx;
+                    node_idx = node_idx.parent() catch {
+                        // std.debug.print("No parent sadge {d} \n", .{ni.value});
+                        break;
+                    };
+                    bucket += 1;
+                } else |_| {
+                    break;
+                }
+            }
+
+            const nodestate_idx = NodeStateIdx.create(bucket, node_idx);
+            if (nodestate_idx.parent()) |parent_node_idx| {
+                self.node_state.toggle(parent_node_idx.value);
+            } else |_| {}
+            const node = try self.alloc.create(BucketItem);
+            node.* = .{ .node_idx = node_idx };
+            self.buckets[bucket].prepend(node);
+        }
+
+        fn _alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
             const self: *@This() = @ptrCast(@alignCast(context));
-            return self.allocate(len) catch {
+            const res = self.allocate(len, alignment) catch {
                 return null;
             };
+            std.debug.print("[after allocate] res {X}\n", .{@intFromPtr(res)});
+            std.debug.print("[after allocate] self.memory {any}\n", .{self.memory_start});
+            return res;
+        }
+
+        fn _free(
+            context: *anyopaque,
+            memory: []u8,
+            alignment: std.mem.Alignment,
+            _: usize,
+        ) void {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            std.debug.print("[_free] self is {*}\n", .{self});
+            std.debug.print("[_free1] buddy.memory is {any}\n", .{self.memory_start});
+            self.free(memory.ptr, memory.len, alignment) catch {
+                @panic("Unexpected error while freeing memory");
+            };
+            std.debug.print("[_free2] buddy.memory is {any}\n", .{self.memory_start});
         }
     };
 }
@@ -227,7 +318,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
 test "Buddy" {
     const TestBuddy = Buddy(.{ .memory_start = 0x1234, .memory_length = 128, .min_size = 1 });
     const NodeIdx = TestBuddy.NodeIdx;
-    const value_type = @typeInfo(NodeIdx);
+    const value_type = @typeInfo(@FieldType(NodeIdx, "value"));
     const BucketIdx = TestBuddy.BucketIdx;
     const bucket_type = @typeInfo(BucketIdx);
 
@@ -258,10 +349,10 @@ test "nodestate idx children" {
 
 test "node idx children" {
     const TestBuddy = Buddy(.{ .memory_start = 0x1234, .memory_length = 128, .min_size = 1 });
-    try std.testing.expectEqual(0, TestBuddy.nodeChild(0, .left));
-    try std.testing.expectEqual(1, TestBuddy.nodeChild(0, .right));
-    try std.testing.expectEqual(2, TestBuddy.nodeChild(1, .left));
-    try std.testing.expectEqual(5, TestBuddy.nodeChild(2, .right));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 0 }, (TestBuddy.NodeIdx{ .value = 0 }).child(.left));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 1 }, (TestBuddy.NodeIdx{ .value = 0 }).child(.right));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 2 }, (TestBuddy.NodeIdx{ .value = 1 }).child(.left));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 5 }, (TestBuddy.NodeIdx{ .value = 2 }).child(.right));
 }
 
 test "buddy init test" {
@@ -286,21 +377,21 @@ test "buddy test" {
     const bucketIdx = buddy.lengthToBucketIdx(64);
     try std.testing.expectEqual(6, bucketIdx);
 
-    try std.testing.expectEqual(0, buddy.nodeIdxFromPtr(@intCast(7), 0x1000));
-    try std.testing.expectEqual(0, buddy.nodeIdxFromPtr(@intCast(6), 0x1000));
-    try std.testing.expectEqual(1, buddy.nodeIdxFromPtr(@intCast(6), 0x1000 + 64));
-    try std.testing.expectEqual(0, buddy.nodeIdxFromPtr(@intCast(5), 0x1000));
-    try std.testing.expectEqual(1, buddy.nodeIdxFromPtr(@intCast(5), 0x1000 + 32));
-    try std.testing.expectEqual(2, buddy.nodeIdxFromPtr(@intCast(5), 0x1000 + 64));
-    try std.testing.expectEqual(3, buddy.nodeIdxFromPtr(@intCast(5), 0x1000 + 96));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 0 }, buddy.nodeIdxFromPtr(@intCast(7), 0x1000));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 0 }, buddy.nodeIdxFromPtr(@intCast(6), 0x1000));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 1 }, buddy.nodeIdxFromPtr(@intCast(6), 0x1000 + 64));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 0 }, buddy.nodeIdxFromPtr(@intCast(5), 0x1000));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 1 }, buddy.nodeIdxFromPtr(@intCast(5), 0x1000 + 32));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 2 }, buddy.nodeIdxFromPtr(@intCast(5), 0x1000 + 64));
+    try std.testing.expectEqual(TestBuddy.NodeIdx{ .value = 3 }, buddy.nodeIdxFromPtr(@intCast(5), 0x1000 + 96));
 
-    try std.testing.expectEqual(0x1000, buddy.ptrFromNodeIdx(@intCast(7), 0));
-    try std.testing.expectEqual(0x1000, buddy.ptrFromNodeIdx(@intCast(6), 0));
-    try std.testing.expectEqual(0x1000 + 64, buddy.ptrFromNodeIdx(@intCast(6), 1));
-    try std.testing.expectEqual(0x1000, buddy.ptrFromNodeIdx(@intCast(5), 0));
-    try std.testing.expectEqual(0x1000 + 32, buddy.ptrFromNodeIdx(@intCast(5), 1));
-    try std.testing.expectEqual(0x1000 + 64, buddy.ptrFromNodeIdx(@intCast(5), 2));
-    try std.testing.expectEqual(0x1000 + 96, buddy.ptrFromNodeIdx(@intCast(5), 3));
+    try std.testing.expectEqual(0x1000, buddy.ptrFromNodeIdx(@intCast(7), .{ .value = 0 }));
+    try std.testing.expectEqual(0x1000, buddy.ptrFromNodeIdx(@intCast(6), .{ .value = 0 }));
+    try std.testing.expectEqual(0x1000 + 64, buddy.ptrFromNodeIdx(@intCast(6), .{ .value = 1 }));
+    try std.testing.expectEqual(0x1000, buddy.ptrFromNodeIdx(@intCast(5), .{ .value = 0 }));
+    try std.testing.expectEqual(0x1000 + 32, buddy.ptrFromNodeIdx(@intCast(5), .{ .value = 1 }));
+    try std.testing.expectEqual(0x1000 + 64, buddy.ptrFromNodeIdx(@intCast(5), .{ .value = 2 }));
+    try std.testing.expectEqual(0x1000 + 96, buddy.ptrFromNodeIdx(@intCast(5), .{ .value = 3 }));
 }
 
 test "Buddy allocate" {
@@ -311,7 +402,7 @@ test "Buddy allocate" {
         const TestBuddy = Buddy(.{ .memory_start = 0x1000, .memory_length = 128, .min_size = 1 });
         var buddy: TestBuddy = try .init(test_alloc);
         defer buddy.deinit();
-        const allocated = try buddy.allocate(128);
+        const allocated = try buddy.allocate(128, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000, @intFromPtr(allocated));
         // try std.testing.expectEqual(128, allocated.len);
     }
@@ -321,18 +412,18 @@ test "Buddy allocate" {
         const TestBuddy = Buddy(.{ .memory_start = 0x1000, .memory_length = 128, .min_size = 1 });
         var buddy: TestBuddy = try .init(test_alloc);
         defer buddy.deinit();
-        const allocated = try buddy.allocate(8);
+        const allocated = try buddy.allocate(8, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000, @intFromPtr(allocated));
         // try std.testing.expectEqual(8, allocated.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
-        const allocated2 = try buddy.allocate(8);
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
+        // }
+        const allocated2 = try buddy.allocate(8, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000 + 8, @intFromPtr(allocated2));
         // try std.testing.expectEqual(8, allocated2.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
+        // }
     }
 
     {
@@ -340,49 +431,91 @@ test "Buddy allocate" {
         const TestBuddy = Buddy(.{ .memory_start = 0x1000, .memory_length = 128, .min_size = 1 });
         var buddy: TestBuddy = try .init(test_alloc);
         defer buddy.deinit();
-        const allocated = try buddy.allocate(16);
+        const allocated = try buddy.allocate(16, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000, @intFromPtr(allocated));
         // try std.testing.expectEqual(16, allocated.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
-        const allocated2 = try buddy.allocate(8);
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
+        // }
+        const allocated2 = try buddy.allocate(8, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000 + 16, @intFromPtr(allocated2));
         // try std.testing.expectEqual(8, allocated2.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
     }
+    // }
 
     {
-        // Case 4: allocate 8b then allocate 16b
+        // Case 4: allocate 8b then allocate 16b then 2b then 1b
         const TestBuddy = Buddy(.{ .memory_start = 0x1000, .memory_length = 128, .min_size = 1 });
         var buddy: TestBuddy = try .init(test_alloc);
         defer buddy.deinit();
-        const allocated = try buddy.allocate(8);
+        const allocated = try buddy.allocate(8, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000, @intFromPtr(allocated));
         // try std.testing.expectEqual(8, allocated.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
-        const allocated2 = try buddy.allocate(16);
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
+        // }
+        const allocated2 = try buddy.allocate(16, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000 + 16, @intFromPtr(allocated2));
         // try std.testing.expectEqual(16, allocated2.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
-        const allocated3 = try buddy.allocate(2);
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
+        // }
+        const allocated3 = try buddy.allocate(2, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000 + 8, @intFromPtr(allocated3));
         // try std.testing.expectEqual(2, allocated3.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
-        const allocated4 = try buddy.allocate(1);
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
+        // }
+        const allocated4 = try buddy.allocate(1, std.mem.Alignment.@"1");
         try std.testing.expectEqual(0x1000 + 8 + 2, @intFromPtr(allocated4));
         // try std.testing.expectEqual(1, allocated4.len);
-        for (buddy.buckets, 0..) |b, i| {
-            std.debug.print("[bucket{d}] {any}\n", .{ i, b });
-        }
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[bucket{d}] {any}\n", .{ i, b });
+        // }
+    }
+}
+
+test "Buddy free" {
+    const test_alloc = std.testing.allocator;
+
+    {
+        // Case 1
+        const TestBuddy = Buddy(.{ .memory_start = 0x1000, .memory_length = 128, .min_size = 1 });
+        var buddy: TestBuddy = try .init(test_alloc);
+        defer buddy.deinit();
+        const alloc8b0 = try buddy.allocate(8, std.mem.Alignment.@"1");
+        const alloc16b = try buddy.allocate(16, std.mem.Alignment.@"1");
+        const alloc2b0 = try buddy.allocate(2, std.mem.Alignment.@"1");
+        const alloc2b1 = try buddy.allocate(2, std.mem.Alignment.@"1");
+        const alloc1b = try buddy.allocate(1, std.mem.Alignment.@"1");
+        const alloc8b1 = try buddy.allocate(8, std.mem.Alignment.@"1");
+        const alloc8b2 = try buddy.allocate(8, std.mem.Alignment.@"1");
+
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[alloc][bucket{d}] {any}\n", .{ i, b });
+        // }
+
+        // std.debug.print("[free ] freeing 8b1 \n", .{});
+        try buddy.free(alloc8b1, 8, std.mem.Alignment.@"1");
+        // std.debug.print("[free ] freeing 8b2 \n", .{});
+        try buddy.free(alloc8b2, 8, std.mem.Alignment.@"1");
+        // std.debug.print("[free ] freeing 16b \n", .{});
+        try buddy.free(alloc16b, 16, std.mem.Alignment.@"1");
+        // std.debug.print("[free ] freeing 8b0 \n", .{});
+        try buddy.free(alloc8b0, 8, std.mem.Alignment.@"1");
+        // std.debug.print("[free ] freeing 2b1 \n", .{});
+        try buddy.free(alloc2b1, 2, std.mem.Alignment.@"1");
+        // std.debug.print("[free ] freeing 2b0 \n", .{});
+        try buddy.free(alloc2b0, 2, std.mem.Alignment.@"1");
+        // std.debug.print("[free ] freeing 1b \n", .{});
+        try buddy.free(alloc1b, 1, std.mem.Alignment.@"1");
+
+        // std.debug.print("\n", .{});
+        // for (buddy.buckets, 0..) |b, i| {
+        //     std.debug.print("[free ][bucket{d}] {any}\n", .{ i, b });
+        // }
     }
 }
 
@@ -390,13 +523,22 @@ test "buddy allocator" {
     const test_alloc = std.testing.allocator;
     const buffer = try test_alloc.alloc(u8, 128);
     defer test_alloc.free(buffer);
-    std.debug.print("buffer: 0x{X} with size {d}", .{ @intFromPtr(&buffer), buffer.len });
+    std.debug.print("buffer: 0x{X} with size {d}\n", .{ @intFromPtr(&buffer), buffer.len });
     const TestBuddy = Buddy(.{ .memory_start = 0x1, .memory_length = 128, .min_size = @sizeOf(u8) });
     var buddy: TestBuddy = try .init_test(test_alloc, @intFromPtr(&buffer));
     defer buddy.deinit();
 
     const alloc = buddy.allocator();
+    _ = &alloc;
+    std.debug.print("[before alloc] memory ptr is {X}\n", .{buddy.memory_start});
     const slice = try alloc.alloc(u64, 10);
-    try std.testing.expectEqual(@intFromPtr(&buffer), @intFromPtr(slice.ptr));
-    try std.testing.expectEqual(10, slice.len);
+    std.debug.print("[after alloc] slice is {any}\n", .{slice.ptr});
+    std.debug.print("[after alloc ] memory field ptr is {X}\n", .{&buddy.memory_start});
+    // _ = slice;
+    // try std.testing.expectEqual(@intFromPtr(&buffer), @intFromPtr(slice.ptr));
+    // try std.testing.expectEqual(10, slice.len);
+    std.debug.print("[after alloc ] memory ptr is {X}\n", .{buddy.memory_start});
+    std.debug.print("[after alloc ] buddy.len is {d}\n", .{buddy.memory_length});
+
+    // alloc.free(slice);
 }

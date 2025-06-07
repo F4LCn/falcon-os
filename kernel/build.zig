@@ -32,6 +32,7 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{
         .root_source_file = b.path("src/tests.zig"),
         .name = "all_tests",
+        .optimize = .Debug,
     });
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
