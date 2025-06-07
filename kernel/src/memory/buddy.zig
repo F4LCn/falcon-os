@@ -182,9 +182,9 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         }
 
         fn nodeIdxFromPtr(self: *const Self, bucket_idx: BucketIdx, ptr: u64) NodeIdx {
-            std.debug.print("[node2ptr]self.memory is {any}\n", .{self.memory_start});
+            // std.debug.print("[node2ptr]self.memory is {any}\n", .{self.memory_start});
             const start_ptr = @as(u64, self.memory_start);
-            std.debug.print("start_ptr is 0x{X}\n", .{start_ptr});
+            // std.debug.print("start_ptr is 0x{X}\n", .{start_ptr});
             const offset = ptr - start_ptr;
             const shift: u6 = @as(u6, @intCast(max_block_size_log + bucket_idx + 1 - max_order));
             const node_idx = (offset >> shift);
@@ -240,8 +240,8 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         }
 
         pub fn free(self: *Self, ptr: [*]u8, length: u64, _: std.mem.Alignment) !void {
-            std.debug.print("[free] self is {*}\n", .{self});
-            std.debug.print("[free] self.memory is {any}\n", .{self.memory_start});
+            // std.debug.print("[free] self is {*}\n", .{self});
+            // std.debug.print("[free] self.memory is {any}\n", .{self.memory_start});
             const matching_bucket = self.lengthToBucketIdx(length);
             var node_idx = self.nodeIdxFromPtr(matching_bucket, @intFromPtr(ptr));
 
@@ -293,8 +293,8 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const res = self.allocate(len, alignment) catch {
                 return null;
             };
-            std.debug.print("[after allocate] res {X}\n", .{@intFromPtr(res)});
-            std.debug.print("[after allocate] self.memory {any}\n", .{self.memory_start});
+            // std.debug.print("[after allocate] res {X}\n", .{@intFromPtr(res)});
+            // std.debug.print("[after allocate] self.memory {any}\n", .{self.memory_start});
             return res;
         }
 
@@ -305,12 +305,12 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             _: usize,
         ) void {
             const self: *@This() = @ptrCast(@alignCast(context));
-            std.debug.print("[_free] self is {*}\n", .{self});
-            std.debug.print("[_free1] buddy.memory is {any}\n", .{self.memory_start});
+            // std.debug.print("[_free] self is {*}\n", .{self});
+            // std.debug.print("[_free1] buddy.memory is {any}\n", .{self.memory_start});
             self.free(memory.ptr, memory.len, alignment) catch {
                 @panic("Unexpected error while freeing memory");
             };
-            std.debug.print("[_free2] buddy.memory is {any}\n", .{self.memory_start});
+            // std.debug.print("[_free2] buddy.memory is {any}\n", .{self.memory_start});
         }
     };
 }
@@ -523,22 +523,22 @@ test "buddy allocator" {
     const test_alloc = std.testing.allocator;
     const buffer = try test_alloc.alloc(u8, 128);
     defer test_alloc.free(buffer);
-    std.debug.print("buffer: 0x{X} with size {d}\n", .{ @intFromPtr(&buffer), buffer.len });
+    std.debug.print("buffer: 0x{X} with size {d}\n", .{ @intFromPtr(buffer.ptr), buffer.len });
     const TestBuddy = Buddy(.{ .memory_start = 0x1, .memory_length = 128, .min_size = @sizeOf(u8) });
-    var buddy: TestBuddy = try .init_test(test_alloc, @intFromPtr(&buffer));
+    var buddy: TestBuddy = try .init_test(test_alloc, @intFromPtr(buffer.ptr));
     defer buddy.deinit();
 
     const alloc = buddy.allocator();
     _ = &alloc;
+    std.debug.print("[before alloc] buddy is {*}\n", .{&buddy});
     std.debug.print("[before alloc] memory ptr is {X}\n", .{buddy.memory_start});
     const slice = try alloc.alloc(u64, 10);
     std.debug.print("[after alloc] slice is {any}\n", .{slice.ptr});
     std.debug.print("[after alloc ] memory field ptr is {X}\n", .{&buddy.memory_start});
-    // _ = slice;
-    // try std.testing.expectEqual(@intFromPtr(&buffer), @intFromPtr(slice.ptr));
-    // try std.testing.expectEqual(10, slice.len);
+    try std.testing.expectEqual(@intFromPtr(buffer.ptr), @intFromPtr(slice.ptr));
+    try std.testing.expectEqual(10, slice.len);
     std.debug.print("[after alloc ] memory ptr is {X}\n", .{buddy.memory_start});
     std.debug.print("[after alloc ] buddy.len is {d}\n", .{buddy.memory_length});
 
-    // alloc.free(slice);
+    alloc.free(slice);
 }
