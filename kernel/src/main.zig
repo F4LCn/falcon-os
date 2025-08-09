@@ -6,6 +6,7 @@ const serial = @import("log/serial.zig");
 const heap = @import("heap.zig");
 const pmem = @import("memory/pmem.zig");
 const vmem = @import("memory/vmem.zig");
+const descriptors = @import("descriptors.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -74,6 +75,8 @@ pub fn failableMain() !void {
     v_id_mapped.* = 654;
     std.log.info("value @ {d}", .{v_id_mapped.*});
 
-    v.* = 321;
-    std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
+    // v.* = 321;
+    // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
+
+    try descriptors.init(&kernel_vmem);
 }

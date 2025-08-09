@@ -5,6 +5,9 @@ const Constants = @import("../constants.zig");
 const Registers = @import("../registers.zig");
 const Allocator = std.mem.Allocator;
 
+// TODO: make this great again
+const pmem = @import("pmem.zig");
+
 const log = std.log.scoped(.vmem);
 
 const ReadWrite = enum(u1) {
@@ -103,9 +106,11 @@ const VAddr = packed struct(u64) {
     _pad: u16 = 0,
 };
 const VirtMemRange = struct {
+    // vm: *VMEM,
     start: VAddr,
     length: u64,
     type: ?VirtRangeType = null,
+    // mapped: bool = false,
 
     pub fn format(
         self: *const @This(),
@@ -120,6 +125,19 @@ const VirtMemRange = struct {
             try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) free]", .{ self, start_addr, start_addr + self.length, self.length });
         }
     }
+
+    // pub fn map(self: *@This(), prange: pmem.PhysMemRange) !void {
+    //     if (self.length < prange.length) return error.TooSmall;
+    //     self.vm.mmap(prange.start, self.start, DefaultMmapFlags);
+    //     self.mapped = true;
+    // }
+
+    // pub fn unmap(self: *@This()) !void {
+    //     if (!self.mapped) {
+    //         return error.NotMapped;
+    //     }
+    //     self.vm.mmap(0x0, self.start, .{ .present = false });
+    // }
 };
 const VirtMemRangeListItem = struct {
     const Self = @This();
@@ -228,6 +246,8 @@ root: u64,
 levels: u8,
 vmm: VirtualMemoryManager,
 
+const VMEM = @This();
+
 extern const _kernel_end: u64;
 
 pub fn init(alloc: Allocator) !@This() {
@@ -327,14 +347,15 @@ pub fn allocateRange(self: *@This(), length: u64, args: struct { typ: ?VirtRange
     if (args.typ) |typ| {
         var iter = self.vmm.reserved_ranges.iter();
         while (iter.next()) |item| {
-            var range = &item.range;
+            var range = item.range;
             if (range.type != typ) continue;
             if (range.length == length) {
                 self.vmm.reserved_ranges.remove(item);
                 defer self.vmm.alloc.destroy(item);
                 return range;
             } else if (range.length > length) {
-                range.start += length;
+                const new_start: u64 = @as(u64, @bitCast(range.start)) + length;
+                range.start = @bitCast(new_start);
                 range.length -= length;
                 const new_range = VirtMemRange{ .start = range.start, .length = length, .type = typ };
                 return new_range;
@@ -343,19 +364,22 @@ pub fn allocateRange(self: *@This(), length: u64, args: struct { typ: ?VirtRange
     } else {
         var iter = self.vmm.free_ranges.iter();
         while (iter.next()) |item| {
-            var range = &item.range;
+            var range = item.range;
             if (range.length == length) {
                 self.vmm.free_ranges.remove(item);
                 defer self.vmm.alloc.destroy(item);
                 return range;
             } else if (range.length > length) {
-                range.start += length;
+                const new_start = @as(u64, @bitCast(range.start)) + length;
+                range.start = @bitCast(new_start);
                 range.length -= length;
                 const new_range = VirtMemRange{ .start = range.start, .length = length };
                 return new_range;
             }
         }
     }
+
+    unreachable;
 }
 
 pub fn freeRange(self: *@This(), range: *VirtMemRange) void {
@@ -381,6 +405,53 @@ pub fn quickUnmap(self: *@This()) void {
     writeEntry(entry, 0, .{});
     log.info("quickmap {*} 0x{X} -> 0x{X}", .{ entry, quickmap_addr, entry.getAddr() });
     invalidateTLB(quickmap_addr);
+}
+
+pub fn mmap(self: *@This(), prange: pmem.PhysMemRange, vrange: VirtMemRange, flags: MmapFlags) !void {
+    if (prange.length > vrange.length) return error.TooSmall;
+
+    const physical_addr = std.mem.alignBackward(u64, prange.start, Constants.arch_page_size);
+    const virtual_addr = vrange.start;
+
+    const entry = try self.getPageTableEntry(virtual_addr, flags);
+    if (entry.present) {
+        log.warn("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(physical_addr)) });
+    }
+
+    writeEntry(entry, physical_addr, flags);
+    log.debug("entry after mapping({*}): 0x{X}", .{ entry, @as(u64, @bitCast(entry.*)) });
+}
+
+fn getPageTableEntry(self: *const @This(), vaddr: VAddr, flags: MmapFlags) !*PageMapping.Entry {
+    const pml4_mapping: *PageMapping = @ptrFromInt(self.root);
+    log.debug("PML4: {*}", .{pml4_mapping});
+    const pdp_mapping = try getOrCreateMapping(pml4_mapping, vaddr.pml4_idx);
+    log.debug("PDP: {*}", .{pdp_mapping});
+    const pd_mapping = try getOrCreateMapping(pdp_mapping, vaddr.pdp_idx);
+    log.debug("PD: {*}", .{pd_mapping});
+    const pt_mapping = try getOrCreateMapping(pd_mapping, vaddr.pd_idx);
+    log.debug("PT: {*}", .{pt_mapping});
+    if (flags.page_size == .large) {
+        // TODO: handle large pages here
+        @panic("large pages unhandled");
+    }
+    const entry = &pt_mapping.mappings[vaddr.pt_idx];
+    return entry;
+}
+
+fn getOrCreateMapping(mapping: *PageMapping, idx: u9) !*PageMapping {
+    const next_level: *PageMapping.Entry = &mapping.mappings[idx];
+    if (!next_level.present) {
+        const maybe_page = pmem.allocatePage(1, .{});
+        if (maybe_page) |page_ptr| {
+            writeEntry(next_level, page_ptr.start, .{ .present = true, .read_write = .read_write });
+            return @ptrFromInt(page_ptr.start);
+        } else {
+            return error.PhysicalAllocationError;
+        }
+    }
+    const addr = next_level.getAddr();
+    return @ptrFromInt(addr);
 }
 
 fn writeEntry(entry: *PageMapping.Entry, paddr: u64, flags: MmapFlags) void {

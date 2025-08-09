@@ -26,7 +26,7 @@ const PhysRangeType = enum {
     }
 };
 const PAddr = u64;
-const PhysMemRange = struct {
+pub const PhysMemRange = struct {
     start: PAddr,
     length: u64,
     type: PhysRangeType,
