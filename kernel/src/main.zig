@@ -78,5 +78,5 @@ pub fn failableMain() !void {
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
 
-    try descriptors.init(&kernel_vmem);
+    descriptors.init();
 }
