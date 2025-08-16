@@ -1,4 +1,5 @@
 const std = @import("std");
+const common = @import("common.zig");
 
 pub const Segment = struct {
     pub const PrivilegeLevel = enum(u2) {
@@ -6,11 +7,6 @@ pub const Segment = struct {
         ring1 = 1,
         ring2 = 2,
         ring3 = 3,
-    };
-
-    pub const DescriptorType = enum(u1) {
-        system = 0,
-        code_data = 1,
     };
 
     pub const Granularity = enum(u1) {
@@ -24,7 +20,7 @@ pub const Segment = struct {
         index: u13,
     };
 
-    pub const Type = packed struct(u4) {
+    pub const SegmentType = packed struct(u4) {
         accessed: bool = false,
         write_enabled: bool = false,
         expansion_direction: bool = false,
@@ -40,16 +36,21 @@ pub const Segment = struct {
         }
     };
 
-    const KernelCodeType = Type.create(.{ .code = true });
-    const KernelDataType = Type.create(.{});
-    const UserCodeType = Type.create(.{ .code = true });
-    const UserDataType = Type.create(.{});
+    pub const KernelCodeType = SegmentType.create(.{ .code = true });
+    pub const KernelDataType = SegmentType.create(.{});
+    pub const UserCodeType = SegmentType.create(.{ .code = true });
+    pub const UserDataType = SegmentType.create(.{});
 
-    pub const Descriptor8Bytes = packed struct(u64) {
+    pub const GlobalDescriptor = packed struct(u64) {
+        pub const Type = enum(u1) {
+            system = 0,
+            code_data = 1,
+        };
+
         limit_lower: u16 = 0,
         base_lower: u24 = 0,
-        typ: Type = .{},
-        descriptor_type: DescriptorType = .system,
+        typ: SegmentType = .{},
+        descriptor_type: Type = .system,
         privilege: PrivilegeLevel = .ring0,
         present: bool = false,
         limit_upper: u4 = 0,
@@ -62,8 +63,8 @@ pub const Segment = struct {
         pub fn create(args: struct {
             base: u32,
             limit: u20,
-            typ: Type,
-            descriptor_type: DescriptorType = .code_data,
+            typ: SegmentType,
+            descriptor_type: Type = .code_data,
             privilege: PrivilegeLevel = .ring0,
             present: bool = true,
             is_64bit: bool,
@@ -93,55 +94,95 @@ pub const Segment = struct {
         }
     };
 
-    pub const Descriptor16Bytes = packed struct(u128) {
-        limit_lower: u16,
-        base_lower: u24,
+    pub const ISR = fn () callconv(.naked) void;
+
+    pub const GateDescriptor = packed struct(u128) {
+        pub const Type = enum(u4) {
+            invalid_gate = 0,
+            interrupt_gate = 14,
+            trap_gate = 15,
+        };
+
+        offset_lower: u16 = 0,
+        segment_selector: Segment.Selector = .{ .index = 0 },
+        ist: u3 = 0,
+        _unused0: u5 = 0,
         typ: Type,
-        descriptor_type: DescriptorType = .system,
-        privilege: PrivilegeLevel,
-        present: bool,
-        limit_upper: u4,
-        avl: bool,
-        is_64bit: bool = false,
-        default_size: u1 = 0,
-        granularity: Granularity,
-        base_upper: u40,
-        reserved: u32 = 0,
+        _unused1: u1 = 0,
+        privilege: PrivilegeLevel = .ring0,
+        present: bool = false,
+        offset_upper: u48 = 0,
+        _reserved: u32 = 0,
 
         pub fn create(args: struct {
-            base: u64,
-            limit: u20,
             typ: Type,
-            descriptor_type: DescriptorType = .code_data,
-            privilege: PrivilegeLevel = .ring0,
-            present: bool = true,
-            is_64bit: bool,
-            default_size: u1,
-            granularity: Granularity = .pages,
+            isr: ISR,
         }) @This() {
-            std.debug.assert((args.is_64bit and args.default_size == 0) or !args.is_64bit);
-
-            const limit_lower: u16 = @truncate(args.limit);
-            const limit_upper: u4 = @truncate(args.limit >> @typeInfo(u16).int.bits);
-            const base_lower: u24 = @truncate(args.base);
-            const base_upper: u40 = @truncate(args.base >> @typeInfo(u24).int.bits);
+            const offset = @intFromPtr(&args.isr);
+            const offset_lower: u16 = @truncate(offset);
+            const offset_upper: u40 = @truncate(offset >> @typeInfo(u16).int.bits);
 
             return .{
-                .limit_lower = limit_lower,
-                .base_lower = base_lower,
+                .offset_lower = offset_lower,
+                .segment_selector = common.kernel_code_segment_selector,
+                .ist = 1,
                 .typ = args.typ,
-                .descriptor_type = args.descriptor_type,
-                .privilege = args.privilege,
-                .present = args.present,
-                .limit_upper = limit_upper,
-                .avl = args.avl,
-                .is_64bit = args.is_64bit,
-                .default_size = args.default_size,
-                .granularity = args.granularity,
-                .base_upper = base_upper,
+                .present = true,
+                .offset_upper = offset_upper,
             };
         }
     };
+
+    pub const Descriptor16Bytes = struct {};
+    // pub const Descriptor16Bytes = packed struct(u128) {
+    //     limit_lower: u16,
+    //     base_lower: u24,
+    //     typ: SegmentType,
+    //     descriptor_type: DescriptorType = .system,
+    //     privilege: PrivilegeLevel,
+    //     present: bool,
+    //     limit_upper: u4,
+    //     avl: bool,
+    //     is_64bit: bool = false,
+    //     default_size: u1 = 0,
+    //     granularity: Granularity,
+    //     base_upper: u40,
+    //     reserved: u32 = 0,
+
+    //     pub fn create(args: struct {
+    //         base: u64,
+    //         limit: u20,
+    //         typ: SegmentType,
+    //         descriptor_type: DescriptorType = .code_data,
+    //         privilege: PrivilegeLevel = .ring0,
+    //         present: bool = true,
+    //         is_64bit: bool,
+    //         default_size: u1,
+    //         granularity: Granularity = .pages,
+    //     }) @This() {
+    //         std.debug.assert((args.is_64bit and args.default_size == 0) or !args.is_64bit);
+
+    //         const limit_lower: u16 = @truncate(args.limit);
+    //         const limit_upper: u4 = @truncate(args.limit >> @typeInfo(u16).int.bits);
+    //         const base_lower: u24 = @truncate(args.base);
+    //         const base_upper: u40 = @truncate(args.base >> @typeInfo(u24).int.bits);
+
+    //         return .{
+    //             .limit_lower = limit_lower,
+    //             .base_lower = base_lower,
+    //             .typ = args.typ,
+    //             .descriptor_type = args.descriptor_type,
+    //             .privilege = args.privilege,
+    //             .present = args.present,
+    //             .limit_upper = limit_upper,
+    //             .avl = args.avl,
+    //             .is_64bit = args.is_64bit,
+    //             .default_size = args.default_size,
+    //             .granularity = args.granularity,
+    //             .base_upper = base_upper,
+    //         };
+    //     }
+    // };
 
     pub const TaskState = extern struct {
         reserved0: u32,

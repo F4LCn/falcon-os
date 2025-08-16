@@ -1,6 +1,7 @@
 const std = @import("std");
 const Segment = @import("types.zig").Segment;
 const builtin = @import("builtin");
+const common = @import("common.zig");
 
 const Self = @This();
 const GDTR = packed struct {
@@ -9,13 +10,13 @@ const GDTR = packed struct {
 };
 const max_gdt_entries = 5;
 const max_tss_entries = 0;
-const gdt_entries_size = @sizeOf(Segment.Descriptor8Bytes) * max_gdt_entries + @sizeOf(Segment.Descriptor16Bytes) * max_tss_entries;
+const gdt_entries_size = @sizeOf(Segment.GlobalDescriptor) * max_gdt_entries + @sizeOf(Segment.Descriptor16Bytes) * max_tss_entries;
 gdt_entries_buffer: [gdt_entries_size]u8 align(16) = [_]u8{0} ** gdt_entries_size,
 gdtr: GDTR = undefined,
 
 pub fn init() Self {
     var _gdt: Self = .{};
-    var gdt_entries = std.mem.bytesAsSlice(Segment.Descriptor8Bytes, _gdt.gdt_entries_buffer[0 .. @sizeOf(Segment.Descriptor8Bytes) * max_gdt_entries]);
+    var gdt_entries = std.mem.bytesAsSlice(Segment.GlobalDescriptor, _gdt.gdt_entries_buffer[0 .. @sizeOf(Segment.GlobalDescriptor) * max_gdt_entries]);
 
     gdt_entries[0] = .{};
     gdt_entries[1] = .create(.{
@@ -36,6 +37,7 @@ pub fn init() Self {
         .base = 0x0,
         .limit = std.math.maxInt(u16),
         .typ = Segment.UserCodeType,
+        .privilege = .ring3,
         .is_64bit = true,
         .default_size = 0,
     });
@@ -43,6 +45,7 @@ pub fn init() Self {
         .base = 0x0,
         .limit = std.math.maxInt(u16),
         .typ = Segment.UserDataType,
+        .privilege = .ring3,
         .is_64bit = true,
         .default_size = 0,
     });
@@ -52,13 +55,13 @@ pub fn init() Self {
         .base = &_gdt.gdt_entries_buffer,
     };
 
-    _gdt.loadGDT();
+    _gdt.loadGDTR();
     _gdt.flushGDT();
 
     return _gdt;
 }
 
-fn loadGDT(self: *Self) void {
+fn loadGDTR(self: *Self) void {
     asm volatile (
         \\lgdt (%[gdtr])
         :
@@ -67,18 +70,15 @@ fn loadGDT(self: *Self) void {
 }
 
 fn flushGDT(self: *Self) void {
-    const code_segment_selector: Segment.Selector = .{ .index = 1 };
-    const data_segment_selector: Segment.Selector = .{ .index = 2 };
-
-    self.loadDataSegment(data_segment_selector);
-    self.loadCodeSegment(code_segment_selector);
+    self.loadDataSegment(common.kernel_data_segment_selector);
+    self.loadCodeSegment(common.kernel_code_segment_selector);
 }
 
 fn loadDataSegment(self: *Self, segment_selector: Segment.Selector) void {
     if (builtin.mode == .Debug) {
         if (segment_selector.table_indicator == .GDT) {
-            const gdt_entries = std.mem.bytesAsSlice(Segment.Descriptor8Bytes, self.gdt_entries_buffer[0 .. @sizeOf(Segment.Descriptor8Bytes) * max_gdt_entries]);
-            const selected_entry: Segment.Descriptor8Bytes = gdt_entries[segment_selector.index];
+            const gdt_entries = std.mem.bytesAsSlice(Segment.GlobalDescriptor, self.gdt_entries_buffer[0 .. @sizeOf(Segment.GlobalDescriptor) * max_gdt_entries]);
+            const selected_entry: Segment.GlobalDescriptor = gdt_entries[segment_selector.index];
             std.debug.assert(selected_entry.typ.code == false);
         }
     }
@@ -98,8 +98,8 @@ fn loadDataSegment(self: *Self, segment_selector: Segment.Selector) void {
 fn loadCodeSegment(self: *Self, segment_selector: Segment.Selector) void {
     if (builtin.mode == .Debug) {
         if (segment_selector.table_indicator == .GDT) {
-            const gdt_entries = std.mem.bytesAsSlice(Segment.Descriptor8Bytes, self.gdt_entries_buffer[0 .. @sizeOf(Segment.Descriptor8Bytes) * max_gdt_entries]);
-            const selected_entry: Segment.Descriptor8Bytes = gdt_entries[segment_selector.index];
+            const gdt_entries = std.mem.bytesAsSlice(Segment.GlobalDescriptor, self.gdt_entries_buffer[0 .. @sizeOf(Segment.GlobalDescriptor) * max_gdt_entries]);
+            const selected_entry: Segment.GlobalDescriptor = gdt_entries[segment_selector.index];
             std.debug.assert(selected_entry.typ.code == true);
         }
     }
