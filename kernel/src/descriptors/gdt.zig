@@ -105,14 +105,13 @@ fn loadCodeSegment(self: *Self, segment_selector: Segment.Selector) void {
     }
 
     asm volatile (
-        \\mov %[cs_selector], %%rax
-        \\pushq %%rax
+        \\pushw %[cs_selector]
         \\leaq .jmp_offset(%%rip), %%rax
         \\pushq %%rax
         \\lretq
         \\.jmp_offset:
         :
-        : [cs_selector] "n" (@as(u16, @bitCast(segment_selector))),
+        : [cs_selector] "r" (@as(u16, @bitCast(segment_selector))),
         : "rax"
     );
 }
