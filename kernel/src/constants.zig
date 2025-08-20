@@ -1,4 +1,8 @@
-pub const arch_page_size = 1 << 12;
+const constants = @import("constants");
 
-// TODO: make the max_cpu the same for bootloaders & kernel (idea is take it from zig build config)
-pub const max_cpu = 8;
+pub fn validate() void {
+    if (constants.arch_page_size <= 0)
+        @compileError("No page size specified for arch " ++ @tagName(constants.arch));
+    if (constants.max_cpu <= 0)
+        @compileError("No max_cpu set");
+}

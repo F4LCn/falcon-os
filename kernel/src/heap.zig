@@ -1,11 +1,9 @@
 const std = @import("std");
+const constants = @import("constants");
 const Allocator = std.mem.Allocator;
 
-const PERMANENT_HEAP_SIZE = 1 * 1024 * 1024;
-const KERNEL_HEAP_SIZE = 4 * 1024 * 1024;
-
-const permanent_heap: [PERMANENT_HEAP_SIZE]u8 linksection(".kernel_heap") = undefined;
-const kernel_heap: [KERNEL_HEAP_SIZE]u8 linksection(".kernel_heap") = undefined;
+const permanent_heap: [constants.permanent_heap_size]u8 linksection(".kernel_heap") = undefined;
+const kernel_heap: [constants.heap_size]u8 linksection(".kernel_heap") = undefined;
 
 var _permanent_alloc = std.heap.FixedBufferAllocator.init(@constCast(&permanent_heap));
 var _kernel_alloc = std.heap.FixedBufferAllocator.init(@constCast(&kernel_heap));

@@ -1,7 +1,7 @@
 const std = @import("std");
+const constants = @import("constants");
 const SpinLock = @import("../synchronization.zig").SpinLock;
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
-const Constants = @import("../constants.zig");
 const Registers = @import("../registers.zig");
 const Allocator = std.mem.Allocator;
 
@@ -66,7 +66,7 @@ const PageMapping = extern struct {
             log.info("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
-    mappings: [@divExact(Constants.arch_page_size, @sizeOf(Entry))]Entry,
+    mappings: [@divExact(constants.arch_page_size, @sizeOf(Entry))]Entry,
 
     pub fn print(self: *const PageMapping, lvl: u8, vaddr: *VAddr) void {
         for (&self.mappings, 0..) |*mapping, idx| {
@@ -256,13 +256,13 @@ pub fn init(alloc: Allocator) !@This() {
     var vmm = VirtualMemoryManager.init(alloc);
     log.info("after init. kernel_end 0x{X}", .{&_kernel_end});
 
-    const quickmap_start = @intFromPtr(&_kernel_end) + 2 * Constants.arch_page_size;
-    const quickmap_length = Constants.arch_page_size * Constants.max_cpu;
+    const quickmap_start = @intFromPtr(&_kernel_end) + 2 * constants.arch_page_size;
+    const quickmap_length = constants.arch_page_size * constants.max_cpu;
     vmm.quickmap.start = @bitCast(quickmap_start);
     vmm.quickmap.length = quickmap_length;
 
-    const quickmap_pt_entry_length = std.mem.alignForward(u64, Constants.max_cpu * @sizeOf(PageMapping.Entry), Constants.arch_page_size);
-    const quickmap_pt_entry_start = -%(@as(u64, Constants.arch_page_size) * Constants.max_cpu) - quickmap_pt_entry_length - 2 * Constants.arch_page_size;
+    const quickmap_pt_entry_length = std.mem.alignForward(u64, constants.max_cpu * @sizeOf(PageMapping.Entry), constants.arch_page_size);
+    const quickmap_pt_entry_start = -%(@as(u64, constants.arch_page_size) * constants.max_cpu) - quickmap_pt_entry_length - 2 * constants.arch_page_size;
     vmm.quickmap_pt_entry.start = @bitCast(quickmap_pt_entry_start);
     vmm.quickmap_pt_entry.length = quickmap_pt_entry_length;
 
@@ -410,7 +410,7 @@ pub fn quickUnmap(self: *@This()) void {
 pub fn mmap(self: *@This(), prange: pmem.PhysMemRange, vrange: VirtMemRange, flags: MmapFlags) !void {
     if (prange.length > vrange.length) return error.TooSmall;
 
-    const physical_addr = std.mem.alignBackward(u64, prange.start, Constants.arch_page_size);
+    const physical_addr = std.mem.alignBackward(u64, prange.start, constants.arch_page_size);
     const virtual_addr = vrange.start;
 
     const entry = try self.getPageTableEntry(virtual_addr, flags);

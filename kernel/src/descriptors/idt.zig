@@ -1,6 +1,6 @@
 const std = @import("std");
+const constants = @import("constants");
 const Segment = @import("types.zig").Segment;
-const Constants = @import("../constants.zig");
 
 const Self = @This();
 const max_interrupt_vectors = 256;
@@ -8,7 +8,7 @@ const IDTR = packed struct {
     limit: u16,
     base: *[max_interrupt_vectors]Segment.GateDescriptor,
 };
-idt_entries: [max_interrupt_vectors]Segment.GateDescriptor align(Constants.arch_page_size) = [_]Segment.GateDescriptor{std.mem.zeroes(Segment.GateDescriptor)} ** max_interrupt_vectors,
+idt_entries: [max_interrupt_vectors]Segment.GateDescriptor align(constants.arch_page_size) = [_]Segment.GateDescriptor{std.mem.zeroes(Segment.GateDescriptor)} ** max_interrupt_vectors,
 idtr: IDTR = undefined,
 
 pub fn init() Self {

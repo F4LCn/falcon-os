@@ -15,6 +15,10 @@ pub const std_options: std.Options = .{
     .log_level = .debug,
 };
 
+comptime {
+    _constants.validate();
+}
+
 export fn _start() callconv(.naked) noreturn {
     asm volatile (
         \\ .global kernelMain

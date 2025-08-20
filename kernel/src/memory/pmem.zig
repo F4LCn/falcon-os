@@ -1,9 +1,9 @@
 const std = @import("std");
+const constants = @import("constants");
 const BootInfo = @import("../bootinfo.zig").BootInfo;
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
 const SpinLock = @import("../synchronization.zig").SpinLock;
 const Allocator = std.mem.Allocator;
-const Constants = @import("../constants.zig");
 
 extern var bootinfo: BootInfo;
 var mmap_entries: []BootInfo.MmapEntry = undefined;
@@ -157,12 +157,12 @@ fn initRanges() !void {
             const free_list_item = try mm.alloc.create(PhysMemRangeListItem);
             free_list_item.* = .{ .range = range };
             mm.free_ranges.append(free_list_item);
-            mm.free_pages_count += @divExact(size, Constants.arch_page_size);
+            mm.free_pages_count += @divExact(size, constants.arch_page_size);
         } else {
             const reserved_list_item = try mm.alloc.create(PhysMemRangeListItem);
             reserved_list_item.* = .{ .range = range };
             mm.reserved_ranges.append(reserved_list_item);
-            mm.reserved_pages_count += @divExact(size, Constants.arch_page_size);
+            mm.reserved_pages_count += @divExact(size, constants.arch_page_size);
         }
     }
 }
@@ -203,7 +203,7 @@ pub fn allocatePage(count: u64, args: struct { committed: bool = false, zero: bo
         mm.uncommitted_pages_count -= count;
     }
 
-    const requested_size = count * Constants.arch_page_size;
+    const requested_size = count * constants.arch_page_size;
     var iter = mm.free_ranges.iter();
     var range: ?PhysMemRange = null;
     while (iter.next()) |list_item| {
