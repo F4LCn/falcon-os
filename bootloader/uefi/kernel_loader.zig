@@ -127,15 +127,15 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
                     const symbol = symtab[sym_idx];
                     const symbol_name: []const u8 = strtab[symbol.st_name..];
                     if (std.mem.eql(u8, symbol_name[0..8], "bootinfo")) {
-                        log.debug("Found bootinfo symbol with value 0x{X}", .{symbol.st_value});
+                        log.info("Found bootinfo symbol with value 0x{X}", .{symbol.st_value});
                         kernel_info.bootinfo_addr = symbol.st_value;
                     }
                     if (std.mem.eql(u8, symbol_name[0..2], "fb")) {
-                        log.debug("Found framebuffer symbol with value 0x{X}", .{symbol.st_value});
+                        log.info("Found framebuffer symbol with value 0x{X}", .{symbol.st_value});
                         kernel_info.fb_addr = symbol.st_value;
                     }
                     if (std.mem.eql(u8, symbol_name[0..3], "env")) {
-                        log.debug("Found env config symbol with value 0x{X}", .{symbol.st_value});
+                        log.info("Found env config symbol with value 0x{X}", .{symbol.st_value});
                         kernel_info.env_addr = symbol.st_value;
                     }
                 }
