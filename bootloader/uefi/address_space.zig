@@ -126,7 +126,8 @@ pub fn mmap(self: *const Self, vaddr: Address, paddr: Address, flags: MmapFlags)
 
     const entry = try self.getPageTableEntry(virtual_addr, flags);
     if (entry.present) {
-        log.warn("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(physical_addr)) });
+        log.err("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(physical_addr)) });
+        @panic("Overwritten present page");
     }
 
     writeEntry(entry, physical_addr, flags);

@@ -1,4 +1,6 @@
 const std = @import("std");
+// Keep this here to validate the constants
+const _constants = @import("constants.zig");
 const BootInfo = @import("bootinfo.zig").BootInfo;
 const logger = @import("log/logger.zig");
 const cpu = @import("cpu.zig");
@@ -54,11 +56,13 @@ pub fn failableMain() !void {
         std.log.info("item[{d}] = {d}", .{ i, item });
     }
 
+    std.log.info("Initializing physical memory manager", .{});
     try pmem.init(heap.permanentAllocator());
     const range = pmem.allocatePage(10, .{});
     std.log.info("Allocated range: {any}", .{range});
     pmem.printFreeRanges();
 
+    std.log.info("Initializing virtual memory manager", .{});
     var kernel_vmem = try vmem.init(heap.permanentAllocator());
     kernel_vmem.printFreeRanges();
     kernel_vmem.printReservedRanges();
