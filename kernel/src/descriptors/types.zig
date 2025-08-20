@@ -120,7 +120,7 @@ pub const Segment = struct {
         }) @This() {
             const offset = @intFromPtr(&args.isr);
             const offset_lower: u16 = @truncate(offset);
-            const offset_upper: u40 = @truncate(offset >> @typeInfo(u16).int.bits);
+            const offset_upper: u48 = @truncate(offset >> @typeInfo(u16).int.bits);
 
             return .{
                 .offset_lower = offset_lower,
