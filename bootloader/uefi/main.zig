@@ -225,7 +225,7 @@ fn mapKernelSpace(
             .paddr => |x| @as(u64, @bitCast(x)),
             else => unreachable,
         };
-        log.info("Mapping kernel segment 0x{X} -> 0x{X} {X}", .{
+        log.debug("Mapping kernel segment 0x{X} -> 0x{X} {X}", .{
             @as(u64, @bitCast(mapping_paddr)),
             @as(u64, @bitCast(mapping_vaddr)),
             mapping.len,
@@ -301,6 +301,8 @@ fn mapKernelSpace(
             .{ .paddr = bootinfo_ptr },
             AddressSpace.DefaultMmapFlags,
         );
+    } else {
+        @panic("No bootinfo found");
     }
     // fb
     // TODO: make sure the size is page aligned
