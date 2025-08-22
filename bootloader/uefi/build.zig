@@ -10,11 +10,14 @@ pub fn build(b: *Build) void {
         .os_tag = Target.Os.Tag.uefi,
         .abi = Target.Abi.msvc,
     });
-    const executable = b.addExecutable(.{
-        .name = "boot",
-        .root_source_file = b.path("main.zig"),
+    const bootloader_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
         .optimize = optimize,
         .target = target,
+    });
+    const executable = b.addExecutable(.{
+        .name = "boot",
+        .root_module = bootloader_module,
     });
     b.installArtifact(executable);
 }
