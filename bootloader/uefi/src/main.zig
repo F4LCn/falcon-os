@@ -147,10 +147,10 @@ pub fn main() uefi.Status {
         \\ page map -> 0x{X}
         \\ kernel_entry -> 0x{X}
         \\ current addr -> 0x{X}
-    , .{ addr_space.root, kernel_info.entrypoint, &_marker });
+    , .{ addr_space.root, kernel_info.entrypoint, @intFromPtr(&_marker) });
 
     // TODO: exit boot services
-    const status = Globals.boot_services.exitBootServices(uefi.handle, map_key);
+    const status = Globals.boot_services._exitBootServices(uefi.handle, map_key);
     switch (status) {
         .success => {
             std.log.info("Exited boot services. Handling execution to kernel ...", .{});
@@ -179,7 +179,7 @@ pub fn main() uefi.Status {
         :
         : [page_map] "r" (addr_space.root),
           [kernel_entry] "r" (kernel_info.entrypoint),
-        : "rax"
+        : .{ .rax = true }
     );
 
     return uefi.Status.timeout;

@@ -22,7 +22,7 @@ pub inline fn outString(port: u16, bytes: []const u8) usize {
         : [port] "{dx}" (port),
           [src] "{rsi}" (bytes.ptr),
           [len] "{rcx}" (bytes.len),
-        : "rcx", "rsi"
+        : .{ .rcx = true, .rsi = true }
     );
     return bytes.len - unwritten_bytes;
 }

@@ -27,7 +27,7 @@ pub fn getPreferredResolution() BootloaderError!VideoInfo {
     var status: uefi.Status = undefined;
     var handles_count: usize = 0;
     var handles: [*]uefi.Handle = undefined;
-    status = boot_services.locateHandleBuffer(.by_protocol, &GraphicsOutput.guid, null, &handles_count, &handles);
+    status = boot_services._locateHandleBuffer(.by_protocol, &GraphicsOutput.guid, null, &handles_count, &handles);
     switch (status) {
         .success => log.debug("Found {d} video device handles", .{handles_count}),
         else => {
@@ -40,7 +40,7 @@ pub fn getPreferredResolution() BootloaderError!VideoInfo {
     while (i < handles_count) : (i += 1) {
         const device_handle: uefi.Handle = handles[i];
         var edid_protocol: *uefi.protocol.edid.Discovered = undefined;
-        status = boot_services.handleProtocol(device_handle, &uefi.protocol.edid.Discovered.guid, @as(*?*anyopaque, @ptrCast(&edid_protocol)));
+        status = boot_services._handleProtocol(device_handle, &uefi.protocol.edid.Discovered.guid, @as(*?*anyopaque, @ptrCast(&edid_protocol)));
         switch (status) {
             .success => log.debug("Found edid of size {d}", .{edid_protocol.size_of_edid}),
             .unsupported => {
@@ -71,9 +71,9 @@ pub fn getFramebuffer(video_info: VideoInfo, bootinfo: *BootInfo) BootloaderErro
     var status: uefi.Status = undefined;
 
     if (video_info.device_handle) |handle| {
-        status = boot_services.handleProtocol(handle, &GraphicsOutput.guid, @as(*?*anyopaque, @ptrCast(&gop)));
+        status = boot_services._handleProtocol(handle, &GraphicsOutput.guid, @as(*?*anyopaque, @ptrCast(&gop)));
     } else {
-        status = boot_services.locateProtocol(&GraphicsOutput.guid, null, @as(*?*anyopaque, @ptrCast(&gop)));
+        status = boot_services._locateProtocol(&GraphicsOutput.guid, null, @as(*?*const anyopaque, @ptrCast(&gop)));
     }
     switch (status) {
         .success => log.debug("Located graphics output protocol", .{}),

@@ -23,7 +23,7 @@ pub const FileBuffer = struct {
 pub fn init() BootloaderError!void {
     var status: uefi.Status = undefined;
     boot_services = Globals.boot_services;
-    status = boot_services.locateProtocol(&uefi.protocol.SimpleFileSystem.guid, null, @as(*?*anyopaque, @ptrCast(&_file_system)));
+    status = boot_services._locateProtocol(&uefi.protocol.SimpleFileSystem.guid, null, @as(*?*const anyopaque, @ptrCast(&_file_system)));
     switch (status) {
         .success => log.debug("Located the file system protocol", .{}),
         else => {
@@ -72,8 +72,8 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
         },
     }
 
-    status = boot_services.allocatePool(.loader_data, file_info_size, @as(*[*]align(8) u8, @ptrCast(@alignCast(&file_info))));
-    defer _ = boot_services.freePool(@as([*]align(8) u8, @ptrCast(@alignCast(file_info))));
+    status = boot_services._allocatePool(.loader_data, file_info_size, @as(*[*]align(8) u8, @ptrCast(@alignCast(&file_info))));
+    defer _ = boot_services._freePool(@as([*]align(8) u8, @ptrCast(@alignCast(file_info))));
     switch (status) {
         .success => log.debug("Allocated {d} bytes for file info", .{file_info_size}),
         else => {

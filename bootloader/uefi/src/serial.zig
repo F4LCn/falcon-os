@@ -51,9 +51,8 @@ const ModemCtrlReg = packed struct(u8) {
 
 pub const SerialWriter = struct {
     port: Port,
-
+    writer: std.io.Writer,
     pub const SerialError = error{};
-    pub const Writer = std.io.GenericWriter(*const Self, SerialError, write);
     const Self = @This();
     pub fn init(comptime port: Port) SerialWriter {
         const port_num = @intFromEnum(port);
@@ -72,14 +71,27 @@ pub const SerialWriter = struct {
 
         io.outb(port_num + @intFromEnum(Offset.ModemCtrl), @bitCast(ModemCtrlReg{}));
 
-        return .{ .port = port };
+        return .{
+            .port = port,
+            .writer = .{
+                .vtable = &.{
+                    .drain = drain,
+                },
+                .buffer = &[0]u8{},
+            },
+        };
     }
 
-    pub fn writer(self: *const Self) Writer {
-        return .{ .context = self };
+    pub fn drain(w: *std.io.Writer, data: []const []const u8, splat: usize) !usize {
+        _ = splat;
+        const self: *SerialWriter = @fieldParentPtr("writer", w);
+        var out: usize = 0;
+        for (data) |datum|
+            out += try self.write(datum);
+        return out;
     }
 
-    pub fn write(self: *const Self, bytes: []const u8) SerialError!usize {
+    fn write(self: *const Self, bytes: []const u8) SerialError!usize {
         const port = self.port;
         const port_num = @intFromEnum(port);
         for (bytes) |b| {

@@ -51,7 +51,7 @@ pub const MemoryType = enum(u32) {
 
 pub fn allocatePages(num_pages: u64, typ: MemoryType) BootloaderError![*]align(Constants.arch_page_size) u8 {
     var page_ptr: [*]align(Constants.arch_page_size) u8 = undefined;
-    const status = Globals.boot_services.allocatePages(.allocate_any_pages, typ.toUefi(), num_pages, &page_ptr);
+    const status = Globals.boot_services._allocatePages(.any, typ.toUefi(), num_pages, &page_ptr);
     switch (status) {
         .success => log.debug("Allocated {d} pages at 0x{X}", .{ num_pages, @intFromPtr(page_ptr) }),
         else => return BootloaderError.AddressSpaceAllocatePages,
