@@ -10,6 +10,6 @@ pub fn readCR(comptime reg: Register) u64 {
     return asm (read_instr
         : [page_map] "={r8}" (-> u64),
         :
-        : "r8"
+        : .{ .r8 = true }
     );
 }

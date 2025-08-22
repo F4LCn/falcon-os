@@ -254,7 +254,7 @@ pub fn init(alloc: Allocator) !@This() {
     const root = Registers.readCR(.cr3);
     log.info("Got current pagemap: 0x{X}", .{root});
     var vmm = VirtualMemoryManager.init(alloc);
-    log.info("after init. kernel_end 0x{X}", .{&_kernel_end});
+    log.info("after init. kernel_end 0x{*}", .{&_kernel_end});
 
     const quickmap_start = @intFromPtr(&_kernel_end) + 2 * constants.arch_page_size;
     const quickmap_length = constants.arch_page_size * constants.max_cpu;
@@ -304,7 +304,7 @@ fn invalidateTLB(addr: u64) void {
     asm volatile ("invlpg (%[addr])"
         :
         : [addr] "r" (addr),
-        : "memory"
+        : .{ .memory = true }
     );
 }
 

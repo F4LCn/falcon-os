@@ -7,17 +7,21 @@ pub fn build(b: *std.Build) void {
         .ofmt = .elf,
         .os_tag = .freestanding,
     });
+    const default_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const kernel_exe = b.addExecutable(.{
-        .name = "kernel64.elf",
+    const kernel_module = b.createModule(.{
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/main.zig"),
-        .sanitize_thread = false,
         .omit_frame_pointer = true,
         .pic = true,
         .code_model = .kernel,
+        .sanitize_thread = false,
+    });
+    const kernel_exe = b.addExecutable(.{
+        .name = "kernel64.elf",
+        .root_module = kernel_module,
     });
 
     // switch (optimize) {
@@ -32,10 +36,14 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(kernel_exe);
 
-    const tests = b.addTest(.{
+    const tests_module = b.createModule(.{
         .root_source_file = b.path("src/tests.zig"),
-        .name = "all_tests",
         .optimize = .Debug,
+        .target = default_target,
+    });
+    const tests = b.addTest(.{
+        .name = "all_tests",
+        .root_module = tests_module,
     });
 
     const run_tests = b.addRunArtifact(tests);

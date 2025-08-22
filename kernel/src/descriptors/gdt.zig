@@ -112,6 +112,6 @@ fn loadCodeSegment(self: *Self, segment_selector: Segment.Selector) void {
         \\.jmp_offset:
         :
         : [cs_selector] "r" (@as(u16, @bitCast(segment_selector))),
-        : "rax"
+        : .{ .rax = true }
     );
 }

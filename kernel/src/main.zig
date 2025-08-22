@@ -41,7 +41,8 @@ pub export fn kernelMain() callconv(.c) void {
 
 pub fn failableMain() !void {
     const alloc = heap.allocator();
-    var list = std.ArrayList(u32).init(alloc);
+    var unmanaged_list = std.ArrayList(u32).empty;
+    var list = unmanaged_list.toManaged(alloc);
     try list.append(1);
     try list.append(10);
     try list.append(5434);
@@ -51,7 +52,8 @@ pub fn failableMain() !void {
     }
 
     const permAlloc = heap.permanentAllocator();
-    var list2 = std.ArrayList(u32).init(permAlloc);
+    var unmanaged_list2 = std.ArrayList(u32).empty;
+    var list2 = unmanaged_list2.toManaged(permAlloc);
     try list2.append(1);
     try list2.append(10);
     try list2.append(5434);
