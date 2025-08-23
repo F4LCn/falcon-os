@@ -1,18 +1,18 @@
+const std = @import("std");
 const GDT = @import("descriptors/gdt.zig");
 const IDT = @import("descriptors/idt.zig");
 const GateDescriptor = @import("descriptors/types.zig").Segment.GateDescriptor;
+const interrupt = @import("interrupt.zig");
 
-var gdt: GDT = undefined;
-var idt: IDT = undefined;
+const log = std.log.scoped(.descriptors);
 
-fn dummyIsr() callconv(.naked) void {
-// do stack magic
-//iret
-}
+pub var gdt: GDT = undefined;
+pub var idt: IDT = undefined;
 
 pub fn init() void {
-    gdt = .init();
-    idt = .init();
-
-    idt.registerGate(0, .create(.{.typ = .interrupt_gate, .isr = dummyIsr }));
+    gdt = .create();
+    gdt.loadGDTR();
+    gdt.flushGDT();
+    idt = .create();
+    interrupt.init(&idt);
 }

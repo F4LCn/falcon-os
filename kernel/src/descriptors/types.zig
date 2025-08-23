@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("common.zig");
+const ISR = @import("../interrupt/types.zig").ISR;
 
 pub const Segment = struct {
     pub const PrivilegeLevel = enum(u2) {
@@ -55,7 +56,7 @@ pub const Segment = struct {
         present: bool = false,
         limit_upper: u4 = 0,
         avl: u1 = 0,
-        is_64bit: bool = false,
+        is_64bit_code: bool = false,
         default_size: u1 = 0,
         granularity: Granularity = .bytes,
         base_upper: u8 = 0,
@@ -67,11 +68,13 @@ pub const Segment = struct {
             descriptor_type: Type = .code_data,
             privilege: PrivilegeLevel = .ring0,
             present: bool = true,
-            is_64bit: bool,
+            is_64bit_code: bool,
             default_size: u1,
             granularity: Granularity = .pages,
         }) @This() {
-            std.debug.assert((args.is_64bit and args.default_size == 0) or !args.is_64bit);
+            std.debug.assert((args.is_64bit_code and args.default_size == 0) or !args.is_64bit_code);
+
+            std.debug.assert((args.is_64bit_code and args.typ.code == true) or !args.is_64bit_code);
 
             const limit_lower: u16 = @truncate(args.limit);
             const limit_upper: u4 = @truncate(args.limit >> @typeInfo(u16).int.bits);
@@ -86,15 +89,13 @@ pub const Segment = struct {
                 .privilege = args.privilege,
                 .present = args.present,
                 .limit_upper = limit_upper,
-                .is_64bit = args.is_64bit,
+                .is_64bit_code = args.is_64bit_code,
                 .default_size = args.default_size,
                 .granularity = args.granularity,
                 .base_upper = base_upper,
             };
         }
     };
-
-    pub const ISR = fn () callconv(.naked) void;
 
     pub const GateDescriptor = packed struct(u128) {
         pub const Type = enum(u4) {
@@ -118,7 +119,7 @@ pub const Segment = struct {
             typ: Type,
             isr: ISR,
         }) @This() {
-            const offset = @intFromPtr(&args.isr);
+            const offset = @intFromPtr(args.isr);
             const offset_lower: u16 = @truncate(offset);
             const offset_upper: u48 = @truncate(offset >> @typeInfo(u16).int.bits);
 

@@ -3,26 +3,22 @@ const constants = @import("constants");
 const Segment = @import("types.zig").Segment;
 
 const Self = @This();
-const max_interrupt_vectors = 256;
 const IDTR = packed struct {
     limit: u16,
-    base: *[max_interrupt_vectors]Segment.GateDescriptor,
+    base: *[constants.max_interrupt_vectors]Segment.GateDescriptor,
 };
-idt_entries: [max_interrupt_vectors]Segment.GateDescriptor align(constants.arch_page_size) = [_]Segment.GateDescriptor{std.mem.zeroes(Segment.GateDescriptor)} ** max_interrupt_vectors,
+idt_entries: [constants.max_interrupt_vectors]Segment.GateDescriptor align(constants.arch_page_size) = [_]Segment.GateDescriptor{std.mem.zeroes(Segment.GateDescriptor)} ** constants.max_interrupt_vectors,
 idtr: IDTR = undefined,
 
-pub fn init() Self {
-    var _idt: Self = .{};
-    _idt.idtr = .{
-        .limit = (@sizeOf(Segment.GateDescriptor) * max_interrupt_vectors) - 1,
-        .base = &_idt.idt_entries,
-    };
-
-    _idt.loadIDTR();
-    return _idt;
+pub fn create() Self {
+    return .{};
 }
 
-fn loadIDTR(self: *Self) void {
+pub fn loadIDTR(self: *Self) void {
+    self.idtr = .{
+        .limit = (@sizeOf(Segment.GateDescriptor) * constants.max_interrupt_vectors) - 1,
+        .base = &self.idt_entries,
+    };
     asm volatile (
         \\lidt (%[idtr])
         :
