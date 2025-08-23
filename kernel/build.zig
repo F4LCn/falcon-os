@@ -25,9 +25,12 @@ pub fn build(b: *std.Build) void {
     const kernel_exe = b.addExecutable(.{
         .name = "kernel64.elf",
         .root_module = kernel_module,
-        .use_llvm = true,
-        .use_lld = true,
     });
+
+    if(optimize == .Debug){
+        kernel_exe.use_llvm = true;
+        kernel_exe.use_lld = true;
+    }
 
     // TODO: use objcopy for binary stripping
 

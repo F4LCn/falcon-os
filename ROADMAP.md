@@ -43,7 +43,7 @@
     * [-] Early heap allocation
     * [x] Linked list implementation
     * [-] GDT/IDT redefinition
-    * [ ] Hardware exceptions & interrupts
+    * [-] Hardware exceptions & interrupts
     * [ ] CPU resolution & init
     * [ ] Synchronization (Mutex, lock, ...)
 
