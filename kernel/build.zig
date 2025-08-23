@@ -1,13 +1,15 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
+    const alloc = b.allocator;
+
+    const default_target = b.standardTargetOptions(.{});
     const target = b.resolveTargetQuery(.{
         .cpu_arch = .x86_64,
         .abi = .none,
         .ofmt = .elf,
         .os_tag = .freestanding,
     });
-    const default_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const kernel_module = b.createModule(.{
@@ -19,15 +21,15 @@ pub fn build(b: *std.Build) void {
         .code_model = .kernel,
         .sanitize_thread = false,
     });
-    const constants = registerConstants(b, target.result.cpu.arch);
-    kernel_module.addOptions("constants", constants);
+    attachConstantsModule(b, kernel_module);
+    try attachArchModule(alloc, b, kernel_module);
 
     const kernel_exe = b.addExecutable(.{
         .name = "kernel64.elf",
         .root_module = kernel_module,
     });
 
-    if(optimize == .Debug){
+    if (optimize == .Debug) {
         kernel_exe.use_llvm = true;
         kernel_exe.use_lld = true;
     }
@@ -60,21 +62,53 @@ pub fn build(b: *std.Build) void {
     run_lldb.addArtifactArg(tests);
     const debug_step = b.step("debug", "Debug tests");
     debug_step.dependOn(&run_lldb.step);
+
+    const arch_generator_module = b.createModule(.{
+        .target = default_target,
+        .optimize = optimize,
+        .root_source_file = b.path("tools/generate_arch.zig"),
+    });
+    const arch_generator = b.addExecutable(.{
+        .name = "arch_generator",
+        .root_module = arch_generator_module,
+    });
+    const build_arch = default_target.result.cpu.arch;
+    const generate_arch_run = b.addRunArtifact(arch_generator);
+    generate_arch_run.addArg(@tagName(build_arch));
+    const arch_file = generate_arch_run.addOutputFileArg("arch_file.zig");
+    const arch_file_copy = b.addUpdateSourceFiles();
+    const dest_file_path = try std.fmt.allocPrint(alloc, "src/arch/{t}/arch.zig", .{build_arch});
+    arch_file_copy.addCopyFileToSource(arch_file, dest_file_path);
+
+    const generate_arch_step = b.step("gen-arch", "Generate arch indexes");
+    generate_arch_step.dependOn(&arch_file_copy.step);
 }
 
-fn registerConstants(b: *std.Build, arch: std.Target.Cpu.Arch) *std.Build.Step.Options {
+fn attachConstantsModule(b: *std.Build, module: *std.Build.Module) void {
+    const build_arch = module.resolved_target.?.result.cpu.arch;
+
     const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
 
     const constants = b.addOptions();
     constants.addOption(u64, "max_cpu", max_cpu_option);
     constants.addOption(comptime_int, "max_interrupt_vectors", 256);
-    constants.addOption(std.Target.Cpu.Arch, "arch", arch);
+    constants.addOption(std.Target.Cpu.Arch, "arch", build_arch);
     constants.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
     constants.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
-    switch (arch) {
+    switch (build_arch) {
         .x86_64 => constants.addOption(comptime_int, "arch_page_size", 1 << 12),
         else => constants.addOption(comptime_int, "arch_page_size", 0),
     }
 
-    return constants;
+    module.addOptions("constants", constants);
+}
+
+fn attachArchModule(alloc: std.mem.Allocator, b: *std.Build, module: *std.Build.Module) !void {
+    const build_arch = module.resolved_target.?.result.cpu.arch;
+    const path = try std.mem.concat(alloc, u8, &.{ "src/arch/", @tagName(build_arch), "/arch.zig" });
+    defer alloc.free(path);
+
+    module.addAnonymousImport("arch", .{
+        .root_source_file = b.path(path),
+    });
 }

@@ -1,14 +1,10 @@
 const constants = @import("constants");
-
+const arch = @import("arch");
 pub const ISR = *const fn () callconv(.naked) void;
 
-pub const Registers = switch (constants.arch) {
-    .x86_64 => @import("../arch/x64/registers.zig").Regs,
-    else => @compileError("Unsupported arch " ++ @tagName(constants.arch)),
-};
 
 pub const Context = packed struct {
-    registers: Registers,
+    registers: arch.registers.Registers,
     vector: u64,
     error_code: u64,
     rip: u64,

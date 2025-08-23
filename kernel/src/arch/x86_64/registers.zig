@@ -1,4 +1,4 @@
-pub const Regs = packed struct {
+pub const Registers = packed struct {
     r15: u64,
     r14: u64,
     r13: u64,
