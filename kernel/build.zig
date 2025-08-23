@@ -19,21 +19,24 @@ pub fn build(b: *std.Build) void {
         .code_model = .kernel,
         .sanitize_thread = false,
     });
+    const constants = registerConstants(b, target.result.cpu.arch);
+    kernel_module.addOptions("constants", constants);
+
     const kernel_exe = b.addExecutable(.{
         .name = "kernel64.elf",
         .root_module = kernel_module,
+        .use_llvm = true,
+        .use_lld = true,
     });
+
+    // TODO: use objcopy for binary stripping
 
     // switch (optimize) {
     //     .Debug => kernel_exe.root_module.strip = false,
     //     else => kernel_exe.root_module.strip = true,
     // }
 
-    const constants = registerConstants(b, target.result.cpu.arch);
-    kernel_exe.root_module.addOptions("constants", constants);
-
     kernel_exe.setLinkerScript(b.path("linker.ld"));
-
     b.installArtifact(kernel_exe);
 
     const tests_module = b.createModule(.{
@@ -61,6 +64,7 @@ fn registerConstants(b: *std.Build, arch: std.Target.Cpu.Arch) *std.Build.Step.O
 
     const constants = b.addOptions();
     constants.addOption(u64, "max_cpu", max_cpu_option);
+    constants.addOption(comptime_int, "max_interrupt_vectors", 256);
     constants.addOption(std.Target.Cpu.Arch, "arch", arch);
     constants.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
     constants.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
