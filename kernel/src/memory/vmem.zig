@@ -114,9 +114,7 @@ const VirtMemRange = struct {
 
     pub fn format(
         self: *const @This(),
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
+        writer: *std.io.Writer,
     ) !void {
         const start_addr = @as(u64, @bitCast(self.start));
         if (self.type) |typ| {
@@ -147,11 +145,9 @@ const VirtMemRangeListItem = struct {
 
     pub fn format(
         self: *const @This(),
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
+        writer: *std.io.Writer,
     ) !void {
-        try writer.print("{*}[range={any}, p=0x{X}, n=0x{X}]", .{ self, &self.range, @intFromPtr(self.prev), @intFromPtr(self.next) });
+        try writer.print("{*}[range={f}, p=0x{X}, n=0x{X}]", .{ self, &self.range, @intFromPtr(self.prev), @intFromPtr(self.next) });
     }
 };
 const VirtMemRangeList = DoublyLinkedList(VirtMemRangeListItem, .prev, .next);
@@ -186,7 +182,7 @@ const VirtualMemoryManager = struct {
             var current_range: ?*VirtMemRange = null;
             while (iter.next()) |item| {
                 const range = &item.range;
-                log.info("checking range: {any}", .{range});
+                log.info("checking range: {f}", .{range});
                 const range_start = @as(u64, @bitCast(range.start));
                 const range_end = range_start + range.length;
                 if (typ == range.type and ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end))) {
@@ -295,7 +291,7 @@ pub fn printReservedRanges(self: *const @This()) void {
     var iter = self.vmm.reserved_ranges.iter();
     log.debug("Reserved virtual ranges", .{});
     while (iter.next()) |list_item| {
-        log.debug("{any}", .{list_item});
+        log.debug("{f}", .{list_item});
     }
 }
 
