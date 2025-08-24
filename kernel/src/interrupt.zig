@@ -7,18 +7,16 @@ const ISR = @import("interrupt/types.zig").ISR;
 
 const log = std.log.scoped(.interrupt);
 
-fn genVectorISR(comptime vector: usize) ISR {
+fn genVectorISR(vector: comptime_int) ISR {
     log.info("Creating ISR for vector {d}", .{vector});
     return struct {
         pub fn handler() callconv(.naked) void {
             asm volatile ("cli");
-            if (vector != 8 and (vector <= 10 or vector >= 14) and vector != 17 and vector != 21) {
-                switch (vector) {
-                    8, 10...14, 17, 21 => {},
-                    else => {
-                        asm volatile ("pushq $0");
-                    },
-                }
+            switch (vector) {
+                8, 10...14, 17, 21 => {},
+                else => {
+                    asm volatile ("pushq $0");
+                },
             }
             asm volatile ("pushq %[v]"
                 :

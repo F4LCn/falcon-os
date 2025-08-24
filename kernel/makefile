@@ -3,6 +3,7 @@ OUTPUT_DIR = ../build
 all: kernel64.elf
 
 kernel64.elf:
+	zig build gen-arch
 	zig build -Dmax_cpu=8 --release=safe
 	cp zig-out/bin/kernel64.elf $(OUTPUT_DIR)/kernel64.elf
 
