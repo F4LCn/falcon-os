@@ -3,4 +3,5 @@
 
  pub const registers = @import("registers.zig");
  pub const cpu = @import("cpu.zig");
- pub const Asm = @import("asm.zig");
+ pub const constants = @import("constants.zig");
+ pub const assembly = @import("assembly.zig");

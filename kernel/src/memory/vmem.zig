@@ -1,5 +1,6 @@
 const std = @import("std");
 const constants = @import("constants");
+const arch = @import("arch");
 const SpinLock = @import("../synchronization.zig").SpinLock;
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
 const Registers = @import("../registers.zig");
@@ -66,7 +67,7 @@ const PageMapping = extern struct {
             log.info("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
-    mappings: [@divExact(constants.arch_page_size, @sizeOf(Entry))]Entry,
+    mappings: [@divExact(arch.constants.default_page_size, @sizeOf(Entry))]Entry,
 
     pub fn print(self: *const PageMapping, lvl: u8, vaddr: *VAddr) void {
         for (&self.mappings, 0..) |*mapping, idx| {
@@ -252,13 +253,13 @@ pub fn init(alloc: Allocator) !@This() {
     var vmm = VirtualMemoryManager.init(alloc);
     log.info("after init. kernel_end 0x{*}", .{&_kernel_end});
 
-    const quickmap_start = @intFromPtr(&_kernel_end) + 2 * constants.arch_page_size;
-    const quickmap_length = constants.arch_page_size * constants.max_cpu;
+    const quickmap_start = @intFromPtr(&_kernel_end) + 2 * arch.constants.default_page_size;
+    const quickmap_length = arch.constants.default_page_size * constants.max_cpu;
     vmm.quickmap.start = @bitCast(quickmap_start);
     vmm.quickmap.length = quickmap_length;
 
-    const quickmap_pt_entry_length = std.mem.alignForward(u64, constants.max_cpu * @sizeOf(PageMapping.Entry), constants.arch_page_size);
-    const quickmap_pt_entry_start = -%(@as(u64, constants.arch_page_size) * constants.max_cpu) - quickmap_pt_entry_length - 2 * constants.arch_page_size;
+    const quickmap_pt_entry_length = std.mem.alignForward(u64, constants.max_cpu * @sizeOf(PageMapping.Entry), arch.constants.default_page_size);
+    const quickmap_pt_entry_start = -%(@as(u64, arch.constants.default_page_size) * constants.max_cpu) - quickmap_pt_entry_length - 2 * arch.constants.default_page_size;
     vmm.quickmap_pt_entry.start = @bitCast(quickmap_pt_entry_start);
     vmm.quickmap_pt_entry.length = quickmap_pt_entry_length;
 
@@ -300,8 +301,7 @@ fn invalidateTLB(addr: u64) void {
     asm volatile ("invlpg (%[addr])"
         :
         : [addr] "r" (addr),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
 }
 
 pub fn reserveRange(self: *@This(), start: u64, length: u64, typ: VirtRangeType) !void {

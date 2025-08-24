@@ -2,10 +2,11 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) !void {
     const alloc = b.allocator;
+    const build_arch = b.option(std.Target.Cpu.Arch, "arch", "Kernel target architecture") orelse .x86_64;
 
     const default_target = b.standardTargetOptions(.{});
     const target = b.resolveTargetQuery(.{
-        .cpu_arch = .x86_64,
+        .cpu_arch = build_arch,
         .abi = .none,
         .ofmt = .elf,
         .os_tag = .freestanding,
@@ -72,7 +73,6 @@ pub fn build(b: *std.Build) !void {
         .name = "arch_generator",
         .root_module = arch_generator_module,
     });
-    const build_arch = default_target.result.cpu.arch;
     const generate_arch_run = b.addRunArtifact(arch_generator);
     generate_arch_run.addArg(@tagName(build_arch));
     const arch_file = generate_arch_run.addOutputFileArg("arch_file.zig");
@@ -85,21 +85,12 @@ pub fn build(b: *std.Build) !void {
 }
 
 fn attachConstantsModule(b: *std.Build, module: *std.Build.Module) void {
-    const build_arch = module.resolved_target.?.result.cpu.arch;
-
     const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
 
     const constants = b.addOptions();
     constants.addOption(u64, "max_cpu", max_cpu_option);
-    constants.addOption(comptime_int, "max_interrupt_vectors", 256);
-    constants.addOption(std.Target.Cpu.Arch, "arch", build_arch);
     constants.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
     constants.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
-    switch (build_arch) {
-        .x86_64 => constants.addOption(comptime_int, "arch_page_size", 1 << 12),
-        else => constants.addOption(comptime_int, "arch_page_size", 0),
-    }
-
     module.addOptions("constants", constants);
 }
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const assembly = @import("asm.zig");
+const assembly = @import("assembly.zig");
 
 const CpuidInfoHolder = struct {
     basic: [32]assembly.CpuidResult,

@@ -1,5 +1,6 @@
 const std = @import("std");
 const constants = @import("constants");
+const arch = @import("arch");
 const descriptors = @import("descriptors.zig");
 const IDT = @import("descriptors/idt.zig");
 const Context = @import("interrupt/types.zig").Context;
@@ -77,7 +78,7 @@ export fn dispatchInterrupt(context: *Context) callconv(.c) void {
 
 pub fn init(idt: *IDT) void {
     log.info("Init interrupt", .{});
-    inline for (0..constants.max_interrupt_vectors) |v| {
+    inline for (0.. arch.constants.max_interrupt_vectors) |v| {
         idt.registerGate(v, .create(.{
             .typ = .interrupt_gate,
             .isr = genVectorISR(v),
