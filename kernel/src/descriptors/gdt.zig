@@ -2,6 +2,8 @@ const std = @import("std");
 const Segment = @import("types.zig").Segment;
 const builtin = @import("builtin");
 const common = @import("common.zig");
+const constants = @import("constants");
+const arch = @import("arch");
 
 const log = std.log.scoped(.gdt);
 
@@ -11,9 +13,10 @@ const GDTR = packed struct {
     base: *[gdt_entries_size]u8,
 };
 const max_gdt_entries = 5;
-const max_tss_entries = 0;
-const gdt_entries_size = @sizeOf(Segment.GlobalDescriptor) * max_gdt_entries + @sizeOf(Segment.Descriptor16Bytes) * max_tss_entries;
+const max_tsd_entries = constants.max_cpu;
+const gdt_entries_size = @sizeOf(Segment.GlobalDescriptor) * max_gdt_entries + @sizeOf(Segment.TaskSegmentDescriptor) * max_tsd_entries;
 gdt_entries_buffer: [gdt_entries_size]u8 align(16) = [_]u8{0} ** gdt_entries_size,
+tss_entries: [max_tsd_entries]Segment.TaskState = [_]Segment.TaskState{std.mem.zeroes(Segment.TaskState)} ** max_tsd_entries,
 gdtr: GDTR = undefined,
 
 pub fn create() Self {
@@ -57,16 +60,50 @@ pub fn create() Self {
     return _gdt;
 }
 
-pub fn loadGDTR(self: *Self) void {
+pub fn fillGDTR(self: *Self) void {
+    log.debug("filling GDTR", .{});
     self.gdtr = .{
         .limit = self.gdt_entries_buffer.len - 1,
         .base = &self.gdt_entries_buffer,
     };
-    log.info("loading {*}", .{self.gdtr.base});
+}
+
+pub fn fillTss(self: *Self, stacks: *[max_tsd_entries * arch.constants.default_page_size]u8) void {
+    log.debug("filling TSS", .{});
+    const tsd_entries_buffer = self.gdt_entries_buffer[@sizeOf(Segment.GlobalDescriptor) * max_gdt_entries ..];
+    var tsd_entries = std.mem.bytesAsSlice(Segment.TaskSegmentDescriptor, tsd_entries_buffer[0 .. @sizeOf(Segment.TaskSegmentDescriptor) * max_tsd_entries]);
+
+    inline for (0..max_tsd_entries) |tsd_idx| {
+        tsd_entries[tsd_idx] = .create(.{
+            .base = @intFromPtr(&self.tss_entries[tsd_idx]),
+            .limit = @sizeOf(Segment.TaskState) - 1,
+        });
+    }
+
+    inline for (0..max_tsd_entries) |tsd_idx| {
+        const stack_start_addr = @intFromPtr(stacks) + stacks.len - tsd_idx * arch.constants.default_page_size;
+        self.tss_entries[tsd_idx].ist1 = stack_start_addr;
+        self.tss_entries[tsd_idx].iomap_offset = std.math.maxInt(u16);
+    }
+}
+
+pub fn loadGDTR(self: *Self) void {
+    log.info("loading GDTR {*}", .{self.gdtr.base});
     asm volatile (
         \\lgdt (%[gdtr])
         :
         : [gdtr] "r" (@intFromPtr(&self.gdtr)),
+    );
+}
+
+pub fn loadTR(self: *Self, args: struct { cpu_id: u32 = 0 }) void {
+    _ = self;
+    const tss_selector = @as(u16, @bitCast(Segment.Selector{ .index = max_gdt_entries + @as(u13, @truncate(args.cpu_id)) }));
+    log.info("loading TR 0x{X}", .{tss_selector});
+    asm volatile (
+        \\ltr %[tss_selector]
+        :
+        : [tss_selector] "r" (tss_selector),
     );
 }
 

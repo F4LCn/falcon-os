@@ -134,58 +134,54 @@ pub const Segment = struct {
         }
     };
 
-    pub const Descriptor16Bytes = struct {};
-    // pub const Descriptor16Bytes = packed struct(u128) {
-    //     limit_lower: u16,
-    //     base_lower: u24,
-    //     typ: SegmentType,
-    //     descriptor_type: DescriptorType = .system,
-    //     privilege: PrivilegeLevel,
-    //     present: bool,
-    //     limit_upper: u4,
-    //     avl: bool,
-    //     is_64bit: bool = false,
-    //     default_size: u1 = 0,
-    //     granularity: Granularity,
-    //     base_upper: u40,
-    //     reserved: u32 = 0,
+    pub const TaskSegmentDescriptor = packed struct(u128) {
+        pub const Type = enum(u4) {
+            invalid = 0,
+            tss_available = 9,
+            tss_busy = 11,
+        };
 
-    //     pub fn create(args: struct {
-    //         base: u64,
-    //         limit: u20,
-    //         typ: SegmentType,
-    //         descriptor_type: DescriptorType = .code_data,
-    //         privilege: PrivilegeLevel = .ring0,
-    //         present: bool = true,
-    //         is_64bit: bool,
-    //         default_size: u1,
-    //         granularity: Granularity = .pages,
-    //     }) @This() {
-    //         std.debug.assert((args.is_64bit and args.default_size == 0) or !args.is_64bit);
+        limit_lower: u16,
+        base_lower: u24,
+        typ: Type,
+        _unused0: u1 = 0,
+        privilege: PrivilegeLevel = .ring0,
+        present: bool = false,
+        limit_upper: u4,
+        _avl: u1 = 0,
+        _unused1: u2 = 0,
+        granularity: Granularity = .pages,
+        base_upper: u40,
+        _unused2: u32 = 0,
 
-    //         const limit_lower: u16 = @truncate(args.limit);
-    //         const limit_upper: u4 = @truncate(args.limit >> @typeInfo(u16).int.bits);
-    //         const base_lower: u24 = @truncate(args.base);
-    //         const base_upper: u40 = @truncate(args.base >> @typeInfo(u24).int.bits);
+        pub fn create(args: struct {
+            base: u64,
+            limit: u20,
+            typ: Type = .tss_available,
+            privilege: PrivilegeLevel = .ring0,
+            granularity: Granularity = .pages,
+        }) @This() {
+            const base_lower: u24 = @truncate(args.base);
+            // TODO: make sure this is fine
+            const base_upper: u40 = @truncate(args.base >> @typeInfo(u24).int.bits);
 
-    //         return .{
-    //             .limit_lower = limit_lower,
-    //             .base_lower = base_lower,
-    //             .typ = args.typ,
-    //             .descriptor_type = args.descriptor_type,
-    //             .privilege = args.privilege,
-    //             .present = args.present,
-    //             .limit_upper = limit_upper,
-    //             .avl = args.avl,
-    //             .is_64bit = args.is_64bit,
-    //             .default_size = args.default_size,
-    //             .granularity = args.granularity,
-    //             .base_upper = base_upper,
-    //         };
-    //     }
-    // };
+            const limit_lower: u16 = @truncate(args.limit);
+            const limit_upper: u4 = @truncate(args.limit >> @typeInfo(u16).int.bits);
 
-    pub const TaskState = extern struct {
+            return .{
+                .limit_lower = limit_lower,
+                .base_lower = base_lower,
+                .typ = args.typ,
+                .privilege = args.privilege,
+                .present = true,
+                .limit_upper = limit_upper,
+                .granularity = args.granularity,
+                .base_upper = base_upper,
+            };
+        }
+    };
+
+    pub const TaskState = packed struct {
         reserved0: u32,
         rsp0: u64,
         rsp1: u64,

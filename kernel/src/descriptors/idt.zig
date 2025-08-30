@@ -3,6 +3,7 @@ const constants = @import("constants");
 const arch = @import("arch");
 const Segment = @import("types.zig").Segment;
 
+const log = std.log.scoped(.idt);
 const Self = @This();
 const IDTR = packed struct {
     limit: u16,
@@ -20,6 +21,7 @@ pub fn loadIDTR(self: *Self) void {
         .limit = (@sizeOf(Segment.GateDescriptor) * arch.constants.max_interrupt_vectors) - 1,
         .base = &self.idt_entries,
     };
+    log.info("loading IDTR {*}", .{self.idtr.base});
     asm volatile (
         \\lidt (%[idtr])
         :

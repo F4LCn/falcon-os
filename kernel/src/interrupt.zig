@@ -9,7 +9,6 @@ const ISR = @import("interrupt/types.zig").ISR;
 const log = std.log.scoped(.interrupt);
 
 fn genVectorISR(vector: comptime_int) ISR {
-    log.info("Creating ISR for vector {d}", .{vector});
     return struct {
         pub fn handler() callconv(.naked) void {
             asm volatile ("cli");
@@ -47,10 +46,14 @@ export fn commonISR() callconv(.naked) void {
         \\ pushq %%r14
         \\ pushq %%r15
 
-        // TODO: check for rsp alignment (8bytes maybe even 16)
         \\ pushq %%rsp
         \\ popq %%rdi
+        \\ pushq %%rsp
+        \\ pushq (%%rsp)
+        \\ andq $-0x10, %%rsp
         \\ call dispatchInterrupt
+        \\ mov 8(%%rsp), %%rsp
+
         \\ popq %%r15
         \\ popq %%r14
         \\ popq %%r13
@@ -67,18 +70,19 @@ export fn commonISR() callconv(.naked) void {
         \\ popq %%rcx
         \\ popq %%rbx
         \\ popq %%rax
+        \\ addq $0x10, %%rsp
         \\ iretq
     );
 }
 
 export fn dispatchInterrupt(context: *Context) callconv(.c) void {
-    _ = context;
-    @panic("Dispatching interrupt");
+    log.debug("interrupt context {any}", .{context});
+    while (true) asm volatile ("hlt");
 }
 
 pub fn init(idt: *IDT) void {
     log.info("Init interrupt", .{});
-    inline for (0.. arch.constants.max_interrupt_vectors) |v| {
+    inline for (0..arch.constants.max_interrupt_vectors) |v| {
         idt.registerGate(v, .create(.{
             .typ = .interrupt_gate,
             .isr = genVectorISR(v),

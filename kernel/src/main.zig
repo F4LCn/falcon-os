@@ -88,9 +88,6 @@ pub fn failableMain() !void {
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
 
-
     descriptors.init();
-    const p: u64 = 0xFFFF_FFFF_0000_0000;
-    const pt: *u64 = @ptrFromInt(p);
-    std.log.info("{d}", .{pt.*});
+    @panic("hihi");
 }

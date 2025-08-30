@@ -42,7 +42,7 @@
     * [x] Setup serial logger
     * [-] Early heap allocation
     * [x] Linked list implementation
-    * [-] GDT/IDT redefinition
+    * [x] GDT/IDT/TSS definition
     * [-] Hardware exceptions & interrupts
     * [ ] CPU resolution & init
     * [ ] Synchronization (Mutex, lock, ...)
