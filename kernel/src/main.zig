@@ -31,7 +31,7 @@ export fn _start() callconv(.naked) noreturn {
 
 pub export fn kernelMain() callconv(.c) void {
     logger.init(serial.Port.COM1);
-    cpu.init();
+    cpu.init() catch unreachable;
     std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str[0..12]});
 
     failableMain() catch |e| {
@@ -87,6 +87,7 @@ pub fn failableMain() !void {
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
+    std.log.info("Cpu has sse: {any}", .{cpu.hasFeature(.sse)});
 
     descriptors.init();
     @panic("hihi");
