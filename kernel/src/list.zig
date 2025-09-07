@@ -1,11 +1,32 @@
 const std = @import("std");
 
+pub fn Iterator(comptime T: anytype, field: std.meta.FieldEnum(T)) type {
+    return struct {
+        const Self = @This();
+        const next_item = std.meta.fieldInfo(T, field).name;
+
+        current: ?*T,
+
+        pub fn next(self: *Self) ?*T {
+            const current_val = self.current;
+            if (current_val) |cv| {
+                self.current = @field(cv, next_item);
+            }
+            return current_val;
+        }
+    };
+}
+
 pub fn SinglyLinkedList(comptime T: anytype, comptime next_field: std.meta.FieldEnum(T)) type {
     return struct {
         const Self = @This();
         const next = std.meta.fieldInfo(T, next_field).name;
 
         head: ?*T = null,
+
+        pub fn iter(self: Self) Iterator(T, next_field) {
+            return .{ .current = self.head };
+        }
 
         pub fn prepend(self: *Self, new_node: *T) void {
             if (self.head) |_| {
@@ -58,23 +79,6 @@ pub fn SinglyLinkedList(comptime T: anytype, comptime next_field: std.meta.Field
                     @field(c, next) = @field(node, next);
                 }
             }
-        }
-    };
-}
-
-pub fn Iterator(comptime T: anytype, field: std.meta.FieldEnum(T)) type {
-    return struct {
-        const Self = @This();
-        const next_item = std.meta.fieldInfo(T, field).name;
-
-        current: ?*T,
-
-        pub fn next(self: *Self) ?*T {
-            const current_val = self.current;
-            if (current_val) |cv| {
-                self.current = @field(cv, next_item);
-            }
-            return current_val;
         }
     };
 }

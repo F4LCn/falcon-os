@@ -87,8 +87,10 @@ pub fn failableMain() !void {
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
-    std.log.info("Cpu has sse: {any}", .{cpu.hasFeature(.sse)});
+    std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
 
     descriptors.init();
-    @panic("hihi");
+
+    v.* = 321;
+    std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
 }

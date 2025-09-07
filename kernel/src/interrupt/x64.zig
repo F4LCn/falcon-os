@@ -1,0 +1,69 @@
+const ISR = @import("types.zig").ISR;
+
+// more like arch specific
+pub fn genVectorISR(vector: comptime_int) ISR {
+    return struct {
+        pub fn handler() callconv(.naked) void {
+            asm volatile ("cli");
+            switch (vector) {
+                8, 10...14, 17, 21 => {},
+                else => {
+                    asm volatile ("pushq $0");
+                },
+            }
+            asm volatile ("pushq %[v]"
+                :
+                : [v] "n" (vector),
+            );
+            asm volatile ("jmp commonISR");
+        }
+    }.handler;
+}
+
+export fn commonISR() callconv(.naked) void {
+    asm volatile (
+        \\ pushq %%rax
+        \\ pushq %%rbx
+        \\ pushq %%rcx
+        \\ pushq %%rdx
+        \\ pushq %%rsi
+        \\ pushq %%rdi
+        \\ pushq %%rsp
+        \\ pushq %%rbp
+        \\ pushq %%r8
+        \\ pushq %%r9
+        \\ pushq %%r10
+        \\ pushq %%r11
+        \\ pushq %%r12
+        \\ pushq %%r13
+        \\ pushq %%r14
+        \\ pushq %%r15
+
+        \\ pushq %%rsp
+        \\ popq %%rdi
+        \\ pushq %%rsp
+        \\ pushq (%%rsp)
+        \\ andq $-0x10, %%rsp
+        \\ call dispatchInterrupt
+        \\ mov 8(%%rsp), %%rsp
+
+        \\ popq %%r15
+        \\ popq %%r14
+        \\ popq %%r13
+        \\ popq %%r12
+        \\ popq %%r11
+        \\ popq %%r10
+        \\ popq %%r9
+        \\ popq %%r8
+        \\ popq %%rbp
+        \\ popq %%rsp
+        \\ popq %%rdi
+        \\ popq %%rsi
+        \\ popq %%rdx
+        \\ popq %%rcx
+        \\ popq %%rbx
+        \\ popq %%rax
+        \\ addq $0x10, %%rsp
+        \\ iretq
+    );
+}

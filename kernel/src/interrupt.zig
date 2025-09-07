@@ -4,80 +4,121 @@ const arch = @import("arch");
 const descriptors = @import("descriptors.zig");
 const IDT = @import("descriptors/idt.zig");
 const Context = @import("interrupt/types.zig").Context;
-const ISR = @import("interrupt/types.zig").ISR;
+const x64 = @import("interrupt/x64.zig");
+const SinglyLinkedList = @import("list.zig").SinglyLinkedList;
 
 const log = std.log.scoped(.interrupt);
 
-fn genVectorISR(vector: comptime_int) ISR {
-    return struct {
-        pub fn handler() callconv(.naked) void {
-            asm volatile ("cli");
-            switch (vector) {
-                8, 10...14, 17, 21 => {},
-                else => {
-                    asm volatile ("pushq $0");
-                },
-            }
-            asm volatile ("pushq %[v]"
-                :
-                : [v] "n" (vector),
-            );
-            asm volatile ("jmp commonISR");
-        }
-    }.handler;
-}
+pub const InterruptHandler = struct {
+    const HandlerFn = *const fn (self: *anyopaque, context: *const Context) bool;
+    ctx: *anyopaque,
+    handler: HandlerFn,
+    next: ?*@This() = null,
 
-export fn commonISR() callconv(.naked) void {
-    asm volatile (
-        \\ pushq %%rax
-        \\ pushq %%rbx
-        \\ pushq %%rcx
-        \\ pushq %%rdx
-        \\ pushq %%rsi
-        \\ pushq %%rdi
-        \\ pushq %%rsp
-        \\ pushq %%rbp
-        \\ pushq %%r8
-        \\ pushq %%r9
-        \\ pushq %%r10
-        \\ pushq %%r11
-        \\ pushq %%r12
-        \\ pushq %%r13
-        \\ pushq %%r14
-        \\ pushq %%r15
+    pub fn handle(self: *@This(), context: *const Context) bool {
+        return self.handler(self.ctx, context);
+    }
+};
 
-        \\ pushq %%rsp
-        \\ popq %%rdi
-        \\ pushq %%rsp
-        \\ pushq (%%rsp)
-        \\ andq $-0x10, %%rsp
-        \\ call dispatchInterrupt
-        \\ mov 8(%%rsp), %%rsp
+const InterruptHandlerList = SinglyLinkedList(InterruptHandler, .next);
 
-        \\ popq %%r15
-        \\ popq %%r14
-        \\ popq %%r13
-        \\ popq %%r12
-        \\ popq %%r11
-        \\ popq %%r10
-        \\ popq %%r9
-        \\ popq %%r8
-        \\ popq %%rbp
-        \\ popq %%rsp
-        \\ popq %%rdi
-        \\ popq %%rsi
-        \\ popq %%rdx
-        \\ popq %%rcx
-        \\ popq %%rbx
-        \\ popq %%rax
-        \\ addq $0x10, %%rsp
-        \\ iretq
-    );
-}
+var handlers_list: [arch.constants.max_interrupt_vectors]InterruptHandlerList = [_]InterruptHandlerList{.{}} ** arch.constants.max_interrupt_vectors;
 
 export fn dispatchInterrupt(context: *Context) callconv(.c) void {
-    log.debug("interrupt context {any}", .{context});
+    // Interface "InterruptHandler"
+    // Register one or more interrupt handlers
+    // ? Call the handlers one by one (prob have some sort of mechanism to stop the propagation)
+    // have default handlers in place just in case
+    const vector = context.vector;
+    const handler_list = handlers_list[vector];
+    var iter = handler_list.iter();
+    log.info("Handlers list: {any}", .{handler_list});
+    while (iter.next()) |handler| {
+        if (handler.handle(context)) {
+            return;
+        }
+    }
+    defaultHandler(context);
+}
+
+fn defaultHandler(context: *Context) void {
+    log.err(
+        \\
+        \\ ---------- EXCEPTION ----------
+        \\ An interrupt has not been handled
+        \\ Exception 0x{X}: {s}
+        \\
+        \\ Error code: 0x{X}
+        \\ FLAGS: 0x{X}
+        \\ CR2: 0x{X:0>16}
+        \\ RIP: 0x{X:0>16}
+        \\ RAX: 0x{X:0>16}
+        \\ RBX: 0x{X:0>16}
+        \\ RCX: 0x{X:0>16}
+        \\ RDX: 0x{X:0>16}
+        \\ RSI: 0x{X:0>16}
+        \\ RDI: 0x{X:0>16}
+        \\ RSP: 0x{X:0>16}
+        \\ RBP: 0x{X:0>16}
+        \\ R8 : 0x{X:0>16}
+        \\ R9 : 0x{X:0>16}
+        \\ R10: 0x{X:0>16}
+        \\ R11: 0x{X:0>16}
+        \\ R12: 0x{X:0>16}
+        \\ R13: 0x{X:0>16}
+        \\ R14: 0x{X:0>16}
+        \\ R15: 0x{X:0>16}
+        \\ CS : 0x{X}
+        \\ ---------- EXCEPTION ----------
+        \\
+    , .{
+        context.vector,        vectorToName(context.vector),
+        context.error_code,    context.flags,
+        asm volatile ("mov %%CR2, %[ret]"
+            : [ret] "=r" (-> u64),
+        ),
+        context.rip,           context.registers.rax,
+        context.registers.rbx, context.registers.rcx,
+        context.registers.rdx, context.registers.rsi,
+        context.registers.rdi, context.registers.rsp,
+        context.registers.rbp, context.registers.r8,
+        context.registers.r9,  context.registers.r10,
+        context.registers.r11, context.registers.r12,
+        context.registers.r13, context.registers.r14,
+        context.registers.r15,
+        context.cs,
+    });
+
+    // TODO: move to arch specific code + register printing
     while (true) asm volatile ("hlt");
+}
+
+fn vectorToName(vector: u64) []const u8 {
+    return switch (vector) {
+        0 => "#DE: Divide error",
+        1 => "#DB: Debug exception",
+        2 => "NMI: Non-maskable interrupt",
+        3 => "#BP: Breakpoint",
+        4 => "#OF: Overflow",
+        5 => "#BR: Bound range exceeded",
+        6 => "#UD: Invalid opcode",
+        7 => "#NM: Device not available",
+        8 => "#DF: Double fault",
+        9 => "Coprocessor segment overrun",
+        10 => "#TS: Invalid TSS",
+        11 => "#NP: Segment not present",
+        12 => "#SS: Stack segment fault",
+        13 => "#GP: General protection",
+        14 => "#PF: Page fault",
+        15 => "",
+        16 => "#MF: Math fault",
+        17 => "#AC: Alignment check",
+        18 => "#MC: Machine check",
+        19 => "#XM: SIMD floating-point exception",
+        20 => "#VE: Virtualization exception",
+        21 => "#CP: Control protection exception",
+        else => unreachable,
+    };
 }
 
 pub fn init(idt: *IDT) void {
@@ -85,10 +126,16 @@ pub fn init(idt: *IDT) void {
     inline for (0..arch.constants.max_interrupt_vectors) |v| {
         idt.registerGate(v, .create(.{
             .typ = .interrupt_gate,
-            .isr = genVectorISR(v),
+            .isr = x64.genVectorISR(v),
         }));
     }
 
     idt.loadIDTR();
     asm volatile ("sti");
+}
+
+pub fn registerHandler(vector: u64, interrupt_handler: *InterruptHandler) void {
+    var handle_list = &handlers_list[vector];
+    handle_list.prepend(interrupt_handler);
+    log.info("registering demo handler {any}", .{handle_list});
 }

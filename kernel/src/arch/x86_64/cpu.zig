@@ -219,16 +219,6 @@ const CpuVendor = enum {
     amd,
 };
 
-pub const CpuFlags = struct {
-    sse: bool,
-    sse2: bool,
-    sse3: bool,
-    sse41: bool,
-    sse42: bool,
-    avx: bool,
-    avx2: bool,
-};
-
 const MAX_VENDOR_STR = 16;
 const MAX_BRAND_STR = 64;
 pub const CpuInfo = struct {
