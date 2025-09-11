@@ -9,10 +9,16 @@ const heap = @import("heap.zig");
 const pmem = @import("memory/pmem.zig");
 const vmem = @import("memory/vmem.zig");
 const descriptors = @import("descriptors.zig");
+const arch = @import("arch");
+const panicFn = @import("panic.zig").panicFn;
+
+pub const panic = std.debug.FullPanic(panicFn);
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
+    .page_size_min = arch.constants.default_page_size,
+    .page_size_max = arch.constants.default_page_size,
 };
 
 comptime {

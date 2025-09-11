@@ -89,8 +89,8 @@ fn defaultHandler(context: *Context) void {
         context.cs,
     });
 
-    // TODO: move to arch specific code + register printing
-    while (true) asm volatile ("hlt");
+    // arch.assembly.haltEternally();
+    unreachable;
 }
 
 fn vectorToName(vector: u64) []const u8 {

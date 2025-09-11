@@ -26,3 +26,11 @@ pub fn cpuid(regs: *CpuidResult) void {
     regs.ecx = ecx;
     regs.edx = edx;
 }
+
+pub fn halt() void {
+    asm volatile ("hlt");
+}
+
+pub fn haltEternally() noreturn {
+    while (true) asm volatile ("hlt");
+}
