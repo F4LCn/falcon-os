@@ -18,6 +18,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .root_source_file = b.path("src/main.zig"),
         // .omit_frame_pointer = true,
+        .red_zone = false,
         .pic = true,
         .code_model = .default,
         .sanitize_thread = false,
@@ -31,7 +32,7 @@ pub fn build(b: *std.Build) !void {
         .root_module = kernel_module,
     });
 
-    if (optimize == .Debug) {
+    if (optimize == .Debug or optimize == .ReleaseSafe) {
         kernel_exe.use_llvm = true;
         kernel_exe.use_lld = true;
         kernel_exe.stack_size = 0;
