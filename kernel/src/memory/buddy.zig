@@ -107,7 +107,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
 
         const SafetyData = struct {
             pub const TraceType = enum { allocate, free };
-            const num_trace_types = @typeInfo(TraceType).@"enum".fields.len;
+            const num_trace_types = std.enums.directEnumArrayLen(TraceType, 0);
             const num_traces = config.num_traces;
             // TODO: move allocation tracking to the buddy itself
             // as it can be used to determine if we can allocate a size/alignment before doing the work

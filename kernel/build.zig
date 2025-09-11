@@ -34,6 +34,7 @@ pub fn build(b: *std.Build) !void {
 
     if (optimize == .Debug or optimize == .ReleaseSafe) {
         kernel_exe.use_llvm = true;
+        kernel_exe.compress_debug_sections = .none;
         kernel_exe.use_lld = true;
         kernel_exe.stack_size = 0;
     }
