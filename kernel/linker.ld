@@ -37,36 +37,24 @@ SECTIONS
 		*(.data1)
 	}
 
-	__bss_start = .;
-	.bss	ALIGN(4K)	:
+	.bss	ALIGN(4K) 	:
 	{
 		*(.dynbss)
 		*(.bss .bss.* .gnu.linkonce.b.*)
 		*(COMMON)
-    *(.kernel_heap)
 	}
 
-	/* .heap ALIGN(4K) (NOLOAD) : */
-	/* { */
- /*    . = ALIGN(4K); */
- /*    *(.kernel_heap) */
-	/* } */
-
-  /* .debug ALIGN(4K) : */
-  /* { */
-  /*   __debug_start = .; */
-  /*   KEEP(*(.debug_info)) */
-  /*   KEEP(*(.debug_abbrev)) */
-  /*   KEEP(*(.debug_str)) */
-  /*   KEEP(*(.debug_line)) */
-  /*   KEEP(*(.debug_ranges)) */
-  /* } */
+	.heap ALIGN(4K) (NOLOAD) :
+	{
+    . = ALIGN(4K);
+    *(.kernel_heap)
+	}
 
 	. = ALIGN(4K);
 	_kernel_end = .;
 	PROVIDE(_kernel_end = .);
 
-/DISCARD/ : { *(.eh_frame) *(.eh_frame_hdr) *(.note.GNU-stack) *(.gnu_debuglink) *(.exitcall.exit) *(.exit.data) *(.exit.text) *(GNU_STACK) *(GNU_RELRO)}
+/DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.exitcall.exit) *(.exit.data) *(.exit.text) }
 }
 
 

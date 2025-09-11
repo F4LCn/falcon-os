@@ -6,14 +6,18 @@ const BootloaderError = @import("errors.zig").BootloaderError;
 const Constants = @import("constants.zig");
 const Address = @import("address_space.zig").Address;
 const MemHelper = @import("mem_helper.zig");
+const Dwarf = std.debug.Dwarf;
 
 const log = std.log.scoped(.kernel_loader);
 
+const debug_sections_count = std.enums.directEnumArrayLen(Dwarf.Section.Id, 0);
+const null_debug_sections = .{null} ** debug_sections_count;
 pub const MappingInfo = struct { paddr: Address = .{ .paddr = 0 }, vaddr: Address = .{ .vaddr = .{} }, len: u64 };
 pub const KernelInfo = struct {
     entrypoint: u64,
     segment_mappings: [8]MappingInfo = undefined,
     segment_count: u8 = 0,
+    debug_sections: [debug_sections_count]?Dwarf.Section = null_debug_sections,
     bootinfo_addr: ?u64 = null,
     fb_addr: ?u64 = null,
     env_addr: ?u64 = null,
@@ -107,13 +111,49 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
 
         var strtabOpt: ?elf.Elf64_Shdr = null;
         var symtabOpt: ?elf.Elf64_Shdr = null;
+        var debug_sections: [debug_sections_count]?elf.Elf64_Shdr = .{null} ** debug_sections_count;
+        var debug_sections_byte_size: u64 = 0;
+
         var sh_idx: usize = 0;
         while (sh_idx < ehdr.e_shnum) : (sh_idx += 1) {
             const shdr = sheaders[sh_idx];
-            const section_name: []const u8 = shstrtab[shdr.sh_name..];
-            log.debug("Found section with type {d} and name {s}", .{ shdr.sh_type, section_name });
-            if (std.mem.eql(u8, section_name[0..7], ".symtab")) symtabOpt = shdr;
-            if (std.mem.eql(u8, section_name[0..7], ".strtab")) strtabOpt = shdr;
+            const section_name: []const u8 = std.mem.span(@as([*:0]const u8, @ptrCast(shstrtab[shdr.sh_name..].ptr)));
+            log.info("Found section with type {d} and name {s}", .{ shdr.sh_type, section_name });
+            if (std.mem.eql(u8, section_name, ".symtab")) symtabOpt = shdr;
+            if (std.mem.eql(u8, section_name, ".strtab")) strtabOpt = shdr;
+            inline for (@typeInfo(Dwarf.Section.Id).@"enum".fields, 0..) |section_id, idx| {
+                if (std.mem.eql(u8, section_name, "." ++ section_id.name)) {
+                    debug_sections[idx] = shdr;
+                    debug_sections_byte_size += shdr.sh_size;
+                }
+            }
+        }
+
+        const missing_debug_info =
+            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_info)] == null or
+            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_abbrev)] == null or
+            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_str)] == null or
+            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_line)] == null;
+        if (missing_debug_info) {
+            log.info("No kernel debug symbols found, skipping", .{});
+        } else {
+            const debug_sections_num_pages = @divExact(std.mem.Alignment.fromByteUnits(Constants.arch_page_size).forward(debug_sections_byte_size), Constants.arch_page_size);
+            var debug_section_bytes = try MemHelper.allocatePages(debug_sections_num_pages, .KERNEL_MODULE);
+            var debug_section_slice = debug_section_bytes[0..debug_sections_byte_size];
+            var debug_section_cursor: u64 = 0;
+            for (debug_sections, 0..) |maybe_section, idx| {
+                if (maybe_section) |section| {
+                    const section_bytes: []const u8 = kernel_file[section.sh_offset..][0..section.sh_size];
+                    @memcpy(debug_section_slice[debug_section_cursor..][0..section_bytes.len], section_bytes);
+                    defer debug_section_cursor += section_bytes.len;
+                    kernel_info.debug_sections[idx] = .{
+                        .data = debug_section_slice[debug_section_cursor..][0..section_bytes.len],
+                        .virtual_address = section.sh_addr,
+                        .owned = true,
+                    };
+                    log.info("debug section: {*} 0x{x}", .{kernel_info.debug_sections[idx].?.data.ptr, kernel_info.debug_sections[idx].?.virtual_address.?});
+                }
+            }
         }
 
         if (symtabOpt) |symtab_shdr| {
@@ -125,18 +165,22 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
                 var sym_idx: usize = 0;
                 while (sym_idx < symbols_count) : (sym_idx += 1) {
                     const symbol = symtab[sym_idx];
-                    const symbol_name: []const u8 = strtab[symbol.st_name..];
-                    if (std.mem.eql(u8, symbol_name[0..8], "bootinfo")) {
+                    const symbol_name: [:0]const u8 = std.mem.span(@as([*:0]const u8, @ptrCast(strtab[symbol.st_name..].ptr)));
+                    log.debug("Found symbol {s}", .{symbol_name});
+                    if (std.mem.eql(u8, symbol_name, "bootinfo")) {
                         log.info("Found bootinfo symbol with value 0x{X}", .{symbol.st_value});
                         kernel_info.bootinfo_addr = symbol.st_value;
+                        continue;
                     }
-                    if (std.mem.eql(u8, symbol_name[0..2], "fb")) {
+                    if (std.mem.eql(u8, symbol_name, "fb")) {
                         log.info("Found framebuffer symbol with value 0x{X}", .{symbol.st_value});
                         kernel_info.fb_addr = symbol.st_value;
+                        continue;
                     }
-                    if (std.mem.eql(u8, symbol_name[0..3], "env")) {
+                    if (std.mem.eql(u8, symbol_name, "env")) {
                         log.info("Found env config symbol with value 0x{X}", .{symbol.st_value});
                         kernel_info.env_addr = symbol.st_value;
+                        continue;
                     }
                 }
             }
