@@ -12,11 +12,16 @@ var _file_system: *uefi.protocol.SimpleFileSystem = undefined;
 var _root: *uefi.protocol.File = undefined;
 
 pub const FileBuffer = struct {
-    buffer: []u8,
+    buffer: [*]align(Constants.arch_page_size) u8,
     size: usize,
+    len: usize,
 
     pub fn getContents(self: *const FileBuffer) []u8 {
-        return self.buffer[0..self.size];
+        return self.buffer[0..self.len];
+    }
+
+    pub fn deinit(self: *FileBuffer) !void {
+        return MemHelper.freePages(self.buffer, self.size);
     }
 };
 
@@ -53,6 +58,7 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
     std.mem.replaceScalar(u16, &utf16_buffer, '/', '\\');
     log.debug("Converted str: {s} -> {any} ({d})", .{ args.path, utf16_buffer, len });
     status = _root._open(_root, @ptrCast(&file_handle), &utf16_buffer, uefi.protocol.File.OpenMode.read, .{});
+    defer _ = _root._close(file_handle);
     switch (status) {
         .success => log.debug("Opened file {s}", .{args.path}),
         else => {
@@ -63,7 +69,7 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
 
     var file_info_size: usize = 0;
     var file_info: *uefi.protocol.File.Info.File = undefined;
-    status = file_handle._get_info(file_handle,&uefi.protocol.File.Info.File.guid, &file_info_size, @as([*]u8, @ptrCast(file_info)));
+    status = file_handle._get_info(file_handle, &uefi.protocol.File.Info.File.guid, &file_info_size, @as([*]u8, @ptrCast(file_info)));
     switch (status) {
         .buffer_too_small => log.debug("Need to allocate {d} bytes for file info", .{file_info_size}),
         else => {
@@ -106,5 +112,5 @@ pub fn loadFile(args: struct { path: []const u8, type: MemHelper.MemoryType = .R
         },
     }
 
-    return .{ .buffer = contents[0..file_buffer_size], .size = file_info.file_size };
+    return .{ .buffer = contents, .size = pages_to_allocate * Constants.arch_page_size, .len = file_info.file_size };
 }

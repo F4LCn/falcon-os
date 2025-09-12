@@ -9,6 +9,7 @@ pub const BootloaderError = error{
     InvalidKernelExecutable,
     KernelTooLargeError,
     AddressSpaceAllocatePages,
+    AddressSpaceFreePages,
     BadAddressType,
     AllocateKernelInfo,
     MemoryMapTooBig,

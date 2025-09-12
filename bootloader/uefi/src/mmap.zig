@@ -83,9 +83,9 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!uefi.tables.MemoryMapKey {
             const last_mmap_entry = &mmap_entries[last_idx];
             if (mmap_entry.getType() == last_mmap_entry.getType() and mmap_entry.getPtr() == last_mmap_entry.getEnd()) {
                 log.debug("Extending last mmap entry (contiguous): {any}", .{mmap_entry});
-                last_mmap_entry.size += mmap_entry.size;
+                last_mmap_entry.len += mmap_entry.len;
                 mmap_entry.ptr = 0;
-                mmap_entry.size = 0;
+                mmap_entry.len = 0;
                 continue;
             }
             log.debug("Creating a new mmap entry (not contiguous): {any}", .{mmap_entry});

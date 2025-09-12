@@ -60,6 +60,15 @@ pub fn allocatePages(num_pages: u64, typ: MemoryType) BootloaderError![*]align(C
     return page_ptr;
 }
 
+pub fn freePages(mem: [*]align(Constants.arch_page_size) u8, len: u64) BootloaderError!void {
+    const num_pages = @divExact(len, Constants.arch_page_size);
+    const status = Globals.boot_services._freePages(@ptrCast(mem),num_pages);
+    switch (status) {
+        .success => log.debug("Freed {d} pages at 0x{X}", .{ num_pages, @intFromPtr(mem) }),
+        else => return BootloaderError.AddressSpaceFreePages,
+    }
+}
+
 test "MemoryType to UEFI" {
     for (std.enums.values(MemoryType)) |value| {
         const uefi_value: std.os.uefi.tables.MemoryType = value.toUefi();

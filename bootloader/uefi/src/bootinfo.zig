@@ -24,13 +24,13 @@ pub const BootInfo = packed struct {
         };
 
         ptr: u64,
-        size: u64,
+        len: u64,
 
         pub fn create(ptr: u64, size: u64, typ: Type) MmapEntry {
             const ptr_with_typ = ptr + @intFromEnum(typ);
             return .{
                 .ptr = ptr_with_typ,
-                .size = size,
+                .len = size,
             };
         }
 
@@ -40,12 +40,12 @@ pub const BootInfo = packed struct {
             return self.ptr & ptr_mask;
         }
 
-        pub fn getSize(self: MmapEntry) u64 {
-            return self.size;
+        pub fn getLen(self: MmapEntry) u64 {
+            return self.len;
         }
 
         pub fn getEnd(self: MmapEntry) u64 {
-            return self.getPtr() + self.getSize();
+            return self.getPtr() + self.getLen();
         }
 
         pub fn getType(self: MmapEntry) Type {

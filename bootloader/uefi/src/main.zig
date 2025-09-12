@@ -37,7 +37,7 @@ pub fn main() uefi.Status {
         .bootloader_type = .UEFI,
         .mmap = .{
             .ptr = 0xABABABAB,
-            .size = 12345,
+            .len = 12345,
         },
     };
 
@@ -85,11 +85,10 @@ pub fn main() uefi.Status {
 
     std.log.debug("Bootinfo struct: {any}", .{bootinfo});
 
-    const kernel = FileSystem.loadFile(.{ .path = bootloader_config.kernel }) catch {
+    var kernel = FileSystem.loadFile(.{ .path = bootloader_config.kernel }) catch {
         std.log.err("Could not load kernel file", .{});
         return uefi.Status.aborted;
     };
-    _ = &kernel;
 
     const kernel_info = KernelLoader.loadExecutable(kernel.getContents()) catch {
         std.log.err("Could not load kernel executable", .{});
@@ -119,7 +118,7 @@ pub fn main() uefi.Status {
 
     const fb_ptr = bootinfo.fb_ptr;
     const fb_size = (@as(u64, bootinfo.fb_height)) * (@as(u64, bootinfo.fb_scanline_bytes));
-    mapKernelSpace(&addr_space, kernel_info, @intFromPtr(bootinfo), fb_ptr, fb_size, @intFromPtr(config.buffer.ptr)) catch {
+    mapKernelSpace(&addr_space, &kernel_info, @intFromPtr(bootinfo), fb_ptr, fb_size, @intFromPtr(config.buffer)) catch {
         std.log.err("Could not map kernel address space", .{});
         return uefi.Status.aborted;
     };
@@ -127,18 +126,22 @@ pub fn main() uefi.Status {
     // addr_space.print();
 
     std.log.debug("bootinfo page: {X}", .{bootinfo_page[0..200]});
+    kernel.deinit() catch {
+        std.log.err("Could not free kernel buffer", .{});
+        return uefi.Status.aborted;
+    };
 
     const mmap_entries: [*]BootInfo.MmapEntry = @ptrCast(&bootinfo.mmap);
     const map_key = Mmap.getMemMap(bootinfo) catch |e| {
         std.log.err("Failed to get memory map. Error: {}", .{e});
         std.log.err("mmap: ", .{});
         for (mmap_entries[0..5], 0..) |entry, i| {
-            std.log.err("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
+            std.log.err("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getLen(), entry.getType() });
         }
         return uefi.Status.aborted;
     };
     for (mmap_entries[0..30], 0..) |entry, i| {
-        std.log.debug("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getSize(), entry.getType() });
+        std.log.debug("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getLen(), entry.getType() });
     }
 
     const _marker: u64 = 32;
