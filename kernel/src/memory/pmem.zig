@@ -125,14 +125,14 @@ fn reclaimFreeableMemory() void {
         var keep_last = false;
         const entry = &mmap_entries[idx];
         if (entry.getType() == .RECLAIMABLE) {
-            entry.* = BootInfo.MmapEntry.create(entry.getPtr(), entry.getSize(), .FREE);
+            entry.* = BootInfo.MmapEntry.create(entry.getPtr(), entry.getLen(), .FREE);
         }
 
         if (last_idx) |li| {
             const last_entry = &mmap_entries[li];
             if (last_entry.getEnd() == entry.getPtr() and last_entry.getType() == entry.getType()) {
-                last_entry.size += entry.size;
-                entry.size = 0;
+                last_entry.len += entry.len;
+                entry.len = 0;
                 keep_last = true;
             }
         }
@@ -146,10 +146,10 @@ fn reclaimFreeableMemory() void {
 fn initRanges() !void {
     for (mmap_entries) |entry| {
         const ptr = entry.getPtr();
-        const size = entry.getSize();
+        const len = entry.getLen();
         const typ = PhysRangeType.fromMmapEntryType(entry.getType());
-        if (size == 0) continue;
-        const range: PhysMemRange = .{ .start = ptr, .length = size, .type = typ };
+        if (len == 0) continue;
+        const range: PhysMemRange = .{ .start = ptr, .length = len, .type = typ };
         const list_item = try mm.alloc.create(PhysMemRangeListItem);
         list_item.* = .{ .range = range };
         mm.memory_ranges.append(list_item);
@@ -158,12 +158,12 @@ fn initRanges() !void {
             const free_list_item = try mm.alloc.create(PhysMemRangeListItem);
             free_list_item.* = .{ .range = range };
             mm.free_ranges.append(free_list_item);
-            mm.free_pages_count += @divExact(size, arch.constants.default_page_size);
+            mm.free_pages_count += @divExact(len, arch.constants.default_page_size);
         } else {
             const reserved_list_item = try mm.alloc.create(PhysMemRangeListItem);
             reserved_list_item.* = .{ .range = range };
             mm.reserved_ranges.append(reserved_list_item);
-            mm.reserved_pages_count += @divExact(size, arch.constants.default_page_size);
+            mm.reserved_pages_count += @divExact(len, arch.constants.default_page_size);
         }
     }
 }

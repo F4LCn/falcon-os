@@ -25,13 +25,13 @@ pub const BootInfo = extern struct {
         };
 
         ptr: u64,
-        size: u64,
+        len: u64,
 
         pub fn create(ptr: u64, size: u64, typ: Type) MmapEntry {
             const ptr_with_typ = ptr + @intFromEnum(typ);
             return .{
                 .ptr = ptr_with_typ,
-                .size = size,
+                .len = size,
             };
         }
 
@@ -41,12 +41,12 @@ pub const BootInfo = extern struct {
             return self.ptr & ptr_mask;
         }
 
-        pub fn getSize(self: MmapEntry) u64 {
-            return self.size;
+        pub fn getLen(self: MmapEntry) u64 {
+            return self.len;
         }
 
         pub fn getEnd(self: MmapEntry) u64 {
-            return self.getPtr() + self.getSize();
+            return self.getPtr() + self.getLen();
         }
 
         pub fn getType(self: MmapEntry) Type {
@@ -60,7 +60,7 @@ pub const BootInfo = extern struct {
             _: std.fmt.FormatOptions,
             writer: anytype,
         ) !void {
-            try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) {s}", .{ self, self.getPtr(), self.getEnd(), self.getSize(), @tagName(self.getType()) });
+            try writer.print("{*}[0x{X} -> 0x{X} (len={X}) {s}", .{ self, self.getPtr(), self.getEnd(), self.getLen(), @tagName(self.getType()) });
         }
     };
 
@@ -73,8 +73,17 @@ pub const BootInfo = extern struct {
     fb_height: u32,
     fb_scanline_bytes: u32,
     fb_pixelformat: PixelFormat,
-    unused1: [31]u8,
+    unused1: u8,
+    debug_info_ptr: u64 align(1),
+    unused2: [22]u8,
     acpi_ptr: u64,
-    unused2: [24]u8,
+    unused3: [24]u8,
     mmap: MmapEntry,
 };
+
+comptime {
+    if ((@bitSizeOf(BootInfo) - @bitSizeOf(BootInfo.MmapEntry)) != 8 * 96) {
+        const details = std.fmt.comptimePrint("Expect {d} bytes but found {d}", .{ 96, @divExact(@bitSizeOf(BootInfo) - @bitSizeOf(BootInfo.MmapEntry), 8) });
+        @compileError("BootInfo got too large. " ++ details);
+    }
+}

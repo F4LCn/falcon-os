@@ -9,6 +9,7 @@ const heap = @import("heap.zig");
 const pmem = @import("memory/pmem.zig");
 const vmem = @import("memory/vmem.zig");
 const descriptors = @import("descriptors.zig");
+const debug = @import("debug.zig");
 const arch = @import("arch");
 const panicFn = @import("panic.zig").panicFn;
 
@@ -58,26 +59,18 @@ pub fn failableMain() !void {
     }
 
     const permAlloc = heap.permanentAllocator();
-    var unmanaged_list2 = std.ArrayList(u32).empty;
-    var list2 = unmanaged_list2.toManaged(permAlloc);
-    try list2.append(1);
-    try list2.append(10);
-    try list2.append(5434);
-
-    for (list2.items, 0..) |item, i| {
-        std.log.info("item[{d}] = {d}", .{ i, item });
-    }
+    try debug.init(permAlloc);
 
     std.log.info("Initializing physical memory manager", .{});
     try pmem.init(heap.permanentAllocator());
     const range = pmem.allocatePage(10, .{});
     std.log.info("Allocated range: {any}", .{range});
-    pmem.printFreeRanges();
+    // pmem.printFreeRanges();
 
     std.log.info("Initializing virtual memory manager", .{});
     var kernel_vmem = try vmem.init(heap.permanentAllocator());
-    kernel_vmem.printFreeRanges();
-    kernel_vmem.printReservedRanges();
+    // kernel_vmem.printFreeRanges();
+    // kernel_vmem.printReservedRanges();
     std.log.info("Quick mapping", .{});
 
     const addr = kernel_vmem.quickMap(0x14000);
