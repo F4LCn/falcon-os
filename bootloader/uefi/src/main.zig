@@ -83,8 +83,6 @@ pub fn main() uefi.Status {
         return uefi.Status.aborted;
     };
 
-    std.log.debug("Bootinfo struct: {any}", .{bootinfo});
-
     var kernel = FileSystem.loadFile(.{ .path = bootloader_config.kernel }) catch {
         std.log.err("Could not load kernel file", .{});
         return uefi.Status.aborted;
@@ -94,10 +92,17 @@ pub fn main() uefi.Status {
         std.log.err("Could not load kernel executable", .{});
         return uefi.Status.aborted;
     };
+    if (kernel_info.debug_info_ptr)|debug_info_ptr| bootinfo.debug_info_ptr = debug_info_ptr;
+    
+
+    std.log.debug("Bootinfo struct: {any}", .{bootinfo});
 
     std.log.debug("Kernel info: ", .{});
     std.log.debug("  entrypoint: 0x{X}", .{kernel_info.entrypoint});
     std.log.debug("  entry count: {d}", .{kernel_info.segment_count});
+    if (kernel_info.debug_info_ptr) |_| {
+        std.log.debug("  debug info loaded @ 0x{x}", .{kernel_info.debug_info_ptr});
+    }
     for (0..kernel_info.segment_count) |idx| {
         const mapping = kernel_info.segment_mappings[idx];
         const mapping_vaddr = switch (mapping.vaddr) {
@@ -182,8 +187,7 @@ pub fn main() uefi.Status {
         :
         : [page_map] "r" (addr_space.root),
           [kernel_entry] "r" (kernel_info.entrypoint),
-        : .{ .rax = true }
-    );
+        : .{ .rax = true });
 
     return uefi.Status.timeout;
 }

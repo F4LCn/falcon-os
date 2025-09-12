@@ -6,24 +6,23 @@ const BootloaderError = @import("errors.zig").BootloaderError;
 const Constants = @import("constants.zig");
 const Address = @import("address_space.zig").Address;
 const MemHelper = @import("mem_helper.zig");
+const debug = @import("debug.zig");
 const Dwarf = std.debug.Dwarf;
 
 const log = std.log.scoped(.kernel_loader);
 
-const debug_sections_count = std.enums.directEnumArrayLen(Dwarf.Section.Id, 0);
-const null_debug_sections = .{null} ** debug_sections_count;
 pub const MappingInfo = struct { paddr: Address = .{ .paddr = 0 }, vaddr: Address = .{ .vaddr = .{} }, len: u64 };
 pub const KernelInfo = struct {
     entrypoint: u64,
     segment_mappings: [8]MappingInfo = undefined,
     segment_count: u8 = 0,
-    debug_sections: [debug_sections_count]?Dwarf.Section = null_debug_sections,
+    debug_info_ptr: ?u64 = null,
     bootinfo_addr: ?u64 = null,
     fb_addr: ?u64 = null,
     env_addr: ?u64 = null,
 };
 
-pub fn loadExecutable(kernel_file: []const u8) BootloaderError!*KernelInfo {
+pub fn loadExecutable(kernel_file: []const u8) BootloaderError!KernelInfo {
     const kernel_signature = kernel_file[0..4];
     if (std.mem.eql(u8, kernel_signature, elf.MAGIC)) {
         log.info("Kernel matched ELF signature", .{});
@@ -33,8 +32,8 @@ pub fn loadExecutable(kernel_file: []const u8) BootloaderError!*KernelInfo {
     return BootloaderError.InvalidKernelExecutable;
 }
 
-fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
-    var status: uefi.Status = undefined;
+fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
+    // var status: uefi.Status = undefined;
     const ehdr: *elf.Elf64_Ehdr = @as(*elf.Elf64_Ehdr, @ptrCast(@alignCast(@constCast(kernel_file.ptr))));
     if (ehdr.e_ident[elf.EI_CLASS] != elf.ELFCLASS64) {
         log.err("Unsupported class {d}", .{ehdr.e_ident[elf.EI_CLASS]});
@@ -56,13 +55,13 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
         return BootloaderError.InvalidKernelExecutable;
     }
 
-    var kernel_info: *KernelInfo = undefined;
-    status = Globals.boot_services._allocatePool(.loader_data, @sizeOf(KernelInfo), @ptrCast(&kernel_info));
-    switch (status) {
-        .success => log.debug("Allocated kernel info struct at {*}", .{kernel_info}),
-        else => return BootloaderError.AllocateKernelInfo,
-    }
-    kernel_info.* = .{ .entrypoint = ehdr.e_entry };
+    var kernel_info: KernelInfo = .{ .entrypoint = ehdr.e_entry };
+    // status = Globals.boot_services._allocatePool(.loader_data, @sizeOf(KernelInfo), @ptrCast(&kernel_info));
+    // switch (status) {
+    //     .success => log.debug("Allocated kernel info struct at {*}", .{kernel_info}),
+    //     else => return BootloaderError.AllocateKernelInfo,
+    // }
+    // kernel_info.* = .{ .entrypoint = ehdr.e_entry };
 
     const pheaders = std.mem.bytesAsSlice(elf.Elf64_Phdr, kernel_file[ehdr.e_phoff .. ehdr.e_phoff + ehdr.e_phnum * ehdr.e_phentsize]);
     var mapping_idx: usize = 0;
@@ -111,49 +110,66 @@ fn loadElf(kernel_file: []const u8) BootloaderError!*KernelInfo {
 
         var strtabOpt: ?elf.Elf64_Shdr = null;
         var symtabOpt: ?elf.Elf64_Shdr = null;
-        var debug_sections: [debug_sections_count]?elf.Elf64_Shdr = .{null} ** debug_sections_count;
+        const debug_sections_count = std.enums.directEnumArrayLen(Dwarf.Section.Id, 0);
+        var debug_shdr: [debug_sections_count]?elf.Elf64_Shdr = .{null} ** debug_sections_count;
         var debug_sections_byte_size: u64 = 0;
 
         var sh_idx: usize = 0;
         while (sh_idx < ehdr.e_shnum) : (sh_idx += 1) {
             const shdr = sheaders[sh_idx];
             const section_name: []const u8 = std.mem.span(@as([*:0]const u8, @ptrCast(shstrtab[shdr.sh_name..].ptr)));
-            log.info("Found section with type {d} and name {s}", .{ shdr.sh_type, section_name });
+            log.debug("Found section with type {d} and name {s}", .{ shdr.sh_type, section_name });
             if (std.mem.eql(u8, section_name, ".symtab")) symtabOpt = shdr;
             if (std.mem.eql(u8, section_name, ".strtab")) strtabOpt = shdr;
             inline for (@typeInfo(Dwarf.Section.Id).@"enum".fields, 0..) |section_id, idx| {
                 if (std.mem.eql(u8, section_name, "." ++ section_id.name)) {
-                    debug_sections[idx] = shdr;
+                    debug_shdr[idx] = shdr;
                     debug_sections_byte_size += shdr.sh_size;
                 }
             }
         }
 
         const missing_debug_info =
-            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_info)] == null or
-            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_abbrev)] == null or
-            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_str)] == null or
-            debug_sections[@intFromEnum(Dwarf.Section.Id.debug_line)] == null;
+            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_info)] == null or
+            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_abbrev)] == null or
+            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_str)] == null or
+            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_line)] == null;
+
         if (missing_debug_info) {
             log.info("No kernel debug symbols found, skipping", .{});
         } else {
-            const debug_sections_num_pages = @divExact(std.mem.Alignment.fromByteUnits(Constants.arch_page_size).forward(debug_sections_byte_size), Constants.arch_page_size);
-            var debug_section_bytes = try MemHelper.allocatePages(debug_sections_num_pages, .KERNEL_MODULE);
-            var debug_section_slice = debug_section_bytes[0..debug_sections_byte_size];
+            const debug_info_size = @sizeOf(debug.Sections) + debug_sections_byte_size;
+            const debug_info_pages_count = @divExact(std.mem.Alignment.fromByteUnits(Constants.arch_page_size).forward(debug_info_size), Constants.arch_page_size);
+            var debug_info_bytes = try MemHelper.allocatePages(debug_info_pages_count, .KERNEL_MODULE);
+            var debug_info = std.mem.bytesAsValue(debug.Sections, debug_info_bytes[0..@sizeOf(debug.Sections)]);
+            var debug_section_slice = debug_info_bytes[@sizeOf(debug.Sections)..][0..debug_sections_byte_size];
             var debug_section_cursor: u64 = 0;
-            for (debug_sections, 0..) |maybe_section, idx| {
-                if (maybe_section) |section| {
-                    const section_bytes: []const u8 = kernel_file[section.sh_offset..][0..section.sh_size];
-                    @memcpy(debug_section_slice[debug_section_cursor..][0..section_bytes.len], section_bytes);
-                    defer debug_section_cursor += section_bytes.len;
-                    kernel_info.debug_sections[idx] = .{
-                        .data = debug_section_slice[debug_section_cursor..][0..section_bytes.len],
-                        .virtual_address = section.sh_addr,
-                        .owned = true,
-                    };
-                    log.info("debug section: {*} 0x{x}", .{kernel_info.debug_sections[idx].?.data.ptr, kernel_info.debug_sections[idx].?.virtual_address.?});
+            for (debug_shdr, 0..) |maybe_shdr, idx| {
+                const debug_section_type: debug.Section.Type = @enumFromInt(idx);
+                if (maybe_shdr) |shdr| {
+                    const section_slice: []const u8 = kernel_file[shdr.sh_offset..][0..shdr.sh_size];
+                    const dest_slice = debug_section_slice[debug_section_cursor..][0..section_slice.len];
+                    @memcpy(dest_slice, section_slice);
+                    defer debug_section_cursor += section_slice.len;
+                    switch (debug_section_type) {
+                        .debug_info => debug_info.debug_info = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_abbrev => debug_info.debug_abbrev = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_str => debug_info.debug_str = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_str_offsets => debug_info.debug_str_offsets = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_line => debug_info.debug_line = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_line_str => debug_info.debug_line_str = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_ranges => debug_info.debug_ranges = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_loclists => debug_info.debug_loclists = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_rnglists => debug_info.debug_rnglists = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_addr => debug_info.debug_addr = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_names => debug_info.debug_names = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_frame => debug_info.debug_frame = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .eh_frame => debug_info.eh_frame = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .eh_frame_hdr => debug_info.eh_frame_hdr = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                    }
                 }
             }
+            kernel_info.debug_info_ptr = @intFromPtr(debug_info_bytes);
         }
 
         if (symtabOpt) |symtab_shdr| {

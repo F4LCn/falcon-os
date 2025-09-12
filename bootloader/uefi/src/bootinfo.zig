@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const BootInfo = packed struct {
     pub const BootloaderType = enum(u8) {
         BIOS = 0,
@@ -54,6 +56,7 @@ pub const BootInfo = packed struct {
         }
     };
 
+
     magic: u32 = 0x464C434E,
     size: u32 = 96,
     bootloader_type: BootloaderType,
@@ -63,8 +66,17 @@ pub const BootInfo = packed struct {
     fb_height: u32 = 0,
     fb_scanline_bytes: u32 = 0,
     fb_pixelformat: PixelFormat = @enumFromInt(0),
-    unused1: u248 = undefined,
+    unused1: u8 = undefined,
+    debug_info_ptr: u64 = 0,
+    unused2: u176 = undefined,
     acpi_ptr: u64 = 0,
-    unused2: u192 = undefined,
+    unused3: u192 = undefined,
     mmap: MmapEntry = undefined,
 };
+
+comptime {
+    if ((@bitSizeOf(BootInfo) - @bitSizeOf(BootInfo.MmapEntry)) != 8 * 96) {
+        const details = std.fmt.comptimePrint("Expect {d} bytes but found {d}", .{ 96, @divExact(@bitSizeOf(BootInfo) - @bitSizeOf(BootInfo.MmapEntry), 8) });
+        @compileError("BootInfo got too large. " ++ details);
+    }
+}
