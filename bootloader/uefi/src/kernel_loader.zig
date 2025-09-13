@@ -7,7 +7,6 @@ const Constants = @import("constants.zig");
 const Address = @import("address_space.zig").Address;
 const MemHelper = @import("mem_helper.zig");
 const debug = @import("debug.zig");
-const Dwarf = std.debug.Dwarf;
 
 const log = std.log.scoped(.kernel_loader);
 
@@ -110,7 +109,7 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
 
         var strtabOpt: ?elf.Elf64_Shdr = null;
         var symtabOpt: ?elf.Elf64_Shdr = null;
-        const debug_sections_count = std.enums.directEnumArrayLen(Dwarf.Section.Id, 0);
+        const debug_sections_count = std.enums.directEnumArrayLen(debug.Section.Type, 0);
         var debug_shdr: [debug_sections_count]?elf.Elf64_Shdr = .{null} ** debug_sections_count;
         var debug_sections_byte_size: u64 = 0;
 
@@ -121,7 +120,7 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
             log.debug("Found section with type {d} and name {s}", .{ shdr.sh_type, section_name });
             if (std.mem.eql(u8, section_name, ".symtab")) symtabOpt = shdr;
             if (std.mem.eql(u8, section_name, ".strtab")) strtabOpt = shdr;
-            inline for (@typeInfo(Dwarf.Section.Id).@"enum".fields, 0..) |section_id, idx| {
+            inline for (@typeInfo(debug.Section.Type).@"enum".fields, 0..) |section_id, idx| {
                 if (std.mem.eql(u8, section_name, "." ++ section_id.name)) {
                     debug_shdr[idx] = shdr;
                     debug_sections_byte_size += shdr.sh_size;
@@ -130,10 +129,10 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
         }
 
         const missing_debug_info =
-            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_info)] == null or
-            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_abbrev)] == null or
-            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_str)] == null or
-            debug_shdr[@intFromEnum(Dwarf.Section.Id.debug_line)] == null;
+            debug_shdr[@intFromEnum(debug.Section.Type.debug_info)] == null or
+            debug_shdr[@intFromEnum(debug.Section.Type.debug_abbrev)] == null or
+            debug_shdr[@intFromEnum(debug.Section.Type.debug_str)] == null or
+            debug_shdr[@intFromEnum(debug.Section.Type.debug_line)] == null;
 
         if (missing_debug_info) {
             log.info("No kernel debug symbols found, skipping", .{});
