@@ -62,13 +62,13 @@ pub fn failableMain() !void {
     try debug.init(permAlloc);
 
     std.log.info("Initializing physical memory manager", .{});
-    try pmem.init(heap.permanentAllocator());
+    try pmem.init(permAlloc);
     const range = pmem.allocatePage(10, .{});
     std.log.info("Allocated range: {any}", .{range});
     // pmem.printFreeRanges();
 
     std.log.info("Initializing virtual memory manager", .{});
-    var kernel_vmem = try vmem.init(heap.permanentAllocator());
+    var kernel_vmem = try vmem.init(permAlloc);
     // kernel_vmem.printFreeRanges();
     // kernel_vmem.printReservedRanges();
     std.log.info("Quick mapping", .{});

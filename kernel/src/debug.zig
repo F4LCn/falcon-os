@@ -60,6 +60,7 @@ pub const Section = packed struct {
 };
 
 pub const Sections = EnumFieldPackedStruct(Section.Type, Section, .{});
+
 const log = std.log.scoped(.debug);
 
 pub fn init(alloc: std.mem.Allocator) !void {
@@ -103,4 +104,11 @@ pub fn init(alloc: std.mem.Allocator) !void {
         .is_macho = false,
     };
     try Dwarf.open(&dwarf, alloc);
+
+    const symbol = try dwarf.getSymbol(alloc, @intFromPtr(&init));
+    log.info(
+        \\ symbol name: {s}
+        \\ filename: {s}
+        \\ line: {d}
+    , .{ symbol.name, symbol.source_location.?.file_name, symbol.source_location.?.line });
 }

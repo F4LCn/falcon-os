@@ -1,5 +1,5 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
+const Allocator = @import("allocator.zig");
 const builtin = @import("builtin");
 
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
@@ -8,7 +8,7 @@ const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
 // comptime config as input ?
 // smallest allocation size as an comptime arg?
 // impl the allocator interface
-// TODO: add debug info and allocation tracking ?
+// TODO: replace all instances of std.mem.Allocator by a wrapped version of our Allocator
 
 const log = std.log.scoped(.buddy);
 
@@ -117,7 +117,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             stacktraces: [(1 << max_order)][num_trace_types][num_traces]usize = .{.{.{0} ** config.num_traces} ** num_trace_types} ** ((1 << max_order)),
         };
 
-        alloc: Allocator,
+        alloc: std.mem.Allocator,
         memory_start: u64 = config.memory_start,
         memory_length: u64 = config.memory_length,
         min_block_size_log: u64 = min_block_size_log,
@@ -128,7 +128,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         node_state: std.bit_set.ArrayBitSet(u64, (1 << (max_order - 1)) - 1) = .initEmpty(),
         safety_data: if (config.safety) SafetyData else void = if (config.safety) .{} else {},
 
-        pub fn init(alloc: Allocator) !Self {
+        pub fn init(alloc: std.mem.Allocator) !Self {
             var buddy: Self = .{
                 .alloc = alloc,
             };
@@ -138,7 +138,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             return buddy;
         }
 
-        pub fn init_test(alloc: Allocator, memory_start: u64) !Self {
+        pub fn init_test(alloc: std.mem.Allocator, memory_start: u64) !Self {
             if (builtin.is_test) {
                 // const ptr: [*]u8 = @ptrFromInt(memory_start);
                 var buddy: Self = .{
@@ -172,10 +172,11 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             return .{
                 .ptr = self,
                 .vtable = &.{
+                    .can_alloc = _can_alloc,
                     .alloc = _alloc,
                     .free = _free,
-                    .resize = std.mem.Allocator.noResize,
-                    .remap = std.mem.Allocator.noRemap,
+                    .resize = Allocator.noResize,
+                    .remap = Allocator.noRemap,
                 },
             };
         }
@@ -383,7 +384,6 @@ pub fn Buddy(comptime config: BuddyConfig) type {
                 self.safety_data.allocated_aligned_size += aligned_length;
                 const used_idx = NodeStateIdx.create(bucket_idx, node_idx);
                 if (self.safety_data.allocated.isSet(used_idx.value)) {
-                    // self.reportDoubleFree(bucket_idx, node_idx, ret_addr);
                     return error.DoubleAlloc;
                 }
                 self.safety_data.allocated.set(used_idx.value);
@@ -437,7 +437,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const addr = self.ptrFromNodeIdx(bucket_idx, node_idx);
             const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
             const report_format =
-                \\ ------------------- DOUBLE FREE !!!! ----------------------
+                \\ ------------------- MEMORY LEAK !!!! ----------------------
                 \\ A memory leak was detected at address 0x{X}
                 \\ Originally allocated from:
                 \\ {f}
@@ -483,6 +483,24 @@ pub fn Buddy(comptime config: BuddyConfig) type {
                     }
                 }
             }
+        }
+
+        fn _can_alloc(context: *anyopaque, requested_length: usize, alignment: std.mem.Alignment) bool {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            const aligned_length = @as(u64, std.mem.alignForwardLog2(requested_length, min_block_size_log));
+            const length = alignment.forward(aligned_length);
+            if (length > self.memory_length) return false;
+            const matching_bucket = self.lengthToBucketIdx(length);
+            var bucket = matching_bucket;
+            while (bucket < max_order) {
+                var iter = self.buckets[bucket].iter();
+                if (iter.next()) |_| {
+                    return true;
+                } else {
+                    bucket += 1;
+                }
+            }
+            return false;
         }
 
         fn _alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
@@ -689,8 +707,9 @@ test "buddy allocator alignment" {
     const TestBuddy = Buddy(.{ .memory_start = 0x1, .memory_length = 256, .min_size = @sizeOf(u8) });
     var buddy: TestBuddy = try .init_test(test_alloc, @intFromPtr(buffer.ptr));
     defer buddy.deinit();
+    var out_alloc = buddy.allocator();
 
-    var validationAlloc = std.mem.validationWrap(&buddy);
+    var validationAlloc = std.mem.validationWrap(&out_alloc);
     blk: {
         const alloc = validationAlloc.allocator();
         const check = try alloc.alloc(u8, 128);
@@ -711,6 +730,31 @@ test "buddy allocator alignment" {
         };
         defer alloc.free(slice3);
     }
-    std.debug.print("allocated size {d} \n", .{buddy.safety_data.allocated_size});
-    std.debug.print("allocated aligned size {d}\n", .{buddy.safety_data.allocated_aligned_size});
+    // std.debug.print("allocated size {d} \n", .{buddy.safety_data.allocated_size});
+    // std.debug.print("allocated aligned size {d}\n", .{buddy.safety_data.allocated_aligned_size});
+}
+
+test "can allocate" {
+    const test_alloc = std.testing.allocator;
+    const buffer = try test_alloc.alloc(u8, 256);
+    defer test_alloc.free(buffer);
+    const TestBuddy = Buddy(.{ .memory_start = 0x1, .memory_length = 256, .min_size = @sizeOf(u8) });
+    var buddy: TestBuddy = try .init_test(test_alloc, @intFromPtr(buffer.ptr));
+    defer buddy.deinit();
+
+    const alloc = buddy.allocator();
+    try std.testing.expectEqual(true, alloc.canAlloc(u8, 128));
+    const check = try alloc.alloc(u8, 128);
+    defer alloc.free(check);
+    try std.testing.expectEqual(true, alloc.canAlloc(u64, 3));
+    const slice = try alloc.alloc(u64, 3);
+    defer alloc.free(slice);
+    try std.testing.expectEqual(3, slice.len);
+    const slice2_alignment = std.mem.Alignment.fromByteUnits(64);
+    try std.testing.expectEqual(true, alloc.canAlignedAlloc(u64, .fromByteUnits(64), 1));
+    const slice2 = try alloc.alignedAlloc(u64, .fromByteUnits(64), 1);
+    try std.testing.expectEqual(1, slice2.len);
+    try std.testing.expect(slice2_alignment.check(@intFromPtr(slice2.ptr)));
+    defer alloc.free(slice2);
+    try std.testing.expectEqual(false, alloc.canAlignedAlloc(u64, .fromByteUnits(128), 1));
 }
