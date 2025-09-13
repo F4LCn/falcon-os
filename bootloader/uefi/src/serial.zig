@@ -51,7 +51,7 @@ const ModemCtrlReg = packed struct(u8) {
 
 pub const SerialWriter = struct {
     port: Port,
-    writer: std.io.Writer,
+    writer: std.Io.Writer,
     pub const SerialError = error{};
     const Self = @This();
     pub fn init(comptime port: Port) SerialWriter {
@@ -82,7 +82,7 @@ pub const SerialWriter = struct {
         };
     }
 
-    pub fn drain(w: *std.io.Writer, data: []const []const u8, splat: usize) !usize {
+    pub fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) !usize {
         _ = splat;
         const self: *SerialWriter = @fieldParentPtr("writer", w);
         var out: usize = 0;

@@ -115,7 +115,7 @@ const VirtMemRange = struct {
 
     pub fn format(
         self: *const @This(),
-        writer: *std.io.Writer,
+        writer: *std.Io.Writer,
     ) !void {
         const start_addr = @as(u64, @bitCast(self.start));
         if (self.type) |typ| {
@@ -146,7 +146,7 @@ const VirtMemRangeListItem = struct {
 
     pub fn format(
         self: *const @This(),
-        writer: *std.io.Writer,
+        writer: *std.Io.Writer,
     ) !void {
         try writer.print("{*}[range={f}, p=0x{X}, n=0x{X}]", .{ self, &self.range, @intFromPtr(self.prev), @intFromPtr(self.next) });
     }
