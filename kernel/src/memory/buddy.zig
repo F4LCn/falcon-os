@@ -395,6 +395,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         }
 
         fn reportDoubleFree(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx, ret_addr: usize) void {
+            @branchHint(.cold);
             if (!config.safety) @panic("Safety disabled");
             const addr = self.ptrFromNodeIdx(bucket_idx, node_idx);
             const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
@@ -422,6 +423,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         }
 
         fn reportLeak(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx) void {
+            @branchHint(.cold);
             if (!config.safety) @panic("Safety disabled");
             const addr = self.ptrFromNodeIdx(bucket_idx, node_idx);
             const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
