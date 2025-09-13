@@ -2,6 +2,6 @@
  // Run `zig build gen-arch` to regenerate
 
  pub const registers = @import("registers.zig");
+ pub const cpu = @import("cpu.zig");
  pub const constants = @import("constants.zig");
  pub const assembly = @import("assembly.zig");
- pub const cpu = @import("cpu.zig");

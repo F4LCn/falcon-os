@@ -90,12 +90,11 @@ pub fn build(b: *std.Build) !void {
 
 fn attachConstantsModule(b: *std.Build, module: *std.Build.Module) void {
     const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
-    const num_stack_trace = b.option(u64, "stacktrace_depth", "Number of stack trace frames") orelse (if (module.optimize.? == .Debug) @as(u64, 5) else 0);
 
     const constants = b.addOptions();
     constants.addOption(u64, "max_cpu", max_cpu_option);
     constants.addOption(bool, "safety", module.optimize.? == .Debug or module.optimize.? == .ReleaseSafe);
-    constants.addOption(u64, "num_stack_trace", num_stack_trace);
+    constants.addOption(comptime_int, "num_stack_trace", 5);
     constants.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
     constants.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
     module.addOptions("constants", constants);

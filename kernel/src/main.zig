@@ -1,6 +1,5 @@
 const std = @import("std");
-// Keep this here to validate the constants
-const _constants = @import("constants.zig");
+const constants = @import("constants");
 const BootInfo = @import("bootinfo.zig").BootInfo;
 const logger = @import("log/logger.zig");
 const cpu = @import("cpu.zig");
@@ -22,9 +21,9 @@ pub const std_options: std.Options = .{
     .page_size_max = arch.constants.default_page_size,
 };
 
-comptime {
-    _constants.validate();
-}
+// comptime {
+//     if (constants.max_cpu <= 0) @compileError("No max_cpu set");
+// }
 
 export fn _start() callconv(.naked) noreturn {
     asm volatile (

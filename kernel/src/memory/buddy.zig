@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = @import("allocator.zig");
+const debug = @import("../debug.zig");
 const builtin = @import("builtin");
 
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
@@ -114,7 +115,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             allocated_size: u64 = 0,
             allocated_aligned_size: u64 = 0,
             allocated: std.bit_set.ArrayBitSet(u64, (@as(u64, 1) << @as(u6, @intCast(max_order))) - 1) = .initEmpty(),
-            stacktraces: [(1 << max_order)][num_trace_types][num_traces]usize = .{.{.{0} ** config.num_traces} ** num_trace_types} ** ((1 << max_order)),
+            stacktraces: [(1 << max_order)][num_trace_types]debug.StackTrace = .{.{.{}} ** num_trace_types} ** ((1 << max_order)),
         };
 
         alloc: std.mem.Allocator,
@@ -211,18 +212,6 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             return .{ .value = @intCast(node_idx) };
         }
 
-        fn buildStackTrace(addresses: *[SafetyData.num_traces]usize, ret_addr: usize) std.builtin.StackTrace {
-            // NOTE: this is actually important because we look for 0 to decide how deep we go in the stacktrace
-            @memset(addresses, 0);
-
-            var stack_trace: std.builtin.StackTrace = .{
-                .instruction_addresses = addresses,
-                .index = 0,
-            };
-            std.debug.captureStackTrace(ret_addr, &stack_trace);
-            return stack_trace;
-        }
-
         fn captureStackTrace(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx, trace_type: SafetyData.TraceType, ret_addr: usize) void {
             if (!config.safety) @panic("Safety disabled for allocator");
             const total_nodes = (@as(u64, 1) << @as(u6, @intCast(max_order))) - 1;
@@ -230,8 +219,8 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const node_offset = total_nodes + 1 - bucket_node_count;
             const stack_trace_node_idx = node_offset + node_idx.value;
             const stack_trace_node = &self.safety_data.stacktraces[stack_trace_node_idx];
-            const addresses = &stack_trace_node[@intFromEnum(trace_type)];
-            _ = buildStackTrace(addresses, ret_addr);
+            const stacktrace = &stack_trace_node[@intFromEnum(trace_type)];
+            _ = stacktrace.capture(ret_addr);
         }
 
         pub fn allocate(self: *Self, requested_length: u64, alignment: std.mem.Alignment, ret_addr: usize) ![*]u8 {
@@ -410,8 +399,8 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const addr = self.ptrFromNodeIdx(bucket_idx, node_idx);
             const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
             const free_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .free);
-            var addresses: [SafetyData.num_traces]usize = .{0} ** SafetyData.num_traces;
-            const stack_trace = buildStackTrace(&addresses, ret_addr);
+            var stacktrace: debug.StackTrace = .{};
+            const captured_stack = stacktrace.capture(ret_addr);
             const report_format =
                 \\ ------------------- DOUBLE FREE !!!! ----------------------
                 \\ A double free was detected at address 0x{X}
@@ -426,9 +415,9 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             ;
 
             if (builtin.is_test) {
-                std.debug.print(report_format, .{ addr, stack_trace, alloc_stack_trace, free_stack_trace });
+                std.debug.print(report_format, .{ addr, captured_stack, alloc_stack_trace, free_stack_trace });
             } else {
-                log.err(report_format, .{ addr, stack_trace, alloc_stack_trace, free_stack_trace });
+                log.err(report_format, .{ addr, captured_stack, alloc_stack_trace, free_stack_trace });
             }
         }
 

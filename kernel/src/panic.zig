@@ -4,28 +4,24 @@ const arch = @import("arch");
 const constants = @import("constants");
 const debug = @import("debug.zig");
 
-const log = std.log.scoped(.panic);
+const log = std.log.scoped(.@"************************* PANICC *************************");
+
 pub fn panicFn(msg: []const u8, first_trace_addr: ?usize) noreturn {
-    var stack_trace = std.builtin.StackTrace{
-        .instruction_addresses = &.{},
-        .index = 0,
+    @branchHint(.cold);
+    var stacktrace = debug.StackTrace{
+        .addresses = .{0} ** 5,
     };
-    if (constants.safety and first_trace_addr != null) {
-        var addresses: [constants.num_stack_trace]usize = .{0} ** constants.num_stack_trace;
-        stack_trace.instruction_addresses = &addresses;
-        std.debug.captureStackTrace(first_trace_addr, &stack_trace);
+    if (constants.safety) {
+        _ = stacktrace.capture(first_trace_addr orelse @returnAddress());
     }
 
-    log.err("************************* PANICC *************************", .{});
-    log.err("Kernel panicked with error: {s}", .{msg});
-    log.err("Panic stack trace:", .{});
-
-    const stack_trace_len = @min(stack_trace.index, stack_trace.instruction_addresses.len);
-    for (stack_trace.instruction_addresses[0..stack_trace_len], 0..) |address, idx| {
-        log.err("[frame#{d:>3}]: 0x{x}", .{ idx, address });
-    }
-
-    log.err("************************* PANICC *************************", .{});
+    log.err(
+        \\
+        \\Kernel panicked with error: {s}
+        \\Panic stack trace:
+        \\{f}
+    , .{ msg, stacktrace });
+    log.err("", .{});
 
     arch.assembly.haltEternally();
 }

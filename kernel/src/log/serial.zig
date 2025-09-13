@@ -52,7 +52,6 @@ const ModemCtrlReg = packed struct(u8) {
 pub const SerialWriter = struct {
     port: Port,
     writer: std.Io.Writer,
-
     pub const SerialError = error{};
     const Self = @This();
     pub fn init(comptime port: Port) SerialWriter {

@@ -2,10 +2,10 @@ const std = @import("std");
 const serial = @import("serial.zig");
 
 var serial_out: ?serial.SerialWriter = null;
-pub var writer: ?std.Io.Writer = null;
 
 pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.enum_literal), comptime format: []const u8, args: anytype) void {
-    var w = writer orelse return;
+    var s = serial_out  orelse return;
+    var w = &s.writer;
     const scope_prefix = switch (scope) {
         std.log.default_log_scope => "",
         else => "(" ++ @tagName(scope) ++ ") ",
@@ -14,8 +14,11 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.enum_litera
     w.print(prefix ++ format ++ "\n", args) catch return;
 }
 
+pub fn writer() !*std.Io.Writer {
+    var s = serial_out orelse return error.LoggerNotInit;
+    return &s.writer;
+}
+
 pub fn init(comptime port: serial.Port) void {
-    const s = serial.SerialWriter.init(port);
-    serial_out = s;
-    writer = s.writer;
+    serial_out = serial.SerialWriter.init(port);
 }
