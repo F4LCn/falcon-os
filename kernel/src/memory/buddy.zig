@@ -115,7 +115,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             allocated_size: u64 = 0,
             allocated_aligned_size: u64 = 0,
             allocated: std.bit_set.ArrayBitSet(u64, (@as(u64, 1) << @as(u6, @intCast(max_order))) - 1) = .initEmpty(),
-            stacktraces: [(1 << max_order)][num_trace_types]debug.StackTrace = .{.{.{}} ** num_trace_types} ** ((1 << max_order)),
+            stacktraces: [(1 << max_order)][num_trace_types]debug.StackTrace = .{.{debug.StackTrace{}} ** num_trace_types} ** ((1 << max_order)),
         };
 
         alloc: std.mem.Allocator,
@@ -368,30 +368,28 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         }
 
         fn recordAllocation(self: *Self, requested_length: u64, aligned_length: u64, bucket_idx: BucketIdx, node_idx: NodeIdx, ret_addr: usize) !void {
-            if (config.safety) {
-                self.safety_data.allocated_size += requested_length;
-                self.safety_data.allocated_aligned_size += aligned_length;
-                const used_idx = NodeStateIdx.create(bucket_idx, node_idx);
-                if (self.safety_data.allocated.isSet(used_idx.value)) {
-                    return error.DoubleAlloc;
-                }
-                self.safety_data.allocated.set(used_idx.value);
-                self.captureStackTrace(bucket_idx, node_idx, .allocate, ret_addr);
+            if (!config.safety) return;
+            self.safety_data.allocated_size += requested_length;
+            self.safety_data.allocated_aligned_size += aligned_length;
+            const used_idx = NodeStateIdx.create(bucket_idx, node_idx);
+            if (self.safety_data.allocated.isSet(used_idx.value)) {
+                return error.DoubleAlloc;
             }
+            self.safety_data.allocated.set(used_idx.value);
+            self.captureStackTrace(bucket_idx, node_idx, .allocate, ret_addr);
         }
 
         fn recordFree(self: *Self, requested_length: u64, aligned_length: u64, bucket_idx: BucketIdx, node_idx: NodeIdx, ret_addr: usize) !void {
-            if (config.safety) {
-                self.safety_data.allocated_size -= requested_length;
-                self.safety_data.allocated_aligned_size -= aligned_length;
-                const used_idx = NodeStateIdx.create(bucket_idx, node_idx);
-                if (!self.safety_data.allocated.isSet(used_idx.value)) {
-                    self.reportDoubleFree(bucket_idx, node_idx, ret_addr);
-                    return error.DoubleFree;
-                }
-                self.safety_data.allocated.unset(used_idx.value);
-                self.captureStackTrace(bucket_idx, node_idx, .free, ret_addr);
+            if (!config.safety) return;
+            self.safety_data.allocated_size -= requested_length;
+            self.safety_data.allocated_aligned_size -= aligned_length;
+            const used_idx = NodeStateIdx.create(bucket_idx, node_idx);
+            if (!self.safety_data.allocated.isSet(used_idx.value)) {
+                self.reportDoubleFree(bucket_idx, node_idx, ret_addr);
+                return error.DoubleFree;
             }
+            self.safety_data.allocated.unset(used_idx.value);
+            self.captureStackTrace(bucket_idx, node_idx, .free, ret_addr);
         }
 
         fn reportDoubleFree(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx, ret_addr: usize) void {
@@ -401,7 +399,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
             const free_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .free);
             var stacktrace: debug.StackTrace = .{};
-            const captured_stack = stacktrace.capture(ret_addr);
+            stacktrace.capture(ret_addr);
             const report_format =
                 \\ ------------------- DOUBLE FREE !!!! ----------------------
                 \\ A double free was detected at address 0x{X}
@@ -416,9 +414,9 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             ;
 
             if (builtin.is_test) {
-                std.debug.print(report_format, .{ addr, captured_stack, alloc_stack_trace, free_stack_trace });
+                std.debug.print(report_format, .{ addr, stacktrace, alloc_stack_trace, free_stack_trace });
             } else {
-                log.err(report_format, .{ addr, captured_stack, alloc_stack_trace, free_stack_trace });
+                log.err(report_format, .{ addr, stacktrace, alloc_stack_trace, free_stack_trace });
             }
         }
 
@@ -426,7 +424,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             @branchHint(.cold);
             if (!config.safety) @panic("Safety disabled");
             const addr = self.ptrFromNodeIdx(bucket_idx, node_idx);
-            const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
+            const alloc_stacktrace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
             const report_format =
                 \\ ------------------- MEMORY LEAK !!!! ----------------------
                 \\ A memory leak was detected at address 0x{X}
@@ -436,29 +434,21 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             ;
 
             if (builtin.is_test) {
-                std.debug.print(report_format, .{ addr, alloc_stack_trace });
+                std.debug.print(report_format, .{ addr, alloc_stacktrace });
             } else {
-                log.err(report_format, .{ addr, alloc_stack_trace });
+                log.err(report_format, .{ addr, alloc_stacktrace });
             }
         }
 
-        fn getCapturedStackTrace(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx, trace_type: SafetyData.TraceType) std.builtin.StackTrace {
+        fn getCapturedStackTrace(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx, trace_type: SafetyData.TraceType) *const debug.StackTrace {
             if (!config.safety) @panic("Safety disabled");
             const bucket_node_count = @as(u64, 1) << @as(u6, @intCast(max_order - bucket_idx - 1));
             const total_nodes = (@as(u64, 1) << @as(u6, @intCast(max_order))) - 1;
             const node_offset = total_nodes + 1 - bucket_node_count;
-            const stack_trace_node_idx = node_offset + node_idx.value;
-            const stack_trace_node = &self.safety_data.stacktraces[stack_trace_node_idx];
-            const alloc_addresses = &stack_trace_node[@intFromEnum(trace_type)];
-            var len: u64 = 0;
-            while (len < SafetyData.num_traces and alloc_addresses[len] != 0) {
-                len += 1;
-            }
-            const stack_trace: std.builtin.StackTrace = .{
-                .instruction_addresses = alloc_addresses,
-                .index = len,
-            };
-            return stack_trace;
+            const stacktrace_node_idx = node_offset + node_idx.value;
+            const stacktraces = &self.safety_data.stacktraces[stacktrace_node_idx];
+            const stacktrace = &stacktraces[@intFromEnum(trace_type)];
+            return stacktrace;
         }
 
         fn checkForLeak(self: *Self) void {

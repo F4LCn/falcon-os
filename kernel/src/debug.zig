@@ -114,7 +114,7 @@ pub fn init(alloc: std.mem.Allocator) !void {
 
 pub const StackTrace = struct {
     const num_traces = constants.num_stack_trace;
-    addresses: [num_traces]usize = .{0} ** constants.num_stack_trace,
+    addresses: [num_traces]usize = .{0} ** num_traces,
     index: usize = 0,
 
     pub fn capture(self: *@This(), ret_addr: usize) void {
@@ -131,14 +131,19 @@ pub const StackTrace = struct {
         self.index = self.addresses.len;
     }
 
-    pub fn toStdStacktrace(self: *@This()) std.builtin.StackTrace {
-        return .{ .instruction_addresses = &self.addresses, .index = self.index };
-    }
-
     pub fn format(
         self: @This(),
         writer: *std.Io.Writer,
     ) std.Io.Writer.Error!void {
+        // TODO: maybe extract test-specific behavior elsewhere ??
+        if (builtin.is_test) {
+            var addresses: [num_traces]usize = .{0} ** num_traces;
+            @memcpy(&addresses, &self.addresses);
+            const std_stacktrace: std.builtin.StackTrace = .{ .instruction_addresses = &addresses, .index = self.index };
+            try std_stacktrace.format(writer);
+            return;
+        }
+
         writeStackTrace(self, writer) catch |err| {
             try writer.print("Unable to print stack trace: {s}\n", .{@errorName(err)});
         };

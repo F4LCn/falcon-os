@@ -54,6 +54,8 @@ pub fn build(b: *std.Build) !void {
         .optimize = .Debug,
         .target = default_target,
     });
+    attachConstantsModule(b, tests_module);
+
     const tests = b.addTest(.{
         .name = "all_tests",
         .root_module = tests_module,
@@ -89,10 +91,13 @@ pub fn build(b: *std.Build) !void {
 }
 
 fn attachConstantsModule(b: *std.Build, module: *std.Build.Module) void {
-    const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
-
     const constants = b.addOptions();
-    constants.addOption(u64, "max_cpu", max_cpu_option);
+    if (b.available_options_map.get("max_cpu")) |_| {
+    } else {
+        const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
+        constants.addOption(u64, "max_cpu", max_cpu_option);
+    }
+
     constants.addOption(bool, "safety", module.optimize.? == .Debug or module.optimize.? == .ReleaseSafe);
     constants.addOption(comptime_int, "num_stack_trace", 5);
     constants.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
