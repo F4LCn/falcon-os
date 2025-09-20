@@ -108,11 +108,9 @@ const VAddr = packed struct(u64) {
     _pad: u16 = 0,
 };
 const VirtMemRange = struct {
-    // vm: *VMEM,
     start: VAddr,
     length: u64,
     type: ?VirtRangeType = null,
-    // mapped: bool = false,
 
     pub fn format(
         self: *const @This(),
@@ -248,7 +246,7 @@ pub const VMem = @This();
 
 extern const _kernel_end: u64;
 
-pub fn init(alloc: Allocator) !void {
+pub fn init(alloc: Allocator) !VMem {
     const root = Registers.readCR(.cr3);
     log.info("Got current pagemap: 0x{X}", .{root});
     var vmm = VirtualMemoryManager.init(alloc);

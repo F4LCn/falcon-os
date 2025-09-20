@@ -214,7 +214,7 @@ pub fn allocatePages(count: u64, args: struct { committed: bool = false }) Error
             mm.alloc.destroy(list_item);
             return range;
         } else if (list_item.range.length > requested_size) {
-            const range = .{ .start = list_item.range.start, .length = requested_size, .type = .used };
+            const range = PhysMemRange{ .start = list_item.range.start, .length = requested_size, .type = .used };
             list_item.range.start += requested_size;
             list_item.range.length -= requested_size;
             return range;

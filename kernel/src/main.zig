@@ -46,23 +46,12 @@ pub export fn kernelMain() callconv(.c) void {
 }
 
 pub fn failableMain() !void {
-    const alloc = heap.allocator();
-    var unmanaged_list = std.ArrayList(u32).empty;
-    var list = unmanaged_list.toManaged(alloc);
-    try list.append(1);
-    try list.append(10);
-    try list.append(5434);
-
-    for (list.items, 0..) |item, i| {
-        std.log.info("item[{d}] = {d}", .{ i, item });
-    }
-
     const permAlloc = heap.permanentAllocator();
     try debug.init(permAlloc);
 
     std.log.info("Initializing physical memory manager", .{});
     try pmem.init(permAlloc);
-    const range = pmem.allocatePage(10, .{});
+    const range = try pmem.allocatePages(10, .{});
     std.log.info("Allocated range: {any}", .{range});
     // pmem.printFreeRanges();
 
@@ -83,7 +72,8 @@ pub fn failableMain() !void {
     v_id_mapped.* = 654;
     std.log.info("value @ {d}", .{v_id_mapped.*});
 
-    heap.init(&kernel_vmem);
+    const kernel_heap = heap.init(&kernel_vmem);
+    _ = kernel_heap;
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });

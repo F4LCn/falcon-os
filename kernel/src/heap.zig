@@ -35,7 +35,7 @@ const SubHeap = struct {
     // addr belongs to this subheap
     // addr 0xADDR [ ... ] [ .. ]
 
-    alloc: mem.SubHeapAllocator,
+    alloc: mem.allocator.SubHeapAllocator,
     memory_start: u64,
     memory_len: u64,
     prev: ?*SubHeap = null,
@@ -151,7 +151,7 @@ fn _free(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: 
 test "Test subheap with fixed buffer allocator" {
     var buffer = [_]u8{0} ** 256;
     var fixed_buffer = std.heap.FixedBufferAllocator.init(&buffer);
-    var fixed_buffer_adapter = mem.adaptFixedBufferAllocator(&fixed_buffer);
+    var fixed_buffer_adapter = mem.allocator.adaptFixedBufferAllocator(&fixed_buffer);
 
     var fixed_buffer_subheap: SubHeap = .{
         .alloc = fixed_buffer_adapter.subHeapAllocator(),
@@ -168,10 +168,10 @@ test "Test subheap with fixed buffer allocator" {
 
 test "Test subheap with Buddy allocator" {
     var buffer: [128]u8 align(4096) = [_]u8{0} ** 128;
-    const AllocatorType = mem.buddy.Buddy(.{ .memory_start = 0x0, .memory_length = 128 });
-    var underlying_allocator = try AllocatorType.init_test(std.testing.allocator, @intFromPtr(&buffer));
+    const AllocatorType = mem.buddy.Buddy(.{});
+    var underlying_allocator = try AllocatorType.init(std.testing.allocator, &buffer);
     defer underlying_allocator.deinit();
-    var buddy_adapter = mem.adaptBuddyAllocator(AllocatorType, &underlying_allocator);
+    var buddy_adapter = mem.allocator.adaptBuddyAllocator(AllocatorType, &underlying_allocator);
 
     var fixed_buffer_subheap: SubHeap = .{
         .alloc = buddy_adapter.subHeapAllocator(),
