@@ -10,6 +10,7 @@ const Allocator = std.mem.Allocator;
 const pmem = @import("pmem.zig");
 
 const log = std.log.scoped(.vmem);
+const Error = error{OutOfVirtMemory};
 
 const ReadWrite = enum(u1) {
     read_execute = 0,
@@ -152,7 +153,7 @@ const VirtMemRangeListItem = struct {
     }
 };
 const VirtMemRangeList = DoublyLinkedList(VirtMemRangeListItem, .prev, .next);
-const VirtualMemoryManager = struct {
+pub const VirtualMemoryManager = struct {
     const Self = @This();
     alloc: Allocator,
     lock: SpinLock,
@@ -243,11 +244,11 @@ root: u64,
 levels: u8,
 vmm: VirtualMemoryManager,
 
-const VMEM = @This();
+pub const VMem = @This();
 
 extern const _kernel_end: u64;
 
-pub fn init(alloc: Allocator) !@This() {
+pub fn init(alloc: Allocator) !void {
     const root = Registers.readCR(.cr3);
     log.info("Got current pagemap: 0x{X}", .{root});
     var vmm = VirtualMemoryManager.init(alloc);
@@ -338,8 +339,8 @@ pub fn reserveRange(self: *@This(), start: u64, length: u64, typ: VirtRangeType)
     self.reserved_ranges.append(reserved_range_item);
 }
 
-pub fn allocateRange(self: *@This(), length: u64, args: struct { typ: ?VirtRangeType = null }) VirtMemRange {
-    // allocate a range either from free_ranges (typ is null) or reserved_ranges
+pub fn allocateRange(self: *@This(), count: u64, args: struct { typ: ?VirtRangeType = null }) !VirtMemRange {
+    const length = count * arch.constants.default_page_size;
     if (args.typ) |typ| {
         var iter = self.vmm.reserved_ranges.iter();
         while (iter.next()) |item| {
@@ -375,7 +376,7 @@ pub fn allocateRange(self: *@This(), length: u64, args: struct { typ: ?VirtRange
         }
     }
 
-    unreachable;
+    return error.OutOfVirtMemory;
 }
 
 pub fn freeRange(self: *@This(), range: *VirtMemRange) void {
@@ -438,13 +439,9 @@ fn getPageTableEntry(self: *const @This(), vaddr: VAddr, flags: MmapFlags) !*Pag
 fn getOrCreateMapping(mapping: *PageMapping, idx: u9) !*PageMapping {
     const next_level: *PageMapping.Entry = &mapping.mappings[idx];
     if (!next_level.present) {
-        const maybe_page = pmem.allocatePage(1, .{});
-        if (maybe_page) |page_ptr| {
-            writeEntry(next_level, page_ptr.start, .{ .present = true, .read_write = .read_write });
-            return @ptrFromInt(page_ptr.start);
-        } else {
-            return error.PhysicalAllocationError;
-        }
+        const page_ptr = try pmem.allocatePages(1, .{});
+        writeEntry(next_level, page_ptr.start, .{ .present = true, .read_write = .read_write });
+        return @ptrFromInt(page_ptr.start);
     }
     const addr = next_level.getAddr();
     return @ptrFromInt(addr);

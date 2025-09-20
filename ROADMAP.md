@@ -40,7 +40,7 @@
   - Early init
     * [x] Cpu identification and capabilities (initial setup)
     * [x] Setup serial logger
-    * [-] Early heap allocation
+    * [x] Early heap allocation
     * [x] Linked list implementation
     * [x] GDT/IDT/TSS definition
     * [x] Hardware exceptions & interrupts
@@ -51,8 +51,8 @@
     * [ ] Allocators hierarchy
       * [-] Physical memory manager / Frame allocator
       * [-] Virtual memory manager / Page allocator
-      * [-] Buddy allocator (almost there)
-      * [ ] General purpose heap allocator
+      * [x] Buddy allocator
+      * [-] General purpose heap allocator
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] SMP
     * [ ] Processes, Threads & context switching

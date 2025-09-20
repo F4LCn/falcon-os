@@ -10,6 +10,7 @@ extern var bootinfo: BootInfo;
 var mmap_entries: []BootInfo.MmapEntry = undefined;
 
 const log = std.log.scoped(.pmem);
+const Error = error{OutOfPhysMemory};
 
 const PhysRangeType = enum {
     used,
@@ -194,7 +195,7 @@ pub fn uncommitPages(count: u64) void {
     mm.uncommitted_pages_count += count;
 }
 
-pub fn allocatePage(count: u64, args: struct { committed: bool = false, zero: bool = true }) ?PhysMemRange {
+pub fn allocatePages(count: u64, args: struct { committed: bool = false }) Error!PhysMemRange {
     mm.lock.lock();
     defer mm.lock.unlock();
 
@@ -206,33 +207,20 @@ pub fn allocatePage(count: u64, args: struct { committed: bool = false, zero: bo
 
     const requested_size = count * arch.constants.default_page_size;
     var iter = mm.free_ranges.iter();
-    var range: ?PhysMemRange = null;
     while (iter.next()) |list_item| {
         if (list_item.range.length == requested_size) {
-            range = list_item.range;
+            const range = list_item.range;
             mm.free_ranges.remove(list_item);
             mm.alloc.destroy(list_item);
             return range;
         } else if (list_item.range.length > requested_size) {
-            range = .{ .start = list_item.range.start, .length = requested_size, .type = .used };
+            const range = .{ .start = list_item.range.start, .length = requested_size, .type = .used };
             list_item.range.start += requested_size;
             list_item.range.length -= requested_size;
             return range;
         }
     }
-
-    if (args.zero) {
-        if (range) |r| {
-            _ = r;
-
-            // FIXME: this will crash if we don't virtual map the memory region before writing to it
-            // const ptr: [*]u8 = @ptrFromInt(r.start);
-            // const slice = ptr[0..requested_size];
-            // @memset(slice, 0);
-        }
-    }
-
-    return range;
+    return error.OutOfPhysMemory;
 }
 
 pub fn freePages(range: PhysMemRange) void {

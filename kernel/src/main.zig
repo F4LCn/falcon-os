@@ -83,6 +83,8 @@ pub fn failableMain() !void {
     v_id_mapped.* = 654;
     std.log.info("value @ {d}", .{v_id_mapped.*});
 
+    heap.init(&kernel_vmem);
+
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
     std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});

@@ -59,6 +59,7 @@ pub fn build(b: *std.Build) !void {
     const tests = b.addTest(.{
         .name = "all_tests",
         .root_module = tests_module,
+        .use_llvm = true,
     });
 
     const run_tests = b.addRunArtifact(tests);
@@ -92,8 +93,7 @@ pub fn build(b: *std.Build) !void {
 
 fn attachConstantsModule(b: *std.Build, module: *std.Build.Module) void {
     const constants = b.addOptions();
-    if (b.available_options_map.get("max_cpu")) |_| {
-    } else {
+    if (b.available_options_map.get("max_cpu")) |_| {} else {
         const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
         constants.addOption(u64, "max_cpu", max_cpu_option);
     }
