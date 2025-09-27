@@ -2,9 +2,12 @@ pub const pmem = @import("memory/pmem.zig");
 pub const vmem = @import("memory/vmem.zig");
 pub const buddy = @import("memory/buddy.zig");
 pub const allocator = @import("memory/allocator.zig");
+
+pub const kb = 1024;
+pub const mb = kb * kb;
+pub const gb = mb * kb;
 // NOTE: this module is the entrypoint to everything memory related
 // TODO: move all functionality that interact between pmem and vmem here
-
 
 test {
     _ = @import("memory/pmem.zig");

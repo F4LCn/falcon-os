@@ -1,6 +1,7 @@
 const std = @import("std");
 const debug = @import("../debug.zig");
 const builtin = @import("builtin");
+const mem = @import("../memory.zig");
 
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
 
@@ -189,6 +190,14 @@ pub fn Buddy(comptime config: BuddyConfig) type {
                     .resize = std.mem.Allocator.noResize,
                     .remap = std.mem.Allocator.noRemap,
                 },
+            };
+        }
+
+        pub fn subHeapAllocator(self: *Self) mem.allocator.SubHeapAllocator {
+            return .{
+                .ptr = self,
+                .can_alloc = _canAlloc,
+                .create_allocator = _createAllocator,
             };
         }
 
@@ -493,16 +502,26 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             }
         }
 
-        fn _alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
-            const self: *@This() = @ptrCast(@alignCast(context));
+        fn _createAllocator(ptr: *anyopaque) std.mem.Allocator {
+            const self: *Self = @ptrCast(@alignCast(ptr));
+            return self.allocator();
+        }
+
+        fn _canAlloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment) bool {
+            const self: *Self = @ptrCast(@alignCast(ptr));
+            return self.canAlloc(len, alignment);
+        }
+
+        fn _alloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+            const self: *@This() = @ptrCast(@alignCast(ptr));
             const res = self.allocate(len, alignment, ret_addr) catch {
                 return null;
             };
             return res;
         }
 
-        fn _free(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
-            const self: *@This() = @ptrCast(@alignCast(context));
+        fn _free(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
+            const self: *@This() = @ptrCast(@alignCast(ptr));
             self.free(memory.ptr, memory.len, alignment, ret_addr) catch {
                 @panic("Unexpected error while freeing memory");
             };

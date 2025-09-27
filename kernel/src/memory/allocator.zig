@@ -24,14 +24,6 @@ pub fn AllocatorAdapter(comptime T: type) type {
         can_alloc: CanAllocFn,
 
         pub fn init(alloc: *T, args: struct { can_alloc: ?CanAllocFn = null }) @This() {
-            // const can_alloc_fn = comptime blk: {
-            //     if (@hasDecl(T, "canAlloc")) {
-            //         break :blk T.canAlloc;
-            //     } else {
-            //         break :blk args.can_alloc;
-            //     }
-            // };
-
             const can_alloc_fn = if (@hasDecl(T, "canAlloc")) blk: {
                 break :blk T.canAlloc;
             } else args.can_alloc.?;
@@ -68,12 +60,14 @@ fn fixedBufferAllocatorCanAlloc(self: *std.heap.FixedBufferAllocator, len: usize
     const new_end_index = adjusted_index + len;
     return new_end_index <= self.buffer.len;
 }
-pub fn adaptFixedBufferAllocator(fixed_buffer: *std.heap.FixedBufferAllocator) AllocatorAdapter(std.heap.FixedBufferAllocator) {
+pub fn adaptFixedBufferAllocator(alloc: std.mem.Allocator, fixed_buffer: *std.heap.FixedBufferAllocator) !*AllocatorAdapter(std.heap.FixedBufferAllocator) {
     const AdaptedAllocator = AllocatorAdapter(std.heap.FixedBufferAllocator);
-    return AdaptedAllocator.init(
+    const adapter = try alloc.create(AdaptedAllocator);
+    adapter.* = AdaptedAllocator.init(
         fixed_buffer,
         .{ .can_alloc = fixedBufferAllocatorCanAlloc },
     );
+    return adapter;
 }
 
 pub fn adaptBuddyAllocator(comptime T: type, buddy: *T) AllocatorAdapter(T) {

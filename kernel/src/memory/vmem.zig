@@ -262,14 +262,15 @@ pub fn init(alloc: Allocator) !VMem {
     vmm.quickmap_pt_entry.start = @bitCast(quickmap_pt_entry_start);
     vmm.quickmap_pt_entry.length = quickmap_pt_entry_length;
 
-    log.info("Try to reg ranges", .{});
+    log.info("Try to register ranges", .{});
+    // TODO: create a usable page map for the kernel
+    // TODO: mark already used vmem pages
     try vmm.registerRange(quickmap_start, quickmap_length, .{ .typ = .quickmap });
     try vmm.registerRange(quickmap_pt_entry_start, quickmap_pt_entry_length, .{ .typ = .quickmap_pte });
     try vmm.registerRange(0x1000, 0x9000, .{});
     try vmm.registerRange(0x3000, 0x5000, .{});
     try vmm.registerRange(0x9000, 0x19000, .{});
-    try vmm.registerRange(0xB0000, 0x10000, .{});
-    try vmm.registerRange(0x22000, 0xB0000 - 0x22000, .{});
+    try vmm.registerRange(0xC00000000, 250000000, .{});
     try vmm.registerRange(0xffffffffc0000000, 64 * 1024 * 1024, .{ .typ = .framebuffer });
 
     return .{
@@ -405,7 +406,7 @@ pub fn quickUnmap(self: *@This()) void {
 pub fn mmap(self: *@This(), prange: pmem.PhysMemRange, vrange: VirtMemRange, flags: MmapFlags) !void {
     if (prange.length > vrange.length) return error.TooSmall;
 
-    const physical_addr = std.mem.alignBackward(u64, prange.start, constants.arch_page_size);
+    const physical_addr = std.mem.alignBackward(u64, prange.start, arch.constants.default_page_size);
     const virtual_addr = vrange.start;
 
     const entry = try self.getPageTableEntry(virtual_addr, flags);

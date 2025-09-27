@@ -4,8 +4,8 @@ const DoubleLinkedList = @import("list.zig").DoublyLinkedList;
 const mem = @import("memory.zig");
 const arch = @import("arch");
 
-const permanent_heap: [constants.permanent_heap_size]u8 linksection(".kernel_heap") = undefined;
-const kernel_heap: [constants.heap_size]u8 linksection(".kernel_heap") = undefined;
+var permanent_heap: [constants.permanent_heap_size]u8 linksection(".kernel_heap") = undefined;
+var kernel_heap: [constants.heap_size]u8 linksection(".kernel_heap") = undefined;
 
 var _permanent_alloc = std.heap.FixedBufferAllocator.init(@constCast(&permanent_heap));
 var _kernel_alloc = std.heap.FixedBufferAllocator.init(@constCast(&kernel_heap));
@@ -41,6 +41,14 @@ const SubHeap = struct {
     prev: ?*SubHeap = null,
     next: ?*SubHeap = null,
 
+    pub fn initFromSlice(alloc: mem.allocator.SubHeapAllocator, memory: []u8) SubHeap {
+        return .{
+            .alloc = alloc,
+            .memory_start = @intFromPtr(memory.ptr),
+            .memory_len = memory.len,
+        };
+    }
+
     pub fn canAlloc(self: *SubHeap, len: usize, alignment: std.mem.Alignment) bool {
         return self.alloc.canAlloc(len, alignment);
     }
@@ -61,8 +69,18 @@ total_allocated_memory: u64 = 0,
 // TODO: build an allocation tracking that basically lets up build a histogram of sizes/alignments
 // so that we can think about optimizing our memory usage patterns
 
-pub fn init(vmm: *mem.vmem.VMem) Self {
-    return .{ .vmm = vmm };
+pub fn earlyInit() !Self {
+    const perm_alloc = permanentAllocator();
+    var heap: Self = .{ .vmm = undefined };
+    const early_subheap = try perm_alloc.create(SubHeap);
+    const subheap_allocator = try mem.allocator.adaptFixedBufferAllocator(perm_alloc, &_kernel_alloc);
+    early_subheap.* = .initFromSlice(subheap_allocator.subHeapAllocator(), &kernel_heap);
+    heap.subheaps.append(early_subheap);
+    heap.total_free_memory += kernel_heap.len;
+    return heap;
+}
+pub fn setVmm(self: *Self, vmm: *mem.vmem.VMem) void {
+    self.vmm = vmm;
 }
 
 // NOTE: allocatePages
@@ -70,7 +88,7 @@ pub fn init(vmm: *mem.vmem.VMem) Self {
 // NOTE: allocatePhysical
 // TODO: on top of allocatePages build a page_allocator (std.mem.Allocator)
 
-pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false, committed: bool = false }) [*]align(arch.constants.default_page_size) u8 {
+pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false, committed: bool = false }) ![*]align(arch.constants.default_page_size) u8 {
     const pmem_range = try mem.pmem.allocatePages(count, .{ .committed = args.committed });
     const vmem_range = try self.vmm.allocateRange(count, .{});
     try self.vmm.mmap(pmem_range, vmem_range, mem.vmem.DefaultMmapFlags);
@@ -79,30 +97,33 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
     if (args.zero) {
         @memset(allocated_ptr[0 .. count * arch.constants.default_page_size], 0);
     } else {
-        // FIXME: we should figure out how to generate and splat a known (predictable) pattern
-        @memset(allocated_ptr[0 .. count * arch.constants.default_page_size], 0xAABBCCDD11223344);
+        if (constants.safety) {
+            // FIXME: we should figure out how to generate and splat a known (predictable) pattern
+            const u128_slice = std.mem.bytesAsSlice(u64, allocated_ptr[0 .. count * arch.constants.default_page_size]);
+            @memset(u128_slice, 0xAABBCCDD11223344);
+        }
     }
     return allocated_ptr;
 }
 
-const FriendAllocator = mem.buddy.Buddy(.{ .memory_start = 0, .memory_length = undefined });
+// TODO: (opt.) expose buddy min allocation size
 pub fn extend(self: *Self, len: u64) !void {
     const alloc = permanentAllocator();
     const subheap = try alloc.create(SubHeap);
-    const subheap_allocator = try alloc.create(FriendAllocator);
+    const buddy_allocator = try alloc.create(mem.buddy.Buddy(.{}));
 
-    const page_count = std.mem.alignBackward(u64, len, arch.constants.default_page_size);
-    var memory = try allocatePages(page_count);
-    // TODO: USE THIS !!!
-    _ = &memory;
-    subheap_allocator.* = .init(permanentAllocator());
+    const page_aligned_len = std.mem.alignBackward(u64, len, arch.constants.default_page_size);
+    const page_count = @divExact(page_aligned_len, arch.constants.default_page_size);
+    const memory = try self.allocatePages(page_count, .{});
+    const memory_slice = memory[0 .. page_count * arch.constants.default_page_size];
+    buddy_allocator.* = try .init(alloc, memory_slice);
     subheap.* = .{
-        .memory_start = @intFromPtr(memory.ptr),
-        .memory_len = memory.len,
-        .alloc = mem.adaptBuddyAllocator(subheap_allocator),
+        .memory_start = @intFromPtr(memory_slice.ptr),
+        .memory_len = memory_slice.len,
+        .alloc = buddy_allocator.subHeapAllocator(),
     };
     self.subheaps.append(subheap);
-    self.total_free_memory += memory.len;
+    self.total_free_memory += memory_slice.len;
 }
 
 pub fn allocator(self: *Self) std.mem.Allocator {
@@ -127,7 +148,6 @@ fn _alloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: u
             return subheap_alloc.rawAlloc(len, alignment, ret_addr);
         }
     }
-    std.debug.print("Cant allocate :(", .{});
     return null;
 }
 

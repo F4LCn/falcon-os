@@ -196,6 +196,7 @@ pub fn uncommitPages(count: u64) void {
 }
 
 pub fn allocatePages(count: u64, args: struct { committed: bool = false }) Error!PhysMemRange {
+    log.debug("allocating {d} pages", .{count});
     mm.lock.lock();
     defer mm.lock.unlock();
 

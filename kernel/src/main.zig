@@ -5,8 +5,7 @@ const logger = @import("log/logger.zig");
 const cpu = @import("cpu.zig");
 const serial = @import("log/serial.zig");
 const heap = @import("heap.zig");
-const pmem = @import("memory/pmem.zig");
-const vmem = @import("memory/vmem.zig");
+const mem = @import("memory.zig");
 const descriptors = @import("descriptors.zig");
 const debug = @import("debug.zig");
 const arch = @import("arch");
@@ -49,18 +48,28 @@ pub fn failableMain() !void {
     const permAlloc = heap.permanentAllocator();
     try debug.init(permAlloc);
 
+    var kernel_heap = try heap.earlyInit();
+    const kernel_alloc = kernel_heap.allocator();
+    const allocated = try kernel_alloc.alloc(u64, 10);
+    defer kernel_alloc.free(allocated);
+    allocated[0] = 42;
+    for (0.., allocated) |i, a| {
+        std.log.info("allocated[{d}] = {d}", .{ i, a });
+    }
+
     std.log.info("Initializing physical memory manager", .{});
-    try pmem.init(permAlloc);
-    const range = try pmem.allocatePages(10, .{});
+    try mem.pmem.init(permAlloc);
+    const range = try mem.pmem.allocatePages(10, .{});
     std.log.info("Allocated range: {any}", .{range});
     // pmem.printFreeRanges();
 
     std.log.info("Initializing virtual memory manager", .{});
-    var kernel_vmem = try vmem.init(permAlloc);
+    var kernel_vmem = try mem.vmem.init(permAlloc);
+    kernel_heap.setVmm(&kernel_vmem);
     // kernel_vmem.printFreeRanges();
     // kernel_vmem.printReservedRanges();
-    std.log.info("Quick mapping", .{});
 
+    std.log.info("Quick mapping", .{});
     const addr = kernel_vmem.quickMap(0x14000);
     const v_id_mapped: *u64 = @ptrFromInt(0x14000);
     v_id_mapped.* = 456;
@@ -72,15 +81,15 @@ pub fn failableMain() !void {
     v_id_mapped.* = 654;
     std.log.info("value @ {d}", .{v_id_mapped.*});
 
-    const kernel_heap = heap.init(&kernel_vmem);
-    _ = kernel_heap;
-
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
     std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
 
     descriptors.init();
 
-    v.* = 321;
-    std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
+    try kernel_heap.extend(200 * mem.mb);
+
+    // v.* = 321;
+    // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
+    @panic("test");
 }
