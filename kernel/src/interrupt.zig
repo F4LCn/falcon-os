@@ -32,7 +32,6 @@ export fn dispatchInterrupt(context: *Context) callconv(.c) void {
     const vector = context.vector;
     const handler_list = handlers_list[vector];
     var iter = handler_list.iter();
-    log.info("Handlers list: {any}", .{handler_list});
     while (iter.next()) |handler| {
         if (handler.handle(context)) {
             return;

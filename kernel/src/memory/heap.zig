@@ -1,7 +1,10 @@
 const std = @import("std");
 const constants = @import("constants");
-const DoubleLinkedList = @import("list.zig").DoublyLinkedList;
-const mem = @import("memory.zig");
+const DoubleLinkedList = @import("../list.zig").DoublyLinkedList;
+const pmem = @import("pmem.zig");
+const vmem = @import("vmem.zig");
+const mem_allocator = @import("allocator.zig");
+const buddy = @import("buddy.zig");
 const arch = @import("arch");
 
 var permanent_heap: [constants.permanent_heap_size]u8 linksection(".kernel_heap") = undefined;
@@ -35,13 +38,13 @@ const SubHeap = struct {
     // addr belongs to this subheap
     // addr 0xADDR [ ... ] [ .. ]
 
-    alloc: mem.allocator.SubHeapAllocator,
+    alloc: mem_allocator.SubHeapAllocator,
     memory_start: u64,
     memory_len: u64,
     prev: ?*SubHeap = null,
     next: ?*SubHeap = null,
 
-    pub fn initFromSlice(alloc: mem.allocator.SubHeapAllocator, memory: []u8) SubHeap {
+    pub fn initFromSlice(alloc: mem_allocator.SubHeapAllocator, memory: []u8) SubHeap {
         return .{
             .alloc = alloc,
             .memory_start = @intFromPtr(memory.ptr),
@@ -62,7 +65,7 @@ const SubHeap = struct {
 const SubHeapList = DoubleLinkedList(SubHeap, .prev, .next);
 
 const Self = @This();
-vmm: *mem.vmem.VMem,
+virt_alloc: *vmem.VirtualAllocator,
 subheaps: SubHeapList = .{},
 total_free_memory: u64 = 0,
 total_allocated_memory: u64 = 0,
@@ -71,16 +74,16 @@ total_allocated_memory: u64 = 0,
 
 pub fn earlyInit() !Self {
     const perm_alloc = permanentAllocator();
-    var heap: Self = .{ .vmm = undefined };
+    var heap: Self = .{ .virt_alloc = undefined };
     const early_subheap = try perm_alloc.create(SubHeap);
-    const subheap_allocator = try mem.allocator.adaptFixedBufferAllocator(perm_alloc, &_kernel_alloc);
+    const subheap_allocator = try mem_allocator.adaptFixedBufferAllocator(perm_alloc, &_kernel_alloc);
     early_subheap.* = .initFromSlice(subheap_allocator.subHeapAllocator(), &kernel_heap);
     heap.subheaps.append(early_subheap);
     heap.total_free_memory += kernel_heap.len;
     return heap;
 }
-pub fn setVmm(self: *Self, vmm: *mem.vmem.VMem) void {
-    self.vmm = vmm;
+pub fn setVmm(self: *Self, virt_alloc: *vmem.VirtualAllocator) void {
+    self.virt_alloc = virt_alloc;
 }
 
 // NOTE: allocatePages
@@ -89,9 +92,10 @@ pub fn setVmm(self: *Self, vmm: *mem.vmem.VMem) void {
 // TODO: on top of allocatePages build a page_allocator (std.mem.Allocator)
 
 pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false, committed: bool = false }) ![*]align(arch.constants.default_page_size) u8 {
-    const pmem_range = try mem.pmem.allocatePages(count, .{ .committed = args.committed });
-    const vmem_range = try self.vmm.allocateRange(count, .{});
-    try self.vmm.mmap(pmem_range, vmem_range, mem.vmem.DefaultMmapFlags);
+    const pmem_range = try pmem.allocatePages(count, .{ .committed = args.committed });
+    const vmem_range = try self.virt_alloc.allocateRange(count, .{});
+    try self.virt_alloc.mmap(pmem_range, vmem_range, vmem.DefaultMmapFlags, .{});
+    std.log.info("hehe 2", .{});
     const allocated_range_addr: u64 = @bitCast(vmem_range.start);
     var allocated_ptr: [*]align(arch.constants.default_page_size) u8 = @ptrFromInt(allocated_range_addr);
     if (args.zero) {
@@ -99,8 +103,8 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
     } else {
         if (constants.safety) {
             // FIXME: we should figure out how to generate and splat a known (predictable) pattern
-            const u128_slice = std.mem.bytesAsSlice(u64, allocated_ptr[0 .. count * arch.constants.default_page_size]);
-            @memset(u128_slice, 0xAABBCCDD11223344);
+            const u64_slice = std.mem.bytesAsSlice(u64, allocated_ptr[0 .. count * arch.constants.default_page_size]);
+            @memset(u64_slice, 0xAABBCCDD11223344);
         }
     }
     return allocated_ptr;
@@ -110,13 +114,16 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
 pub fn extend(self: *Self, len: u64) !void {
     const alloc = permanentAllocator();
     const subheap = try alloc.create(SubHeap);
-    const buddy_allocator = try alloc.create(mem.buddy.Buddy(.{}));
+    const BuddyAllocatorType = buddy.Buddy(.{});
+    const buddy_allocator = try alloc.create(BuddyAllocatorType);
 
     const page_aligned_len = std.mem.alignBackward(u64, len, arch.constants.default_page_size);
     const page_count = @divExact(page_aligned_len, arch.constants.default_page_size);
-    const memory = try self.allocatePages(page_count, .{});
+    const memory = self.allocatePages(page_count, .{}) catch unreachable;
     const memory_slice = memory[0 .. page_count * arch.constants.default_page_size];
+    std.log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
     buddy_allocator.* = try .init(alloc, memory_slice);
+    std.log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
     subheap.* = .{
         .memory_start = @intFromPtr(memory_slice.ptr),
         .memory_len = memory_slice.len,
@@ -171,7 +178,7 @@ fn _free(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: 
 test "Test subheap with fixed buffer allocator" {
     var buffer = [_]u8{0} ** 256;
     var fixed_buffer = std.heap.FixedBufferAllocator.init(&buffer);
-    var fixed_buffer_adapter = mem.allocator.adaptFixedBufferAllocator(&fixed_buffer);
+    var fixed_buffer_adapter = mem_allocator.adaptFixedBufferAllocator(&fixed_buffer);
 
     var fixed_buffer_subheap: SubHeap = .{
         .alloc = fixed_buffer_adapter.subHeapAllocator(),
@@ -188,10 +195,10 @@ test "Test subheap with fixed buffer allocator" {
 
 test "Test subheap with Buddy allocator" {
     var buffer: [128]u8 align(4096) = [_]u8{0} ** 128;
-    const AllocatorType = mem.buddy.Buddy(.{});
+    const AllocatorType = buddy.Buddy(.{});
     var underlying_allocator = try AllocatorType.init(std.testing.allocator, &buffer);
     defer underlying_allocator.deinit();
-    var buddy_adapter = mem.allocator.adaptBuddyAllocator(AllocatorType, &underlying_allocator);
+    var buddy_adapter = mem_allocator.adaptBuddyAllocator(AllocatorType, &underlying_allocator);
 
     var fixed_buffer_subheap: SubHeap = .{
         .alloc = buddy_adapter.subHeapAllocator(),
