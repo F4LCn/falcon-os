@@ -27,19 +27,17 @@ const PhysRangeType = enum {
         return @enumFromInt(@intFromEnum(typ));
     }
 };
-const PAddr = u64;
+pub const PAddr = arch.memory.PAddr;
 pub const PhysMemRange = struct {
     start: PAddr,
     length: u64,
-    type: PhysRangeType,
+    typ: PhysRangeType,
 
     pub fn format(
         self: *const @This(),
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) {s}]", .{ self, self.start, self.start + self.length, self.length, @tagName(self.type) });
+        try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) {s}]", .{ self, self.start, self.start + self.length, self.length, @tagName(self.typ) });
     }
 };
 const PhysMemRangeListItem = struct {
@@ -50,11 +48,9 @@ const PhysMemRangeListItem = struct {
 
     pub fn format(
         self: *const @This(),
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        try writer.print("{*}[range={any}, p=0x{X}, n=0x{X}]", .{ self, &self.range, @intFromPtr(self.prev), @intFromPtr(self.next) });
+        try writer.print("{*}[range={f}]", .{ self, &self.range });
     }
 };
 const PhysMemRangeList = DoublyLinkedList(PhysMemRangeListItem, .prev, .next);
@@ -111,11 +107,19 @@ pub fn init(alloc: Allocator) !void {
     mm.uncommitted_pages_count = mm.free_pages_count;
 }
 
-pub fn printFreeRanges() void {
+pub fn printRanges() void {
     var iter = mm.free_ranges.iter();
+    log.debug("Free Physical memory ranges:", .{});
     while (iter.next()) |list_item| {
-        log.debug("{any}", .{list_item});
+        log.debug("{f}", .{list_item});
     }
+
+    iter = mm.reserved_ranges.iter();
+    log.debug("Reserved Physical memory ranges:", .{});
+    while (iter.next()) |list_item| {
+        log.debug("{f}", .{list_item});
+    }
+
     log.debug("Total system memory: {X}", .{mm.total_memory});
 }
 
@@ -150,7 +154,7 @@ fn initRanges() !void {
         const len = entry.getLen();
         const typ = PhysRangeType.fromMmapEntryType(entry.getType());
         if (len == 0) continue;
-        const range: PhysMemRange = .{ .start = ptr, .length = len, .type = typ };
+        const range: PhysMemRange = .{ .start = ptr, .length = len, .typ = typ };
         const list_item = try mm.alloc.create(PhysMemRangeListItem);
         list_item.* = .{ .range = range };
         mm.memory_ranges.append(list_item);
@@ -215,7 +219,7 @@ pub fn allocatePages(count: u64, args: struct { committed: bool = false }) Error
             mm.alloc.destroy(list_item);
             return range;
         } else if (list_item.range.length > requested_size) {
-            const range = PhysMemRange{ .start = list_item.range.start, .length = requested_size, .type = .used };
+            const range = PhysMemRange{ .start = list_item.range.start, .length = requested_size, .typ = .used };
             list_item.range.start += requested_size;
             list_item.range.length -= requested_size;
             return range;

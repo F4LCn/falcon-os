@@ -1,3 +1,5 @@
+const memory = @import("memory.zig");
+
 pub const CpuidResult = struct {
     eax: u32,
     ebx: u32,
@@ -33,4 +35,11 @@ pub fn halt() void {
 
 pub fn haltEternally() noreturn {
     while (true) asm volatile ("hlt");
+}
+
+pub fn invalidateVirtualAddress(addr: memory.VAddrInt) void {
+    asm volatile ("invlpg (%[addr])"
+        :
+        : [addr] "r" (addr),
+        : .{ .memory = true });
 }

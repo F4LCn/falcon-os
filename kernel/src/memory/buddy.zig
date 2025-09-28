@@ -1,7 +1,7 @@
 const std = @import("std");
 const debug = @import("../debug.zig");
 const builtin = @import("builtin");
-const mem = @import("../memory.zig");
+const mem_allocator = @import("allocator.zig");
 
 const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
 
@@ -193,7 +193,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             };
         }
 
-        pub fn subHeapAllocator(self: *Self) mem.allocator.SubHeapAllocator {
+        pub fn subHeapAllocator(self: *Self) mem_allocator.SubHeapAllocator {
             return .{
                 .ptr = self,
                 .can_alloc = _canAlloc,
