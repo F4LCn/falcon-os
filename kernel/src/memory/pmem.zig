@@ -159,17 +159,18 @@ fn initRanges() !void {
         list_item.* = .{ .range = range };
         mm.memory_ranges.append(list_item);
         mm.total_memory += range.length;
-        if (typ == .free) {
-            const free_list_item = try mm.alloc.create(PhysMemRangeListItem);
-            free_list_item.* = .{ .range = range };
-            mm.free_ranges.append(free_list_item);
-            mm.free_pages_count += @divExact(len, arch.constants.default_page_size);
-        } else {
-            const reserved_list_item = try mm.alloc.create(PhysMemRangeListItem);
-            reserved_list_item.* = .{ .range = range };
-            mm.reserved_ranges.append(reserved_list_item);
-            mm.reserved_pages_count += @divExact(len, arch.constants.default_page_size);
-        }
+        const list, const pages_count = blk: {
+            if (typ == .free) {
+                break :blk .{ &mm.free_ranges, &mm.free_pages_count };
+            } else {
+                break :blk .{ &mm.reserved_ranges, &mm.reserved_pages_count };
+            }
+        };
+
+        const range_list_item = try mm.alloc.create(PhysMemRangeListItem);
+        range_list_item.* = .{ .range = range };
+        list.append(range_list_item);
+        pages_count.* += @divExact(len, arch.constants.default_page_size);
     }
 }
 
