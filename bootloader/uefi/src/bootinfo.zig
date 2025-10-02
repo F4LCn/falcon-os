@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const BootInfo = packed struct {
+pub const BootInfo = extern struct {
     pub const BootloaderType = enum(u8) {
         BIOS = 0,
         UEFI = 1,
@@ -56,21 +56,20 @@ pub const BootInfo = packed struct {
         }
     };
 
-
-    magic: u32 = 0x464C434E,
+    magic: [4]u8 = .{ 'F', 'L', 'C', 'N' }, //0x464C434E
     size: u32 = 96,
     bootloader_type: BootloaderType,
-    unused0: u24 = undefined,
-    fb_ptr: u64 = 0,
+    unused0: [3]u8 = undefined,
+    fb_ptr: u64 align(1) = 0,
     fb_width: u32 = 0,
     fb_height: u32 = 0,
     fb_scanline_bytes: u32 = 0,
     fb_pixelformat: PixelFormat = @enumFromInt(0),
     unused1: u8 = undefined,
-    debug_info_ptr: u64 = 0,
-    unused2: u176 = undefined,
+    debug_info_ptr: u64 align(1) = 0,
+    unused2: [22]u8 = undefined,
     acpi_ptr: u64 = 0,
-    unused3: u192 = undefined,
+    unused3: [24]u8 = undefined,
     mmap: MmapEntry = undefined,
 };
 

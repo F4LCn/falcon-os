@@ -338,10 +338,22 @@ fn mapKernelSpace(
             AddressSpace.DefaultMmapFlags,
         );
     }
+    // Identity mapping - Low memory
+    const low_memory_limit: u64 = 0x10000;
+    log.debug("Mapping identity low memory 0 -> 0x{X}", .{low_memory_limit});
+    var i: u64 = 0;
+    while (i < low_memory_limit) : (i += Constants.arch_page_size) {
+        log.debug("Mapping identity 0x{X}", .{i});
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(i) },
+            .{ .paddr = @bitCast(i) },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
     // Identity mapping
     const identity_map_size: u64 = MemHelper.gb(4);
     log.debug("Mapping identity 512mb 0x{X}", .{identity_map_size});
-    var i: u64 = 0;
+    i = 0x400000;
     while (i < identity_map_size) : (i += Constants.arch_page_size) {
         log.debug("Mapping identity 0x{X}", .{i});
         try addr_space.mmap(
