@@ -4,11 +4,11 @@ const BootInfo = @import("bootinfo.zig").BootInfo;
 const logger = @import("log/logger.zig");
 const cpu = @import("cpu.zig");
 const serial = @import("log/serial.zig");
-const heap = @import("memory/heap.zig");
 const mem = @import("memory.zig");
 const descriptors = @import("descriptors.zig");
 const debug = @import("debug.zig");
 const arch = @import("arch");
+const Memory = @import("memory.zig");
 const panicFn = @import("panic.zig").panicFn;
 
 pub const panic = std.debug.FullPanic(panicFn);
@@ -45,11 +45,11 @@ pub export fn kernelMain() callconv(.c) void {
 }
 
 pub fn failableMain() !void {
-    const permAlloc = heap.permanentAllocator();
-    try debug.init(permAlloc);
+    try Memory.earlyInit();
+    const kernel_alloc = Memory.allocator();
 
-    var kernel_heap = try heap.earlyInit();
-    const kernel_alloc = kernel_heap.allocator();
+    try debug.init(Memory.permanent_allocator);
+
     const allocated = try kernel_alloc.alloc(u64, 10);
     defer kernel_alloc.free(allocated);
     allocated[0] = 42;
@@ -57,26 +57,16 @@ pub fn failableMain() !void {
         std.log.info("allocated[{d}] = {d}", .{ i, a });
     }
 
-    std.log.info("Initializing physical memory manager", .{});
-    try mem.pmem.init(permAlloc);
-    const range = try mem.pmem.allocatePages(10, .{});
-    std.log.info("Allocated range: {any}", .{range});
-    // pmem.printFreeRanges();
-
-    std.log.info("Initializing virtual memory manager", .{});
-    var kernel_vmem = try mem.vmem.init(permAlloc);
-    kernel_heap.setVmm(&kernel_vmem);
-    // kernel_vmem.printFreeRanges();
-    // kernel_vmem.printReservedRanges();
+    try Memory.init();
 
     std.log.info("Quick mapping", .{});
-    const addr = kernel_vmem.quickMap(0x14000);
-    const v_id_mapped: *u64 = @ptrFromInt(0x14000);
+    const addr = kernel_vmem.quickMap(0x1400000);
+    const v_id_mapped: *u64 = @ptrFromInt(0x1400000);
     v_id_mapped.* = 456;
     const v: *u64 = @ptrFromInt(addr);
     v.* = 123;
     std.log.info("quick mapped value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
-    kernel_vmem.quickUnmap();
+    Memory.kernel_vmem.quickUnmap();
 
     v_id_mapped.* = 654;
     std.log.info("value @ {d}", .{v_id_mapped.*});
@@ -87,7 +77,7 @@ pub fn failableMain() !void {
 
     descriptors.init();
 
-    try kernel_heap.extend(200 * mem.mb);
+    try Memory.lateInit();
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
