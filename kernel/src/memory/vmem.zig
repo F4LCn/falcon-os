@@ -18,10 +18,13 @@ pub const DefaultMmapFlags: MmapFlags = arch.memory.DefaultMmapFlags;
 const PageMapping = arch.memory.PageMapping;
 
 const VirtRangeType = enum(u8) {
+    mmio,
+    framebuffer,
+    kernel,
     low_kernel,
+    stack,
     quickmap,
     quickmap_pte,
-    framebuffer,
 };
 
 const VirtMemRange = struct {
@@ -90,6 +93,7 @@ pub const VirtualMemoryManager = struct {
                 const range_end = range_start +% range.length;
                 if (typ == range.typ and ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end))) {
                     current_range = range;
+                    log.info("found range to merge into {f}", .{range});
                     break;
                 }
             }
@@ -102,7 +106,6 @@ pub const VirtualMemoryManager = struct {
                 cr.start = @bitCast(new_start);
                 cr.length = new_end - new_start;
             } else {
-                log.debug("No current range", .{});
                 const reserved_range_item = try self.alloc.create(VirtMemRangeListItem);
                 reserved_range_item.* = .{
                     .range = .{
@@ -111,6 +114,7 @@ pub const VirtualMemoryManager = struct {
                         .typ = typ,
                     },
                 };
+                log.debug("allocated new range {f}", .{reserved_range_item.range});
                 self.reserved_ranges.append(reserved_range_item);
             }
         } else {
@@ -198,10 +202,23 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
     {
         inner.vmm.lock.lock();
         defer inner.vmm.lock.unlock();
+        try inner.vmm.registerRange(0xfffffffff0000000, 128 * sizes.mb, .{ .typ = .mmio });
         try inner.vmm.registerRange(@intFromPtr(&fb), 64 * sizes.mb, .{ .typ = .framebuffer });
+        const kernel_range_start = 0xfffffffffc000000;
+        const kernel_end_addr = @intFromPtr(&_kernel_end);
+        const kernel_range_size = kernel_end_addr -% kernel_range_start;
+        log.debug("kernel size: {x}", .{kernel_range_size});
+
+        try inner.vmm.registerRange(kernel_range_start, kernel_range_size, .{ .typ = .kernel });
+        const stack_size = constants.max_cpu * arch.constants.default_page_size;
+        log.debug("stack start: {x} size: {x}", .{ stack_start, stack_size });
+        try inner.vmm.registerRange(stack_start, stack_size, .{ .typ = .stack });
         try inner.vmm.registerRange(0x1000, 0x400000 - 0x1000, .{ .typ = .low_kernel });
         try inner.vmm.registerRange(quickmap_pt_entry_start, quickmap_pt_entry_length, .{ .typ = .quickmap_pte });
         try inner.vmm.registerRange(quickmap_start, quickmap_length, .{ .typ = .quickmap });
+        const quickmap_end = quickmap_start + quickmap_length;
+        try inner.vmm.registerRange(quickmap_end + 2 * arch.constants.default_page_size, quickmap_pt_entry_start - quickmap_end - 4 * arch.constants.default_page_size, .{});
+        try inner.vmm.registerRange(0xffffffffc0000000, 0xfffffffff0000000 - 0xffffffffc0000000, .{});
     }
     var self: VirtualAllocator = .{ .inner = inner };
 
@@ -369,6 +386,9 @@ pub fn mmap(self: *VirtualAllocator, prange: pmem.PhysMemRange, vrange: VirtMemR
     for (0..num_pages_to_map) |_| {
         defer physical_addr += arch.constants.default_page_size;
         defer virtual_addr +%= arch.constants.default_page_size;
+        if (idx % 100 == 0) {
+            log.debug("Mapping paddr {x} to vaddr {x}", .{ physical_addr, virtual_addr });
+        }
         self.mmapPage(physical_addr, virtual_addr, flags, args) catch unreachable;
     }
     std.debug.assert(physical_addr == prange.start + prange.length);
