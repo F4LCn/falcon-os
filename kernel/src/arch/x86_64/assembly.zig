@@ -37,7 +37,7 @@ pub fn haltEternally() noreturn {
     while (true) asm volatile ("hlt");
 }
 
-pub fn invalidateVirtualAddress(addr: memory.VAddrInt) void {
+pub fn invalidateVirtualAddress(addr: memory.VAddrSize) void {
     asm volatile ("invlpg (%[addr])"
         :
         : [addr] "r" (addr),

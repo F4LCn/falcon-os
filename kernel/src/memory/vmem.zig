@@ -12,6 +12,7 @@ const pmem = @import("pmem.zig");
 const log = std.log.scoped(.vmem);
 const Error = error{OutOfVirtMemory};
 
+pub const VAddrSize = arch.memory.VAddrSize;
 pub const VAddr = arch.memory.VAddr;
 const MmapFlags = arch.memory.MmapFlags;
 pub const DefaultMmapFlags: MmapFlags = arch.memory.DefaultMmapFlags;
@@ -25,6 +26,7 @@ const VirtRangeType = enum(u8) {
     stack,
     quickmap,
     quickmap_pte,
+    free,
 };
 
 const VirtMemRange = struct {
@@ -59,8 +61,11 @@ const VirtMemRangeListItem = struct {
 };
 const VirtMemRangeList = DoublyLinkedList(VirtMemRangeListItem, .prev, .next);
 pub const VirtualMemoryManager = struct {
+    const num_range_slots = std.enums.directEnumArrayLen(VirtRangeType, 0);
+
     alloc: Allocator,
     lock: SpinLock,
+    memory_map: [num_range_slots]VirtMemRangeList,
     free_ranges: VirtMemRangeList,
     reserved_ranges: VirtMemRangeList,
     quickmap_pt_entry: VirtMemRange,
@@ -71,6 +76,7 @@ pub const VirtualMemoryManager = struct {
         return .{
             .lock = .create(),
             .alloc = alloc,
+            .memory_map = [_]VirtMemRangeList{.{}} ** num_range_slots,
             .free_ranges = VirtMemRangeList{},
             .reserved_ranges = VirtMemRangeList{},
             .quickmap_pt_entry = .{ .start = @bitCast(zero), .length = 0, .typ = .quickmap_pte },
@@ -78,81 +84,128 @@ pub const VirtualMemoryManager = struct {
         };
     }
 
-    pub fn registerRange(self: *VirtualMemoryManager, start: u64, length: u64, args: struct { typ: ?VirtRangeType = null }) !void {
+    pub fn registerRange(self: *VirtualMemoryManager, start: VAddrSize, length: u64, args: struct { typ: ?VirtRangeType = null }) !void {
         const end = start +% length;
-        // if reserved add range to reserved_ranges otherwise add it to free_ranges
-        if (args.typ) |typ| {
-            // register a new reserved range of type typ
-            log.info("Registering range with type: {s}", .{@tagName(typ)});
-            var iter = self.reserved_ranges.iter();
-            var current_range: ?*VirtMemRange = null;
-            while (iter.next()) |item| {
-                const range = &item.range;
-                log.info("checking range: {f}", .{range});
-                const range_start = @as(u64, @bitCast(range.start));
-                const range_end = range_start +% range.length;
-                if (typ == range.typ and ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end))) {
-                    current_range = range;
-                    log.info("found range to merge into {f}", .{range});
-                    break;
-                }
-            }
-
-            if (current_range) |cr| {
-                const current_start = @as(u64, @bitCast(cr.start));
-                const current_end = current_start +% cr.length;
-                const new_start = @min(current_start, start);
-                const new_end = @max(current_end, end);
-                cr.start = @bitCast(new_start);
-                cr.length = new_end - new_start;
+        const typ = args.typ orelse .free;
+        const range_list = &self.memory_map[@intFromEnum(typ)];
+        var iter = range_list.iter();
+        var prev_opt: ?*VirtMemRangeListItem = null;
+        var next_opt: ?*VirtMemRangeListItem = null;
+        while (iter.next()) |item| {
+            const range = &item.range;
+            log.info("checking range: {f}", .{range});
+            const range_start = @as(VAddrSize, @bitCast(range.start));
+            // const range_end = range_start +% range.length;
+            if (range_start <= start) {
+                prev_opt = item;
+                next_opt = item.next;
+                break;
             } else {
-                const reserved_range_item = try self.alloc.create(VirtMemRangeListItem);
-                reserved_range_item.* = .{
-                    .range = .{
-                        .start = @bitCast(start),
-                        .length = length,
-                        .typ = typ,
-                    },
-                };
-                log.debug("allocated new range {f}", .{reserved_range_item.range});
-                self.reserved_ranges.append(reserved_range_item);
-            }
-        } else {
-            log.info("Registering free range 0x{X} -> 0x{X}", .{ start, end });
-            var iter = self.free_ranges.iter();
-            var current_range: ?*VirtMemRange = null;
-            while (iter.next()) |item| {
-                const range = &item.range;
-                log.info("checking range: {any}", .{range});
-                const range_start = @as(u64, @bitCast(range.start));
-                const range_end = range_start +% range.length;
-                if ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end)) {
-                    current_range = range;
-                    break;
-                }
-            }
-
-            log.info("Current range: {any}", .{current_range});
-
-            if (current_range) |cr| {
-                const current_start = @as(u64, @bitCast(cr.start));
-                const current_end = current_start +% cr.length;
-                const new_start = @min(current_start, start);
-                const new_end = @max(current_end, end);
-                cr.start = @bitCast(new_start);
-                cr.length = new_end - new_start;
-            } else {
-                log.debug("No current range", .{});
-                const free_range_item = try self.alloc.create(VirtMemRangeListItem);
-                free_range_item.* = .{
-                    .range = .{
-                        .start = @bitCast(start),
-                        .length = length,
-                    },
-                };
-                self.free_ranges.append(free_range_item);
+                next_opt = item;
+                break;
             }
         }
+
+        if (prev_opt == null and next_opt == null) {
+            // This should only happen if no ranges are present
+            std.debug.assert(range_list.head == null and range_list.tail == null);
+            const range_item = try self.alloc.create(VirtMemRangeListItem);
+            range_item.* = .{
+                .range = .{
+                    .start = @bitCast(start),
+                    .length = length,
+                    .typ = typ,
+                },
+            };
+            range_list.append(range_item);
+        } else if (prev_opt == null) {
+            const n = next_opt.?; // Safety: we know this is non-null
+            const n_range = &n.range;
+            const n_start = @as(VAddrSize, @bitCast(n_range.start));
+            if (n_start <= end) {
+                const overlap_length = end - n_start;
+                n_range.start = @bitCast(start);
+                n_range.length += length - overlap_length;
+                return;
+            }
+            const range_item = try self.alloc.create(VirtMemRangeListItem);
+            range_item.* = .{
+                .range = .{
+                    .start = @bitCast(start),
+                    .length = length,
+                    .typ = typ,
+                },
+            };
+            range_list.insertBefore(n, range_item);
+        } else if (next_opt == null) {
+            const p = prev_opt.?; // Safety: we know this is non-null
+            const p_range = &p.range;
+            const p_start = @as(VAddrSize, @bitCast(p_range.start));
+            const p_end = p_start +% p_range.length;
+            if (p_end >= start) {
+                const overlap_length = p_end - start;
+                p_range.length += length - overlap_length;
+                return;
+            }
+            const range_item = try self.alloc.create(VirtMemRangeListItem);
+            range_item.* = .{
+                .range = .{
+                    .start = @bitCast(start),
+                    .length = length,
+                    .typ = typ,
+                },
+            };
+            range_list.insertAfter(p, range_item);
+        }
+    }
+
+    pub fn reserveRange(self: *VirtualMemoryManager, start: VAddrSize, length: u64, reserved_from: VirtRangeType, reserved_as: VirtRangeType) !void {
+        const end = start +% length;
+        const free_ranges_list = &self.memory_map[@intFromEnum(reserved_from)];
+        var iter = free_ranges_list.iter();
+        while (iter.next()) |item| {
+            const range = &item.range;
+            const range_start: VAddrSize = @bitCast(range.start);
+            const range_end = range_start + range.length;
+            if (range_start <= start and range_end <= start) continue;
+            if (range_start <= start and range_end >= end) {
+                // we are contained in range
+                const top_excess_length = start - range_start;
+                const bottom_excess_length = range_end - end;
+                if (top_excess_length == 0 and bottom_excess_length == 0) {
+                    defer self.alloc.destroy(item);
+                    defer free_ranges_list.remove(item);
+                } else if (top_excess_length > 0 and bottom_excess_length > 0) {
+                    range.length = top_excess_length;
+                    const end_range = try self.alloc.create(VirtMemRangeListItem);
+                    end_range.* = .{
+                        .range = .{
+                            .start = @bitCast(end),
+                            .length = bottom_excess_length,
+                            .typ = range.typ,
+                        },
+                    };
+                    free_ranges_list.insertAfter(item, end_range);
+                } else if (top_excess_length > 0) {
+                    range.length = top_excess_length;
+                } else if (bottom_excess_length > 0) {
+                    range.start = @bitCast(end);
+                    range.length = bottom_excess_length;
+                } else {
+                    // maybe we forgot a case ?
+                    unreachable;
+                }
+            } else if (range_start <= start) {
+                const overlap_length = range_end - start;
+                range.length -= overlap_length;
+            } else if (range_end >= end) {
+                const overlap_length = end - range_start;
+                range.start = @bitCast(end);
+                range.length -= overlap_length;
+                break;
+            }
+        }
+        try self.registerRange(start, length, .{ .typ = reserved_as });
     }
 };
 
@@ -213,7 +266,9 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
         const stack_size = constants.max_cpu * arch.constants.default_page_size;
         log.debug("stack start: {x} size: {x}", .{ stack_start, stack_size });
         try inner.vmm.registerRange(stack_start, stack_size, .{ .typ = .stack });
-        try inner.vmm.registerRange(0x1000, 0x400000 - 0x1000, .{ .typ = .low_kernel });
+        try inner.vmm.registerRange(0x10000, 0x100000 - 0x10000, .{ .typ = .low_kernel });
+        try inner.vmm.registerRange(0x101000, 0x400000 - 0x101000, .{ .typ = .low_kernel });
+        try inner.vmm.registerRange(0x100000, 0x1000, .{ .typ = .low_kernel });
         try inner.vmm.registerRange(quickmap_pt_entry_start, quickmap_pt_entry_length, .{ .typ = .quickmap_pte });
         try inner.vmm.registerRange(quickmap_start, quickmap_length, .{ .typ = .quickmap });
         const quickmap_end = quickmap_start + quickmap_length;
@@ -233,60 +288,35 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
 }
 
 pub fn printRanges(self: *const @This()) void {
-    var iter = self.inner.vmm.free_ranges.iter();
-    log.debug("Free virtual ranges", .{});
-    while (iter.next()) |list_item| {
-        log.debug("{f}", .{list_item});
+    for (self.inner.vmm.memory_map, 0..) |range_list, typ_idx| {
+        const typ: VirtRangeType = @enumFromInt(typ_idx);
+        var iter = range_list.iter();
+        log.debug("{t} virtual ranges", .{typ});
+        while (iter.next()) |list_item| {
+            log.debug("{f}", .{list_item});
+        }
     }
+    // var iter = self.inner.vmm.free_ranges.iter();
+    // log.debug("Free virtual ranges", .{});
+    // while (iter.next()) |list_item| {
+    //     log.debug("{f}", .{list_item});
+    // }
 
-    iter = self.inner.vmm.reserved_ranges.iter();
-    log.debug("Reserved virtual ranges", .{});
-    while (iter.next()) |list_item| {
-        log.debug("{f}", .{list_item});
-    }
+    // iter = self.inner.vmm.reserved_ranges.iter();
+    // log.debug("Reserved virtual ranges", .{});
+    // while (iter.next()) |list_item| {
+    //     log.debug("{f}", .{list_item});
+    // }
 }
 
 pub fn reserveRange(self: *VirtualAllocator, start: u64, length: u64, typ: VirtRangeType) !void {
     // reserved a free range (moves the range from free_ranges to reserved_ranges)
-    const end = start + length;
-    var iter = self.inner.vmm.free_ranges.iter();
-    while (iter.next()) |item| {
-        const range = &item.range;
-        const range_start = @as(u64, @bitCast(range.start));
-        const range_end = range_start + range.length;
-        if ((range_start <= start and range_end >= start) or (range_start <= end and range_end >= end)) {
-            const start_diff = range_start - start;
-            const end_diff = range_end - end;
-
-            if (start_diff <= 0 and end_diff >= 0) {
-                // resize the existing range to [S1 S2]
-                range.length = start - range_start;
-                // create a new range for [E2 E1]
-                const free_range_item = try self.inner.vmm.alloc.create(VirtMemRangeListItem);
-                free_range_item.* = .{ .range = .{ .start = @bitCast(end), .length = range_end - end } };
-                self.inner.vmm.free_ranges.insertAfter(item, free_range_item);
-            } else if (start_diff <= 0) {
-                range.length -= range_end - start;
-            } else if (start_diff > 0) {
-                range.start += start_diff;
-                range.length -= start_diff;
-            }
-            break;
-        }
-    }
-    // or create a new reserved range if it doesn't exist already
-    const reserved_range_item = try self.inner.vmm.alloc.create(VirtMemRangeListItem);
-    reserved_range_item.* = .{
-        .range = .{
-            .start = @bitCast(start),
-            .length = length,
-            .typ = typ,
-        },
-    };
-    self.inner.vmm.reserved_ranges.append(reserved_range_item);
+    try self.inner.vmm.reserveRange(start, length, .free, typ);
 }
 
-pub fn allocateRange(self: *VirtualAllocator, count: u64, args: struct { typ: ?VirtRangeType = null }) !VirtMemRange {
+const VirtualAllocArgs = struct { typ: ?VirtRangeType = null };
+
+pub fn allocateRange(self: *VirtualAllocator, count: u64, args: VirtualAllocArgs) !VirtMemRange {
     const length = count * arch.constants.default_page_size;
     if (args.typ) |typ| {
         var iter = self.inner.vmm.reserved_ranges.iter();
@@ -326,10 +356,52 @@ pub fn allocateRange(self: *VirtualAllocator, count: u64, args: struct { typ: ?V
     return error.OutOfVirtMemory;
 }
 
-pub fn freeRange(self: *VirtualAllocator, range: *VirtMemRange) void {
+pub fn freeRange(self: *VirtualAllocator, ptr: u64, count: u64, args: VirtualAllocArgs) void {
     _ = self; // autofix
-    _ = range; // autofix
-    // WARN: we take a ptr to range but we can't be sure the owner has finished with it. can cause access issues.
+    _ = ptr; // autofix
+    _ = count; // autofix
+    _ = args; // autofix
+    // the only cases we should have here are:
+    // - we create a new range
+    // - we extend an existing range (change start or length but not both)
+    // all other cases should be errors
+
+    // if (args.typ) |typ| {
+    //     var iter = self.inner.vmm.reserved_ranges.iter();
+    //     while (iter.next()) |item| {
+    //         var range = item.range;
+    //         if (range.typ != typ) continue;
+    //         if (range.length == length) {
+    //             self.inner.vmm.reserved_ranges.remove(item);
+    //             defer self.inner.vmm.alloc.destroy(item);
+    //             return range;
+    //         } else if (range.length > length) {
+    //             const new_start: u64 = @as(u64, @bitCast(range.start)) + length;
+    //             range.start = @bitCast(new_start);
+    //             range.length -= length;
+    //             const new_range = VirtMemRange{ .start = range.start, .length = length, .typ = typ };
+    //             return new_range;
+    //         }
+    //     }
+    // } else {
+    //     var iter = self.inner.vmm.free_ranges.iter();
+    //     while (iter.next()) |item| {
+    //         var range = item.range;
+    //         if (range.length == length) {
+    //             self.inner.vmm.free_ranges.remove(item);
+    //             defer self.inner.vmm.alloc.destroy(item);
+    //             return range;
+    //         } else if (range.length > length) {
+    //             const new_start = @as(u64, @bitCast(range.start)) + length;
+    //             range.start = @bitCast(new_start);
+    //             range.length -= length;
+    //             const new_range = VirtMemRange{ .start = range.start, .length = length };
+    //             return new_range;
+    //         }
+    //     }
+    // }
+
+    // return error.OutOfVirtMemory;
 }
 
 pub fn quickMap(self: *VirtualAllocator, addr: u64) u64 {

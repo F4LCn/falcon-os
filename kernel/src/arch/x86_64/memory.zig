@@ -3,8 +3,10 @@ const log = std.log.scoped(.@"x86_64.memory");
 const constants = @import("constants.zig");
 const registers = @import("registers.zig");
 
+pub const PAddrSize = u64;
 pub const PAddr = u64;
-pub const VAddrInt = u64;
+
+pub const VAddrSize = u64;
 pub const VAddr = packed struct(u64) {
     offset: u12 = 0,
     pt_idx: u9 = 0,
@@ -59,8 +61,8 @@ pub const PageMapping = extern struct {
         _pad1: u15 = 0,
         execution_disable: bool = false,
 
-        pub fn getAddr(self: *const Entry) u64 {
-            return @as(u64, @intCast(self.addr)) << 12;
+        pub fn getAddr(self: *const Entry) VAddrSize {
+            return @as(VAddrSize, @intCast(self.addr)) << 12;
         }
 
         pub fn print(self: *const Entry) void {
@@ -103,7 +105,7 @@ pub fn VirtualAllocator(comptime VirtualMemoryManagerType: type) type {
         // FIXME: makeshift page allocator
         allocate_pages: *const fn (count: u64) anyerror!PAddr,
 
-        pub fn init(alloc: std.mem.Allocator, allocate_pages: *const fn (count: u64) anyerror!PAddr) Self {
+        pub fn init(alloc: std.mem.Allocator, allocate_pages: *const fn (count: PAddrSize) anyerror!PAddr) Self {
             const root = registers.readCR(.cr3);
             log.info("Got current pagemap: 0x{X}", .{root});
             const vmm = VirtualMemoryManagerType.init(alloc);
@@ -143,7 +145,7 @@ pub fn VirtualAllocator(comptime VirtualMemoryManagerType: type) type {
             return @ptrFromInt(addr);
         }
 
-        pub fn writeEntry(entry: *PageMapping.Entry, paddr: u64, flags: MmapFlags) void {
+        pub fn writeEntry(entry: *PageMapping.Entry, paddr: PAddr, flags: MmapFlags) void {
             entry.* = @bitCast(paddr | @as(u64, @bitCast(flags)));
         }
     };

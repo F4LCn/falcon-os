@@ -27,10 +27,11 @@ const PhysRangeType = enum {
         return @enumFromInt(@intFromEnum(typ));
     }
 };
+pub const PAddrSize = arch.memory.PAddrSize;
 pub const PAddr = arch.memory.PAddr;
 pub const PhysMemRange = struct {
     start: PAddr,
-    length: u64,
+    length: PAddrSize,
     typ: PhysRangeType,
 
     pub fn format(
@@ -61,11 +62,11 @@ const PhysicalMemoryManager = struct {
     memory_ranges: PhysMemRangeList,
     free_ranges: PhysMemRangeList,
     reserved_ranges: PhysMemRangeList,
-    total_memory: u64,
-    free_pages_count: u64,
-    reserved_pages_count: u64,
-    uncommitted_pages_count: u64,
-    committed_pages_count: u64,
+    total_memory: PAddrSize,
+    free_pages_count: PAddrSize,
+    reserved_pages_count: PAddrSize,
+    uncommitted_pages_count: PAddrSize,
+    committed_pages_count: PAddrSize,
 
     pub fn init(alloc: Allocator) Self {
         return .{
@@ -174,7 +175,7 @@ fn initRanges() !void {
     }
 }
 
-pub fn commitPages(count: u64) bool {
+pub fn commitPages(count: PAddrSize) bool {
     mm.lock.lock();
     defer mm.lock.unlock();
 
@@ -187,7 +188,7 @@ pub fn commitPages(count: u64) bool {
     return true;
 }
 
-pub fn uncommitPages(count: u64) void {
+pub fn uncommitPages(count: PAddrSize) void {
     mm.lock.lock();
     defer mm.lock.unlock();
 
@@ -200,7 +201,7 @@ pub fn uncommitPages(count: u64) void {
     mm.uncommitted_pages_count += count;
 }
 
-pub fn allocatePages(count: u64, args: struct { committed: bool = false }) Error!PhysMemRange {
+pub fn allocatePages(count: PAddrSize, args: struct { committed: bool = false }) Error!PhysMemRange {
     log.debug("allocating {d} pages", .{count});
     mm.lock.lock();
     defer mm.lock.unlock();
