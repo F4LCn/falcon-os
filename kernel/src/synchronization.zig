@@ -21,11 +21,11 @@ pub const SpinLock = struct {
 
     pub fn lock(self: Self) void {
         _ = self;
-        log.debug("Locking", .{});
+        // log.debug("Locking", .{});
     }
 
     pub fn unlock(self: Self) void {
         _ = self;
-        log.debug("Unlocking", .{});
+        // log.debug("Unlocking", .{});
     }
 };
