@@ -48,8 +48,6 @@ pub fn failableMain() !void {
     try Memory.earlyInit();
     const kernel_alloc = Memory.allocator();
 
-    try debug.init(Memory.permanent_allocator);
-
     const allocated = try kernel_alloc.alloc(u64, 10);
     defer kernel_alloc.free(allocated);
     allocated[0] = 42;
@@ -60,7 +58,7 @@ pub fn failableMain() !void {
     try Memory.init();
 
     std.log.info("Quick mapping", .{});
-    const addr = kernel_vmem.quickMap(0x1400000);
+    const addr = Memory.kernel_vmem.quickMap(0x1400000);
     const v_id_mapped: *u64 = @ptrFromInt(0x1400000);
     v_id_mapped.* = 456;
     const v: *u64 = @ptrFromInt(addr);
@@ -78,6 +76,7 @@ pub fn failableMain() !void {
     descriptors.init();
 
     try Memory.lateInit();
+    try debug.init(kernel_alloc);
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });

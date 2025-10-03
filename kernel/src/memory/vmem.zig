@@ -84,7 +84,12 @@ pub const VirtualMemoryManager = struct {
         };
     }
 
-    pub fn registerRange(self: *VirtualMemoryManager, start: VAddrSize, length: u64, args: struct { typ: ?VirtRangeType = null }) !void {
+    const RangeArgs = struct {
+        typ: ?VirtRangeType = null,
+    };
+
+    pub fn registerRange(self: *VirtualMemoryManager, start: VAddrSize, length: u64, args: RangeArgs) !void {
+        log.debug("registering range 0x{x} ({d})", .{ start, length });
         const end = start +% length;
         const typ = args.typ orelse .free;
         const range_list = &self.memory_map[@intFromEnum(typ)];
@@ -93,7 +98,7 @@ pub const VirtualMemoryManager = struct {
         var next_opt: ?*VirtMemRangeListItem = null;
         while (iter.next()) |item| {
             const range = &item.range;
-            log.info("checking range: {f}", .{range});
+            log.debug("checking range: {f}", .{range});
             const range_start = @as(VAddrSize, @bitCast(range.start));
             // const range_end = range_start +% range.length;
             if (range_start <= start) {
@@ -137,7 +142,7 @@ pub const VirtualMemoryManager = struct {
                 },
             };
             range_list.insertBefore(n, range_item);
-        } else if (next_opt == null) {
+        } else {
             const p = prev_opt.?; // Safety: we know this is non-null
             const p_range = &p.range;
             const p_start = @as(VAddrSize, @bitCast(p_range.start));
@@ -145,6 +150,17 @@ pub const VirtualMemoryManager = struct {
             if (p_end >= start) {
                 const overlap_length = p_end - start;
                 p_range.length += length - overlap_length;
+                if (next_opt) |n| {
+                    const n_range = &n.range;
+                    const n_start = @as(VAddrSize, @bitCast(n_range.start));
+                    const new_p_end = p_start +% p_range.length;
+                    if (new_p_end >= n_start) {
+                        const pn_overlap_length = new_p_end - n_start;
+                        p_range.length += n_range.length - pn_overlap_length;
+                        range_list.remove(n);
+                        defer self.alloc.destroy(n);
+                    }
+                }
                 return;
             }
             const range_item = try self.alloc.create(VirtMemRangeListItem);
@@ -159,9 +175,10 @@ pub const VirtualMemoryManager = struct {
         }
     }
 
-    pub fn reserveRange(self: *VirtualMemoryManager, start: VAddrSize, length: u64, reserved_from: VirtRangeType, reserved_as: VirtRangeType) !void {
+    pub fn reserveRange(self: *VirtualMemoryManager, start: VAddrSize, length: u64, src_args: RangeArgs, dst_typ: VirtRangeType) !void {
         const end = start +% length;
-        const free_ranges_list = &self.memory_map[@intFromEnum(reserved_from)];
+        const src_typ = src_args.typ orelse .free;
+        const free_ranges_list = &self.memory_map[@intFromEnum(src_typ)];
         var iter = free_ranges_list.iter();
         while (iter.next()) |item| {
             const range = &item.range;
@@ -205,7 +222,30 @@ pub const VirtualMemoryManager = struct {
                 break;
             }
         }
-        try self.registerRange(start, length, .{ .typ = reserved_as });
+        try self.registerRange(start, length, .{ .typ = dst_typ });
+    }
+
+    pub fn allocateRange(self: *VirtualMemoryManager, count: VAddrSize, args: RangeArgs) !VirtMemRange {
+        const length = count * arch.constants.default_page_size;
+        const typ = args.typ orelse .free;
+        const range_list = &self.memory_map[@intFromEnum(typ)];
+        var iter = range_list.iter();
+        while (iter.next()) |item| {
+            var range = &item.range;
+            if (range.length == length) {
+                range_list.remove(item);
+                defer self.alloc.destroy(item);
+                return range.*;
+            } else if (range.length > length) {
+                const new_start: u64 = @as(u64, @bitCast(range.start)) + length;
+                range.start = @bitCast(new_start);
+                range.length -= length;
+                const new_range = VirtMemRange{ .start = range.start, .length = length, .typ = typ };
+                return new_range;
+            }
+        }
+
+        return error.OutOfVirtMemory;
     }
 };
 
@@ -266,9 +306,7 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
         const stack_size = constants.max_cpu * arch.constants.default_page_size;
         log.debug("stack start: {x} size: {x}", .{ stack_start, stack_size });
         try inner.vmm.registerRange(stack_start, stack_size, .{ .typ = .stack });
-        try inner.vmm.registerRange(0x10000, 0x100000 - 0x10000, .{ .typ = .low_kernel });
-        try inner.vmm.registerRange(0x101000, 0x400000 - 0x101000, .{ .typ = .low_kernel });
-        try inner.vmm.registerRange(0x100000, 0x1000, .{ .typ = .low_kernel });
+        try inner.vmm.registerRange(0x100000, 0x400000 - 0x101000, .{ .typ = .low_kernel });
         try inner.vmm.registerRange(quickmap_pt_entry_start, quickmap_pt_entry_length, .{ .typ = .quickmap_pte });
         try inner.vmm.registerRange(quickmap_start, quickmap_length, .{ .typ = .quickmap });
         const quickmap_end = quickmap_start + quickmap_length;
@@ -296,17 +334,6 @@ pub fn printRanges(self: *const @This()) void {
             log.debug("{f}", .{list_item});
         }
     }
-    // var iter = self.inner.vmm.free_ranges.iter();
-    // log.debug("Free virtual ranges", .{});
-    // while (iter.next()) |list_item| {
-    //     log.debug("{f}", .{list_item});
-    // }
-
-    // iter = self.inner.vmm.reserved_ranges.iter();
-    // log.debug("Reserved virtual ranges", .{});
-    // while (iter.next()) |list_item| {
-    //     log.debug("{f}", .{list_item});
-    // }
 }
 
 pub fn reserveRange(self: *VirtualAllocator, start: u64, length: u64, typ: VirtRangeType) !void {
@@ -317,43 +344,7 @@ pub fn reserveRange(self: *VirtualAllocator, start: u64, length: u64, typ: VirtR
 const VirtualAllocArgs = struct { typ: ?VirtRangeType = null };
 
 pub fn allocateRange(self: *VirtualAllocator, count: u64, args: VirtualAllocArgs) !VirtMemRange {
-    const length = count * arch.constants.default_page_size;
-    if (args.typ) |typ| {
-        var iter = self.inner.vmm.reserved_ranges.iter();
-        while (iter.next()) |item| {
-            var range = item.range;
-            if (range.typ != typ) continue;
-            if (range.length == length) {
-                self.inner.vmm.reserved_ranges.remove(item);
-                defer self.inner.vmm.alloc.destroy(item);
-                return range;
-            } else if (range.length > length) {
-                const new_start: u64 = @as(u64, @bitCast(range.start)) + length;
-                range.start = @bitCast(new_start);
-                range.length -= length;
-                const new_range = VirtMemRange{ .start = range.start, .length = length, .typ = typ };
-                return new_range;
-            }
-        }
-    } else {
-        var iter = self.inner.vmm.free_ranges.iter();
-        while (iter.next()) |item| {
-            var range = item.range;
-            if (range.length == length) {
-                self.inner.vmm.free_ranges.remove(item);
-                defer self.inner.vmm.alloc.destroy(item);
-                return range;
-            } else if (range.length > length) {
-                const new_start = @as(u64, @bitCast(range.start)) + length;
-                range.start = @bitCast(new_start);
-                range.length -= length;
-                const new_range = VirtMemRange{ .start = range.start, .length = length };
-                return new_range;
-            }
-        }
-    }
-
-    return error.OutOfVirtMemory;
+    return try self.inner.vmm.allocateRange(count, .{ .typ = args.typ });
 }
 
 pub fn freeRange(self: *VirtualAllocator, ptr: u64, count: u64, args: VirtualAllocArgs) void {
@@ -433,7 +424,7 @@ pub fn mmapPage(self: *VirtualAllocator, paddr: u64, vaddr: u64, flags: MmapFlag
     }
 
     // log.debug("Mapping paddr {x} to vaddr {x}", .{ paddr, vaddr });
-    const entry = self.getPageTableEntry(@bitCast(vaddr), flags) catch unreachable;
+    const entry = try self.getPageTableEntry(@bitCast(vaddr), flags); 
     if (entry.present) {
         if (entry.getAddr() == @as(u64, @bitCast(paddr)) or args.force) {
             log.warn("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(paddr)) });
@@ -458,9 +449,6 @@ pub fn mmap(self: *VirtualAllocator, prange: pmem.PhysMemRange, vrange: VirtMemR
     for (0..num_pages_to_map) |_| {
         defer physical_addr += arch.constants.default_page_size;
         defer virtual_addr +%= arch.constants.default_page_size;
-        if (idx % 100 == 0) {
-            log.debug("Mapping paddr {x} to vaddr {x}", .{ physical_addr, virtual_addr });
-        }
         self.mmapPage(physical_addr, virtual_addr, flags, args) catch unreachable;
     }
     std.debug.assert(physical_addr == prange.start + prange.length);

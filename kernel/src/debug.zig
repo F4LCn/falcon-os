@@ -67,6 +67,7 @@ var debug_info: ?Dwarf = null;
 var debug_alloc: ?std.mem.Allocator = null;
 
 pub fn init(alloc: std.mem.Allocator) !void {
+    log.info("Initializing debug info", .{});
     if (bootinfo.debug_info_ptr == 0) {
         log.debug("No debug info loaded", .{});
         return;

@@ -202,7 +202,7 @@ pub fn uncommitPages(count: PAddrSize) void {
 }
 
 pub fn allocatePages(count: PAddrSize, args: struct { committed: bool = false }) Error!PhysMemRange {
-    log.debug("allocating {d} pages", .{count});
+    // log.debug("allocating {d} pages", .{count});
     mm.lock.lock();
     defer mm.lock.unlock();
 
