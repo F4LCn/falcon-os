@@ -7,6 +7,7 @@ const mem_allocator = @import("allocator.zig");
 const buddy = @import("buddy.zig");
 const arch = @import("arch");
 
+const log = std.log.scoped(.heap);
 var permanent_heap: [constants.permanent_heap_size]u8 linksection(".kernel_heap") = undefined;
 var kernel_heap: [constants.heap_size]u8 linksection(".kernel_heap") = undefined;
 
@@ -95,7 +96,6 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
     const pmem_range = try pmem.allocatePages(count, .{ .committed = args.committed });
     const vmem_range = try self.virt_alloc.allocateRange(count, .{});
     try self.virt_alloc.mmap(pmem_range, vmem_range, vmem.DefaultMmapFlags, .{});
-    std.log.info("hehe 2", .{});
     const allocated_range_addr: u64 = @bitCast(vmem_range.start);
     var allocated_ptr: [*]align(arch.constants.default_page_size) u8 = @ptrFromInt(allocated_range_addr);
     if (args.zero) {
@@ -114,16 +114,16 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
 pub fn extend(self: *Self, len: u64) !void {
     const alloc = permanentAllocator();
     const subheap = try alloc.create(SubHeap);
-    const BuddyAllocatorType = buddy.Buddy(.{});
+    const BuddyAllocatorType = buddy.Buddy(.{.safety = false});
     const buddy_allocator = try alloc.create(BuddyAllocatorType);
 
     const page_aligned_len = std.mem.alignBackward(u64, len, arch.constants.default_page_size);
     const page_count = @divExact(page_aligned_len, arch.constants.default_page_size);
     const memory = self.allocatePages(page_count, .{}) catch unreachable;
     const memory_slice = memory[0 .. page_count * arch.constants.default_page_size];
-    std.log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
+    log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
     buddy_allocator.* = try .init(alloc, memory_slice);
-    std.log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
+    log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
     subheap.* = .{
         .memory_start = @intFromPtr(memory_slice.ptr),
         .memory_len = memory_slice.len,
