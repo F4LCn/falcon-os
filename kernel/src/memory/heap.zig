@@ -110,11 +110,24 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
     return allocated_ptr;
 }
 
+pub fn freePages(self: *Self, memory: []align(arch.constants.default_page_size) u8, args: struct { committed: bool = false, poison: bool = false }) void {
+    if (constants.safety and args.poison) {
+        // FIXME: we should figure out how to generate and splat a known (predictable) pattern
+        const u64_slice = std.mem.bytesAsSlice(u64, memory);
+        @memset(u64_slice, 0x99887766FFEEDDCC);
+    }
+    const vrange = vmem.VirtMemRange{ .start = @bitCast(@intFromPtr(memory.ptr)), .length = memory.len };
+    self.virt_alloc.munmap(vrange);
+    const paddr = self.virt_alloc.virtToPhys(vrange.start);
+    pmem.freePages(.{ .start = paddr, .length = vrange.length, .typ = .free });
+    self.virt_alloc.freeRange(vrange, .{});
+}
+
 // TODO: (opt.) expose buddy min allocation size
 pub fn extend(self: *Self, len: u64) !void {
     const alloc = permanentAllocator();
     const subheap = try alloc.create(SubHeap);
-    const BuddyAllocatorType = buddy.Buddy(.{.safety = false});
+    const BuddyAllocatorType = buddy.Buddy(.{ .safety = false, .min_size = 8 });
     const buddy_allocator = try alloc.create(BuddyAllocatorType);
 
     const page_aligned_len = std.mem.alignBackward(u64, len, arch.constants.default_page_size);
@@ -145,6 +158,18 @@ pub fn allocator(self: *Self) std.mem.Allocator {
     };
 }
 
+pub fn pageAllocator(self: *Self) std.mem.Allocator {
+    return .{
+        .ptr = self,
+        .vtable = &.{
+            .alloc = _alloc_pages,
+            .free = _free_pages,
+            .resize = std.mem.Allocator.noResize,
+            .remap = std.mem.Allocator.noRemap,
+        },
+    };
+}
+
 fn _alloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
     const self: *Self = @ptrCast(@alignCast(ptr));
     var subheaps_iter = self.subheaps.iter();
@@ -152,6 +177,9 @@ fn _alloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: u
         if (subheap.canAlloc(len, alignment)) {
             @branchHint(.likely);
             const subheap_alloc: std.mem.Allocator = subheap.allocator();
+            const estimated_size = alignment.forward(len);
+            self.total_free_memory -= estimated_size;
+            self.total_allocated_memory += estimated_size;
             return subheap_alloc.rawAlloc(len, alignment, ret_addr);
         }
     }
@@ -169,10 +197,26 @@ fn _free(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: 
             @branchHint(.likely);
             const subheap_alloc: std.mem.Allocator = subheap.allocator();
             subheap_alloc.rawFree(memory, alignment, ret_addr);
+            const estimated_size = alignment.forward(memory.len);
+            self.total_free_memory += estimated_size;
+            self.total_allocated_memory -= estimated_size;
             return;
         }
     }
     unreachable;
+}
+
+fn _alloc_pages(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
+    const self: *Self = @ptrCast(@alignCast(ptr));
+    const page_count = alignment.forward(len) / arch.constants.default_page_size;
+    log.debug("allocating pages: {d}", .{page_count});
+    return self.allocatePages(page_count, .{ .zero = true }) catch return null;
+}
+
+fn _free_pages(ptr: *anyopaque, memory: []u8, _: std.mem.Alignment, _: usize) void {
+    const self: *Self = @ptrCast(@alignCast(ptr));
+    log.debug("freeing pages: 0x{x}", .{@intFromPtr(memory.ptr)});
+    self.freePages(@alignCast(memory), .{ .poison = true });
 }
 
 test "Test subheap with fixed buffer allocator" {

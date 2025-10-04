@@ -52,9 +52,10 @@
       * [-] Physical memory manager / Frame allocator
       * [-] Virtual memory manager / Page allocator
       * [x] Buddy allocator
+      * [ ] Slab allocator
       * [-] General purpose heap allocator
-    * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] SMP
+    * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] Processes, Threads & context switching
     * [ ] Task / Task queues ?
     * [ ] Scheduling

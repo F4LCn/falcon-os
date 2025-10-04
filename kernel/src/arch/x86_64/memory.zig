@@ -61,8 +61,8 @@ pub const PageMapping = extern struct {
         _pad1: u15 = 0,
         execution_disable: bool = false,
 
-        pub fn getAddr(self: *const Entry) VAddrSize {
-            return @as(VAddrSize, @intCast(self.addr)) << 12;
+        pub fn getAddr(self: *const Entry) PAddr {
+            return @as(PAddrSize, @intCast(self.addr)) << 12;
         }
 
         pub fn print(self: *const Entry) void {
@@ -117,14 +117,14 @@ pub fn VirtualAllocator(comptime VirtualMemoryManagerType: type) type {
             };
         }
 
-        pub fn getPageTableEntry(self: *const Self, vaddr: VAddr, flags: MmapFlags) !*PageMapping.Entry {
+        pub fn getPageTableEntry(self: *const Self, vaddr: VAddr, flags: MmapFlags, args: struct { create_if_missing: bool = true }) !*PageMapping.Entry {
             const pml4_mapping: *PageMapping = @ptrFromInt(self.root);
             // log.debug("PML4: {*}", .{pml4_mapping});
-            const pdp_mapping = try self.getOrCreateMapping(pml4_mapping, vaddr.pml4_idx);
+            const pdp_mapping = try self.getOrCreateMapping(pml4_mapping, vaddr.pml4_idx, args.create_if_missing);
             // log.debug("PDP: {*}", .{pdp_mapping});
-            const pd_mapping = try self.getOrCreateMapping(pdp_mapping, vaddr.pdp_idx);
+            const pd_mapping = try self.getOrCreateMapping(pdp_mapping, vaddr.pdp_idx, args.create_if_missing);
             // log.debug("PD: {*}", .{pd_mapping});
-            const pt_mapping = try self.getOrCreateMapping(pd_mapping, vaddr.pd_idx);
+            const pt_mapping = try self.getOrCreateMapping(pd_mapping, vaddr.pd_idx, args.create_if_missing);
             // log.debug("PT: {*}", .{pt_mapping});
             if (flags.page_size == .large) {
                 // TODO: handle large pages here
@@ -134,9 +134,10 @@ pub fn VirtualAllocator(comptime VirtualMemoryManagerType: type) type {
             return entry;
         }
 
-        fn getOrCreateMapping(self: Self, mapping: *PageMapping, idx: u9) !*PageMapping {
+        fn getOrCreateMapping(self: Self, mapping: *PageMapping, idx: u9, create_if_missing: bool) !*PageMapping {
             const next_level: *PageMapping.Entry = &mapping.mappings[idx];
             if (!next_level.present) {
+                if (!create_if_missing) return error.MissingPageMapping;
                 const page_ptr = try self.allocate_pages(1);
                 writeEntry(next_level, page_ptr, .{ .present = true, .read_write = .read_write });
                 return @ptrFromInt(page_ptr);

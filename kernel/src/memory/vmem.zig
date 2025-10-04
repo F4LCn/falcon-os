@@ -29,7 +29,7 @@ const VirtRangeType = enum(u8) {
     free,
 };
 
-const VirtMemRange = struct {
+pub const VirtMemRange = struct {
     start: VAddr,
     length: u64,
     typ: ?VirtRangeType = null,
@@ -238,9 +238,9 @@ pub const VirtualMemoryManager = struct {
                 return range.*;
             } else if (range.length > length) {
                 const new_start: u64 = @as(u64, @bitCast(range.start)) + length;
+                const new_range = VirtMemRange{ .start = range.start, .length = length, .typ = typ };
                 range.start = @bitCast(new_start);
                 range.length -= length;
-                const new_range = VirtMemRange{ .start = range.start, .length = length, .typ = typ };
                 return new_range;
             }
         }
@@ -272,10 +272,8 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
     inner.vmm.quickmap_pt_entry.length = quickmap_pt_entry_length;
 
     log.info("Trying to register ranges", .{});
-    // TODO: create a usable page map for the kernel
-    // TODO: mark already used vmem pages
-
     // NOTE: kernel memory map (N = cpu count, padding = 2 pages)
+    // HIGH_MEM_LIMIT    unused                   (0xffff000000000000 => 0xffffffffc0000000)
     // -1g               free kernel              (0xffffffffc0000000 => 0xfffffffff0000000)
     // -256m             "mmio" area              (0xfffffffff0000000 => 0xfffffffff8000000)
     // -128m             "fb" framebuffer         (0xfffffffff8000000 => 0xfffffffffc000000)
@@ -289,7 +287,7 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
     //                       ......
     //                   stack start (cpu1)       (0xffffffffffffe000 => 0xfffffffffffff000)
     //    0              stack start (cpu0)       (0xfffffffffffff000 => 0x0000000000000000)
-    //
+    //                      ......
     //  0-4g             ram identity mapped      (0x0000000000000000 => 0x0000000100000000)
 
     {
@@ -347,52 +345,14 @@ pub fn allocateRange(self: *VirtualAllocator, count: u64, args: VirtualAllocArgs
     return try self.inner.vmm.allocateRange(count, .{ .typ = args.typ });
 }
 
-pub fn freeRange(self: *VirtualAllocator, ptr: u64, count: u64, args: VirtualAllocArgs) void {
+pub fn freeRange(self: *VirtualAllocator, vrange: VirtMemRange, args: VirtualAllocArgs) void {
     _ = self; // autofix
-    _ = ptr; // autofix
-    _ = count; // autofix
+    _ = vrange; // autofix
     _ = args; // autofix
     // the only cases we should have here are:
     // - we create a new range
     // - we extend an existing range (change start or length but not both)
     // all other cases should be errors
-
-    // if (args.typ) |typ| {
-    //     var iter = self.inner.vmm.reserved_ranges.iter();
-    //     while (iter.next()) |item| {
-    //         var range = item.range;
-    //         if (range.typ != typ) continue;
-    //         if (range.length == length) {
-    //             self.inner.vmm.reserved_ranges.remove(item);
-    //             defer self.inner.vmm.alloc.destroy(item);
-    //             return range;
-    //         } else if (range.length > length) {
-    //             const new_start: u64 = @as(u64, @bitCast(range.start)) + length;
-    //             range.start = @bitCast(new_start);
-    //             range.length -= length;
-    //             const new_range = VirtMemRange{ .start = range.start, .length = length, .typ = typ };
-    //             return new_range;
-    //         }
-    //     }
-    // } else {
-    //     var iter = self.inner.vmm.free_ranges.iter();
-    //     while (iter.next()) |item| {
-    //         var range = item.range;
-    //         if (range.length == length) {
-    //             self.inner.vmm.free_ranges.remove(item);
-    //             defer self.inner.vmm.alloc.destroy(item);
-    //             return range;
-    //         } else if (range.length > length) {
-    //             const new_start = @as(u64, @bitCast(range.start)) + length;
-    //             range.start = @bitCast(new_start);
-    //             range.length -= length;
-    //             const new_range = VirtMemRange{ .start = range.start, .length = length };
-    //             return new_range;
-    //         }
-    //     }
-    // }
-
-    // return error.OutOfVirtMemory;
 }
 
 pub fn quickMap(self: *VirtualAllocator, addr: u64) u64 {
@@ -424,11 +384,12 @@ pub fn mmapPage(self: *VirtualAllocator, paddr: u64, vaddr: u64, flags: MmapFlag
     }
 
     // log.debug("Mapping paddr {x} to vaddr {x}", .{ paddr, vaddr });
-    const entry = try self.getPageTableEntry(@bitCast(vaddr), flags); 
+    const entry = try self.getPageTableEntry(@bitCast(vaddr), flags, .{});
     if (entry.present) {
         if (entry.getAddr() == @as(u64, @bitCast(paddr)) or args.force) {
             log.warn("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(paddr)) });
         } else {
+            log.err("Overwriting a present entry (old paddr: 0x{X}) with 0x{X}", .{ entry.getAddr(), @as(u64, @bitCast(paddr)) });
             @panic("Overwriting existing entry");
         }
     }
@@ -454,8 +415,23 @@ pub fn mmap(self: *VirtualAllocator, prange: pmem.PhysMemRange, vrange: VirtMemR
     std.debug.assert(physical_addr == prange.start + prange.length);
 }
 
-fn getPageTableEntry(self: *const VirtualAllocator, vaddr: VAddr, flags: MmapFlags) !*PageMapping.Entry {
-    return self.inner.getPageTableEntry(vaddr, flags);
+pub fn munmap(self: *VirtualAllocator, vrange: VirtMemRange) void {
+    var virtual_addr: u64 = @bitCast(vrange.start);
+    const num_pages_to_map = @divExact(vrange.length, arch.constants.default_page_size);
+    log.debug("Unmapping vrange {f} ({d} pages)", .{ vrange, num_pages_to_map });
+    for (0..num_pages_to_map) |_| {
+        defer virtual_addr +%= arch.constants.default_page_size;
+        self.mmapPage(0, virtual_addr, @bitCast(@as(u64, 0)), .{ .force = true }) catch unreachable;
+    }
+}
+
+pub fn virtToPhys(self: *VirtualAllocator, vaddr: VAddr) arch.memory.PAddr {
+    const entry = self.getPageTableEntry(vaddr, @bitCast(@as(u64, 0)), .{ .create_if_missing = false }) catch unreachable;
+    return entry.getAddr();
+}
+
+fn getPageTableEntry(self: *const VirtualAllocator, vaddr: VAddr, flags: MmapFlags, args: struct { create_if_missing: bool = true }) !*PageMapping.Entry {
+    return self.inner.getPageTableEntry(vaddr, flags, .{ .create_if_missing = args.create_if_missing });
 }
 
 fn _allocatePages(count: u64) anyerror!pmem.PAddr {

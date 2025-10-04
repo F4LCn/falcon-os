@@ -31,11 +31,26 @@ pub fn init() !void {
 }
 
 pub fn lateInit() !void {
-    try kernel_heap.extend(20 * sizes.mb);
+    try kernel_heap.extend(200 * sizes.mb);
 }
 
 pub fn allocator() std.mem.Allocator {
     return kernel_heap.allocator();
+}
+
+pub fn pageAllocator() std.mem.Allocator {
+    return kernel_heap.pageAllocator();
+}
+
+
+pub fn printStats() void {
+    log.debug(
+        \\
+        \\ Kernel allocator stats:
+        \\      - Free Mem: {d}
+        \\      - Allocated Mem: {d}
+        \\      - Total Mem: {d}
+    , .{ kernel_heap.total_free_memory, kernel_heap.total_allocated_memory, kernel_heap.total_allocated_memory + kernel_heap.total_free_memory });
 }
 
 test {
