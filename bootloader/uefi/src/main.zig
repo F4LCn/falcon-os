@@ -339,7 +339,7 @@ fn mapKernelSpace(
         );
     }
     // Identity mapping - Low memory
-    const low_memory_limit: u64 = 0x100000;
+    const low_memory_limit: u64 = 0x200000;
     log.debug("Mapping identity low memory 0 -> 0x{X}", .{low_memory_limit});
     var i: u64 = 0;
     while (i < low_memory_limit) : (i += Constants.arch_page_size) {
