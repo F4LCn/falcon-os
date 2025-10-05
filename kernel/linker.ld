@@ -3,12 +3,12 @@ OUTPUT_ARCH(i386:x86-64)
 ENTRY(_start)
 
 fb          = 0xfffffffff8000000;
-bootinfo    = 0xfffffffffc000000;
-env	    = 0xfffffffffc001000;
+bootinfo    = 0xffffffff80000000;
+env	    = 0xffffffff80001000;
 
 SECTIONS
 {
-  . = 0xFFFFFFFFFC002000;
+  . = 0xffffffff80002000;
 	.text ALIGN(4K):
 	{
 		*(.text .stub .text.* .gnu.linkonce.t.*)

@@ -7,6 +7,7 @@ const log = std.log.scoped(.config);
 pub const BootloaderConfig = struct {
     kernel: []const u8 = "",
     video: VideoResolution = .{ .width = 640, .height = 480 },
+    page_offset: u64 = 0,
 };
 
 pub fn parseConfig(config: []const u8) BootloaderError!BootloaderConfig {
@@ -34,6 +35,11 @@ pub fn parseConfig(config: []const u8) BootloaderError!BootloaderConfig {
                     };
                     parsed.video = .{ .width = width, .height = height };
                 }
+            } else if (std.mem.eql(u8, key, "PAGE_OFFSET")) {
+                parsed.page_offset = std.fmt.parseInt(u64, value, 0) catch {
+                    log.err("Error while parsing page offset ({s}) (should be a valid u64)", .{value});
+                    return BootloaderError.ConfigParseError;
+                };
             }
         }
     }

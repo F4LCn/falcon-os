@@ -57,11 +57,13 @@ pub fn main() uefi.Status {
     std.log.info(
         \\Parsed config file
         \\Kernel file: {s}
-        \\Video resolution: {d} x {d}"
+        \\Video resolution: {d} x {d}
+        \\Page offset: 0x{x}
     , .{
         bootloader_config.kernel,
         bootloader_config.video.width,
         bootloader_config.video.height,
+        bootloader_config.page_offset,
     });
 
     const video_info: Video.VideoInfo = Video.getPreferredResolution() catch blk: {
@@ -92,13 +94,12 @@ pub fn main() uefi.Status {
         std.log.err("Could not load kernel executable", .{});
         return uefi.Status.aborted;
     };
-    if (kernel_info.debug_info_ptr)|debug_info_ptr| bootinfo.debug_info_ptr = debug_info_ptr;
-    
+    if (kernel_info.debug_info_ptr) |debug_info_ptr| bootinfo.debug_info_ptr = debug_info_ptr;
 
     std.log.debug("Bootinfo struct: {any}", .{bootinfo});
 
     std.log.debug("Kernel info: ", .{});
-    std.log.debug("  entrypoint: 0x{X}", .{kernel_info.entrypoint});
+    std.log.debug("  entrypoint: 0x{x}", .{kernel_info.entrypoint});
     std.log.debug("  entry count: {d}", .{kernel_info.segment_count});
     if (kernel_info.debug_info_ptr) |_| {
         std.log.debug("  debug info loaded @ 0x{x}", .{kernel_info.debug_info_ptr});
@@ -113,7 +114,7 @@ pub fn main() uefi.Status {
             .paddr => |x| @as(u64, @bitCast(x)),
             else => unreachable,
         };
-        std.log.info("  mapping[{d}]: p=0x{X} v=0x{X} l={d}", .{ idx, @as(u64, mapping_paddr), @as(u64, mapping_vaddr), mapping.len });
+        std.log.info("  mapping[{d}]: p=0x{x} v=0x{x} l={d}", .{ idx, @as(u64, mapping_paddr), @as(u64, mapping_vaddr), mapping.len });
     }
 
     var addr_space = AddressSpace.create() catch {
@@ -121,41 +122,50 @@ pub fn main() uefi.Status {
         return uefi.Status.aborted;
     };
 
-    const fb_ptr = bootinfo.fb_ptr;
-    const fb_size = (@as(u64, bootinfo.fb_height)) * (@as(u64, bootinfo.fb_scanline_bytes));
-    mapKernelSpace(&addr_space, &kernel_info, @intFromPtr(bootinfo), fb_ptr, fb_size, @intFromPtr(config.buffer)) catch {
+    mapStacks(&addr_space) catch {
+        std.log.err("Could not map stacks", .{});
+        return uefi.Status.aborted;
+    };
+    mapKernel(&addr_space, &kernel_info, @intFromPtr(bootinfo), @intFromPtr(config.buffer)) catch {
         std.log.err("Could not map kernel address space", .{});
         return uefi.Status.aborted;
     };
+    const fb_ptr = bootinfo.fb_ptr;
+    const fb_size = @as(u64, bootinfo.fb_height) * @as(u64, bootinfo.fb_scanline_bytes);
+    if (kernel_info.fb_addr) |fb_addr|
+        mapFramebuffer(&addr_space, fb_addr, fb_ptr, fb_size) catch {
+            std.log.err("Could not map framebuffer", .{});
+            return uefi.Status.aborted;
+        };
+    mapLowMemory(&addr_space) catch {
+        std.log.err("Could not map low memory", .{});
+        return uefi.Status.aborted;
+    };
 
-    // addr_space.print();
-
-    std.log.debug("bootinfo page: {X}", .{bootinfo_page[0..200]});
+    std.log.debug("bootinfo page: {x}", .{bootinfo_page[0..200]});
     kernel.deinit() catch {
         std.log.err("Could not free kernel buffer", .{});
         return uefi.Status.aborted;
     };
-
-    const mmap_entries: [*]BootInfo.MmapEntry = @ptrCast(&bootinfo.mmap);
-    const map_key = Mmap.getMemMap(bootinfo) catch |e| {
+    const memory_limit = Mmap.buildMmap(bootinfo) catch |e| {
         std.log.err("Failed to get memory map. Error: {}", .{e});
-        std.log.err("mmap: ", .{});
-        for (mmap_entries[0..5], 0..) |entry, i| {
-            std.log.err("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getLen(), entry.getType() });
-        }
         return uefi.Status.aborted;
     };
-    for (mmap_entries[0..30], 0..) |entry, i| {
-        std.log.debug("[{d}] entry: Start=0x{X} Size=0x{X} Typ={}", .{ i, entry.getPtr(), entry.getLen(), entry.getType() });
-    }
+    mapMemory(&addr_space, bootloader_config.page_offset, memory_limit) catch {
+        std.log.err("Could not map low memory", .{});
+        return uefi.Status.aborted;
+    };
+    const map_key = Mmap.getMmapKey() catch |e| {
+        std.log.err("Failed to get memory map key. Error: {}", .{e});
+        return uefi.Status.aborted;
+    };
 
-    const _marker: u64 = 32;
     std.log.info(
         \\ preparing to exit boot services
-        \\ page map -> 0x{X}
-        \\ kernel_entry -> 0x{X}
-        \\ current addr -> 0x{X}
-    , .{ addr_space.root, kernel_info.entrypoint, @intFromPtr(&_marker) });
+        \\ page map -> 0x{x}
+        \\ kernel_entry -> 0x{x}
+        \\ memory limit -> 0x{x}
+    , .{ addr_space.root, kernel_info.entrypoint, memory_limit });
 
     // TODO: exit boot services
     const status = Globals.boot_services._exitBootServices(uefi.handle, map_key);
@@ -165,7 +175,7 @@ pub fn main() uefi.Status {
         },
         else => {
             std.log.err("Could not exit boot services, bad map key", .{});
-            return uefi.Status.aborted;
+            while (true) {}
         },
     }
 
@@ -175,6 +185,7 @@ pub fn main() uefi.Status {
     // if UEFI chooses to load the bootloader too high in memory (around 3G)
     // this means that we need to keep about 4Gb identity mapped and pray
     // FIXME: This needs to be written to a trampoline page we are SURE stays (identity) mapped
+    const page_map = addr_space.root + bootloader_config.page_offset;
     asm volatile (
         \\ mov %cr4, %rax
         \\ or $0x620, %rax
@@ -185,28 +196,34 @@ pub fn main() uefi.Status {
         \\ _catch:
         \\ jmp _catch
         :
-        : [page_map] "r" (addr_space.root),
+        : [page_map] "r" (page_map),
           [kernel_entry] "r" (kernel_info.entrypoint),
         : .{ .rax = true });
 
     return uefi.Status.timeout;
 }
 
-fn mapKernelSpace(
-    addr_space: *AddressSpace,
-    kernel_info: *const KernelLoader.KernelInfo,
-    bootinfo_ptr: u64,
-    fb_ptr: u64,
-    fb_size: u64,
-    env_ptr: u64,
-) BootloaderError!void {
+fn mapLowMemory(addr_space: *AddressSpace) BootloaderError!void {
+    const log = std.log.scoped(.KernelSpaceMapper);
+    const low_memory_limit: u64 = 0x400000;
+    log.debug("Mapping identity low memory 0 -> 0x{x}", .{low_memory_limit});
+    var i: u64 = 0;
+    while (i < low_memory_limit) : (i += Constants.arch_page_size) {
+        log.debug("Mapping identity 0x{x}", .{i});
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(i) },
+            .{ .paddr = @bitCast(i) },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+}
+fn mapStacks(addr_space: *AddressSpace) BootloaderError!void {
     const log = std.log.scoped(.KernelSpaceMapper);
     log.info("Mapping kernel space", .{});
-    // core stack
     var core_stack_vaddr: u64 = -%@as(u64, Constants.arch_page_size);
     for (0..Constants.max_cpu) |i| {
         const core_stack_ptr = try MemHelper.allocatePages(1, .ReservedMemoryType);
-        log.debug("Mapping core[{d}] stack: 0x{X} -> [0x{X} -> 0x{X}]", .{
+        log.debug("Mapping core[{d}] stack: 0x{x} -> [0x{x} -> 0x{x}]", .{
             i,
             @intFromPtr(core_stack_ptr),
             core_stack_vaddr,
@@ -218,6 +235,67 @@ fn mapKernelSpace(
             AddressSpace.DefaultMmapFlags,
         );
         core_stack_vaddr -%= Constants.arch_page_size;
+    }
+}
+
+fn mapFramebuffer(addr_space: *AddressSpace, fb_addr: u64, fb_ptr: u64, fb_size: u64) BootloaderError!void {
+    const log = std.log.scoped(.KernelSpaceMapper);
+    // TODO: make sure the size is page aligned
+    log.info("Mapping framebuffer from 0x{x} -> 0x{x} (0x{x})", .{ fb_ptr, fb_addr, fb_size });
+    var fb_vaddr = fb_addr;
+    var fb_paddr = fb_ptr;
+    while (fb_paddr < fb_ptr + fb_size) : ({
+        fb_paddr += Constants.arch_page_size;
+        fb_vaddr += Constants.arch_page_size;
+    }) {
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(fb_vaddr) },
+            .{ .paddr = fb_paddr },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+}
+
+fn mapMemory(addr_space: *AddressSpace, page_offset: u64, memory_limit: ?u64) BootloaderError!void {
+    const log = std.log.scoped(.KernelSpaceMapper);
+    const memory_size: u64 = memory_limit orelse MemHelper.tb(64);
+    var i: u64 = 0;
+    log.info("Mapping physical memory to 0x{x}", .{page_offset});
+    while (i < memory_size) : (i += Constants.arch_page_size) {
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(i + page_offset) },
+            .{ .paddr = @bitCast(i) },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+}
+
+fn mapKernel(
+    addr_space: *AddressSpace,
+    kernel_info: *const KernelLoader.KernelInfo,
+    bootinfo_ptr: u64,
+    env_ptr: u64,
+) BootloaderError!void {
+    const log = std.log.scoped(.KernelSpaceMapper);
+    // env
+    if (kernel_info.env_addr) |env_addr| {
+        log.debug("Mapping env 0x{x} -> 0x{x}", .{ env_ptr, env_addr });
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(env_addr) },
+            .{ .paddr = env_ptr },
+            AddressSpace.DefaultMmapFlags,
+        );
+    }
+    // bootinfo
+    if (kernel_info.bootinfo_addr) |bootinfo_addr| {
+        log.info("Mapping bootinfo struct 0x{x} -> 0x{x}", .{ bootinfo_ptr, bootinfo_addr });
+        try addr_space.mmap(
+            .{ .vaddr = @bitCast(bootinfo_addr) },
+            .{ .paddr = bootinfo_ptr },
+            AddressSpace.DefaultMmapFlags,
+        );
+    } else {
+        @panic("No bootinfo found");
     }
     // kernel
     var kernel_end: u64 = 0;
@@ -232,7 +310,7 @@ fn mapKernelSpace(
             .paddr => |x| @as(u64, @bitCast(x)),
             else => unreachable,
         };
-        log.debug("Mapping kernel segment 0x{X} -> 0x{X} {X}", .{
+        log.debug("Mapping kernel segment 0x{x} -> 0x{x} {x}", .{
             @as(u64, @bitCast(mapping_paddr)),
             @as(u64, @bitCast(mapping_vaddr)),
             mapping.len,
@@ -241,7 +319,7 @@ fn mapKernelSpace(
         for (0..num_pages) |p| {
             defer mapping_paddr += Constants.arch_page_size;
             defer mapping_vaddr += Constants.arch_page_size;
-            log.debug("\t kernel segment[{d}] 0x{X} -> 0x{X}", .{
+            log.debug("\t kernel segment[{d}] 0x{x} -> 0x{x}", .{
                 p,
                 @as(u64, @bitCast(mapping_paddr)),
                 @as(u64, @bitCast(mapping_vaddr)),
@@ -257,13 +335,13 @@ fn mapKernelSpace(
     kernel_end += Constants.arch_page_size;
 
     const quickmap_start = kernel_end + 2 * Constants.arch_page_size;
-    log.info("Kernel end found @ 0x{X}", .{kernel_end});
+    log.info("Kernel end found @ 0x{x}", .{kernel_end});
     const quickmap_pages = Constants.max_cpu;
     var quickmap_page = quickmap_start;
     const placeholder_addr: u64 = 0xDEADBEEF;
     for (0..quickmap_pages) |p| {
         defer quickmap_page += Constants.arch_page_size;
-        log.info("\t Quickmap page[{d}] 0x{X} -> 0x{X}", .{
+        log.info("\t Quickmap page[{d}] 0x{x} -> 0x{x}", .{
             p,
             @as(u64, @bitCast(placeholder_addr)),
             @as(u64, @bitCast(quickmap_page)),
@@ -286,9 +364,9 @@ fn mapKernelSpace(
 
         const quickmap_page_addr: AddressSpace.Pml4VirtualAddress = @bitCast(quickmap_page);
         const pte_addr = try addr_space.getPageTableEntry(quickmap_page_addr, AddressSpace.DefaultMmapFlags);
-        log.info("Quickmap PTE 0x{X} paddr=0x{X}", .{ @intFromPtr(pte_addr), pte_addr.getAddr() });
+        log.info("Quickmap PTE 0x{x} paddr=0x{x}", .{ @intFromPtr(pte_addr), pte_addr.getAddr() });
         const pte_page_addr = std.mem.alignBackward(u64, @intFromPtr(pte_addr), Constants.arch_page_size);
-        log.info("\t Quickmap pte page[{d}] 0x{X} -> 0x{X}", .{
+        log.info("\t Quickmap pte page[{d}] 0x{x} -> 0x{x}", .{
             p,
             @as(u64, @bitCast(pte_page_addr)),
             @as(u64, @bitCast(quickmap_pt_entry_page)),
@@ -296,69 +374,6 @@ fn mapKernelSpace(
         try addr_space.mmap(
             .{ .vaddr = @bitCast(quickmap_pt_entry_page) },
             .{ .paddr = pte_page_addr },
-            AddressSpace.DefaultMmapFlags,
-        );
-    }
-
-    // bootinfo
-    if (kernel_info.bootinfo_addr) |bootinfo_addr| {
-        log.info("Mapping bootinfo struct 0x{X} -> 0x{X}", .{ bootinfo_ptr, bootinfo_addr });
-        try addr_space.mmap(
-            .{ .vaddr = @bitCast(bootinfo_addr) },
-            .{ .paddr = bootinfo_ptr },
-            AddressSpace.DefaultMmapFlags,
-        );
-    } else {
-        @panic("No bootinfo found");
-    }
-    // fb
-    // TODO: make sure the size is page aligned
-    log.debug("Mapping fb", .{});
-    if (kernel_info.fb_addr) |fb_addr| {
-        log.info("Mapping framebuffer from 0x{X} -> 0x{X} (0x{X})", .{ fb_ptr, fb_addr, fb_size });
-        var fb_vaddr = fb_addr;
-        var fb_paddr = fb_ptr;
-        while (fb_paddr < fb_ptr + fb_size) : ({
-            fb_paddr += Constants.arch_page_size;
-            fb_vaddr += Constants.arch_page_size;
-        }) {
-            try addr_space.mmap(
-                .{ .vaddr = @bitCast(fb_vaddr) },
-                .{ .paddr = fb_paddr },
-                AddressSpace.DefaultMmapFlags,
-            );
-        }
-    }
-    // env
-    if (kernel_info.env_addr) |env_addr| {
-        log.debug("Mapping env 0x{X} -> 0x{X}", .{ env_ptr, env_addr });
-        try addr_space.mmap(
-            .{ .vaddr = @bitCast(env_addr) },
-            .{ .paddr = env_ptr },
-            AddressSpace.DefaultMmapFlags,
-        );
-    }
-    // Identity mapping - Low memory
-    const low_memory_limit: u64 = 0x200000;
-    log.debug("Mapping identity low memory 0 -> 0x{X}", .{low_memory_limit});
-    var i: u64 = 0;
-    while (i < low_memory_limit) : (i += Constants.arch_page_size) {
-        log.debug("Mapping identity 0x{X}", .{i});
-        try addr_space.mmap(
-            .{ .vaddr = @bitCast(i) },
-            .{ .paddr = @bitCast(i) },
-            AddressSpace.DefaultMmapFlags,
-        );
-    }
-    // Identity mapping
-    const identity_map_size: u64 = MemHelper.gb(4);
-    log.debug("Mapping identity 512mb 0x{X}", .{identity_map_size});
-    i = 0x400000;
-    while (i < identity_map_size) : (i += Constants.arch_page_size) {
-        log.debug("Mapping identity 0x{X}", .{i});
-        try addr_space.mmap(
-            .{ .vaddr = @bitCast(i) },
-            .{ .paddr = @bitCast(i) },
             AddressSpace.DefaultMmapFlags,
         );
     }

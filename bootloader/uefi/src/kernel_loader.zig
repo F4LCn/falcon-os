@@ -55,13 +55,6 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
     }
 
     var kernel_info: KernelInfo = .{ .entrypoint = ehdr.e_entry };
-    // status = Globals.boot_services._allocatePool(.loader_data, @sizeOf(KernelInfo), @ptrCast(&kernel_info));
-    // switch (status) {
-    //     .success => log.debug("Allocated kernel info struct at {*}", .{kernel_info}),
-    //     else => return BootloaderError.AllocateKernelInfo,
-    // }
-    // kernel_info.* = .{ .entrypoint = ehdr.e_entry };
-
     const pheaders = std.mem.bytesAsSlice(elf.Elf64_Phdr, kernel_file[ehdr.e_phoff .. ehdr.e_phoff + ehdr.e_phnum * ehdr.e_phentsize]);
     var mapping_idx: usize = 0;
     var ph_idx: usize = 0;

@@ -8,7 +8,7 @@ const MemHelper = @import("mem_helper.zig");
 
 const log = std.log.scoped(.mmap);
 
-pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!uefi.tables.MemoryMapKey {
+pub fn buildMmap(bootinfo: *BootInfo) BootloaderError!u64 {
     var status: uefi.Status = undefined;
     const boot_services = Globals.boot_services;
 
@@ -27,7 +27,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!uefi.tables.MemoryMapKey {
     }
 
     mmap_size += 2 * descriptor_size;
-    status = boot_services._allocatePool(.loader_data, mmap_size, @ptrCast(&mmap));
+    status = boot_services._allocatePool(MemHelper.MemoryType.RECLAIMABLE.toUefi(), mmap_size, @ptrCast(&mmap));
     switch (status) {
         .success => log.debug("Allocated {d} bytes for memory map at {*}", .{ mmap_size, mmap }),
         else => {
@@ -48,6 +48,7 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!uefi.tables.MemoryMapKey {
     log.debug("descriptor size: expected={d}, actual={d}", .{ @sizeOf(uefi.tables.MemoryDescriptor), descriptor_size });
 
     const mmap_entries: [*]BootInfo.MmapEntry = @ptrCast(&bootinfo.mmap);
+    var mem_limit: u64 = 0;
     var mmap_idx: u64 = 0;
     var last_mmap_idx: ?u64 = null;
 
@@ -78,6 +79,9 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!uefi.tables.MemoryMapKey {
 
         const mmap_entry = &mmap_entries[mmap_idx];
         mmap_entry.* = BootInfo.MmapEntry.create(descriptor.physical_start, descriptor.number_of_pages * Constants.arch_page_size, entry_type);
+        if (mem_limit < mmap_entry.getEnd()) {
+            mem_limit = mmap_entry.getEnd();
+        }
 
         if (last_mmap_idx) |last_idx| {
             const last_mmap_entry = &mmap_entries[last_idx];
@@ -99,5 +103,24 @@ pub fn getMemMap(bootinfo: *BootInfo) BootloaderError!uefi.tables.MemoryMapKey {
         mmap_idx += 1;
     }
     log.info("Created {d} mmap entries, bootinfo size: {d}", .{ mmap_idx, bootinfo.size });
+    return mem_limit;
+}
+
+pub fn getMmapKey() BootloaderError!uefi.tables.MemoryMapKey {
+    var mmap_size: usize = 0;
+    const mmap: ?[*]uefi.tables.MemoryDescriptor = null;
+    var mapKey: uefi.tables.MemoryMapKey = undefined;
+    var descriptor_size: usize = undefined;
+    var descriptor_version: u32 = undefined;
+    const boot_services = Globals.boot_services;
+    const status = boot_services._getMemoryMap(&mmap_size, @ptrCast(mmap), &mapKey, &descriptor_size, &descriptor_version);
+    switch (status) {
+        .buffer_too_small => log.debug("Need {d} bytes for memory map buffer", .{mmap_size}),
+        else => {
+            log.err("Expected BufferTooSmall but got {s} instead", .{@tagName(status)});
+            return BootloaderError.MemoryMapError;
+        },
+    }
+
     return mapKey;
 }

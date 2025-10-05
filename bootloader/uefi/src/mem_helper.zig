@@ -17,6 +17,10 @@ pub fn gb(val: comptime_int) comptime_int {
     return mb(val) * 1024;
 }
 
+pub fn tb(val: comptime_int) comptime_int {
+    return mb(val) * mb(val);
+}
+
 pub const MemoryType = enum(u32) {
     ReservedMemoryType,
     LoaderCode,
