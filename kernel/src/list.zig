@@ -1,4 +1,5 @@
 const std = @import("std");
+const constants = @import("constants");
 
 pub fn Iterator(comptime T: anytype, field: std.meta.FieldEnum(T)) type {
     return struct {
@@ -34,6 +35,10 @@ pub fn SinglyLinkedList(comptime T: anytype, comptime next_field: std.meta.Field
             }
 
             self.head = new_node;
+        }
+
+        pub fn isEmpty(self: *Self) bool {
+            return self.head == null;
         }
 
         pub fn len(self: Self) usize {
@@ -159,7 +164,9 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
         }
 
         pub fn insertBefore(self: *Self, node: *T, new_node: *T) void {
-            std.debug.assert(self.head != null and self.tail != null);
+            if (constants.safety) {
+                if (self.head != null and self.tail == null or self.head == null and self.tail != null) @panic("Bug: Head and Tail not concordent on nullity");
+            }
             const node_prev = @field(node, prev);
             if (node_prev) |np| {
                 @field(np, next) = new_node;
@@ -173,7 +180,9 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
         }
 
         pub fn insertAfter(self: *Self, node: *T, new_node: *T) void {
-            std.debug.assert(self.head != null and self.tail != null);
+            if (constants.safety) {
+                if (self.head != null and self.tail == null or self.head == null and self.tail != null) @panic("Bug: Head and Tail not concordent on nullity");
+            }
             const node_next = @field(node, next);
             if (node_next) |nx| {
                 @field(nx, prev) = new_node;
@@ -222,6 +231,13 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
             if (node_next) |n| {
                 @field(n, prev) = node_prev;
             }
+        }
+
+        pub fn isEmpty(self: *Self) bool {
+            if (constants.safety) {
+                if (self.head != null and self.tail == null or self.head == null and self.tail != null) @panic("Bug: Head and Tail not concordent on nullity");
+            }
+            return self.head == null;
         }
     };
 }
