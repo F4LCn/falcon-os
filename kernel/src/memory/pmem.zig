@@ -21,6 +21,7 @@ const PhysRangeType = enum {
     framebuffer,
     kernel_module,
     paging,
+    trampoline,
 
     pub fn fromMmapEntryType(typ: BootInfo.MmapEntry.Type) @This() {
         // TODO: make this a bit more resilient

@@ -74,7 +74,7 @@ pub const PageMapping = extern struct {
                 2 => vaddr.pd_idx = @intCast(idx),
                 1 => {
                     vaddr.pt_idx = @intCast(idx);
-                    log.info("VAddr: 0x{X}: {any}", .{ @as(u64, @bitCast(vaddr.*)), vaddr });
+                    log.info("VAddr: 0x{X}: 0x{x}", .{ @as(u64, @bitCast(vaddr.*)), vaddr });
                     mapping.print();
                     continue;
                 },
@@ -144,8 +144,8 @@ pub fn getPageTableEntry(self: *const Self, vaddr: Pml4VirtualAddress, flags: Mm
     const pt_mapping = try getOrCreateMapping(pd_mapping, vaddr.pd_idx);
     log.debug("PT: {*}", .{pt_mapping});
     if (flags.page_size == .large) {
-        // TODO: handle large pages here
-        @panic("large pages unhandled");
+        const entry = &pd_mapping.mappings[vaddr.pd_idx];
+        return entry;
     }
     const entry = &pt_mapping.mappings[vaddr.pt_idx];
     return entry;

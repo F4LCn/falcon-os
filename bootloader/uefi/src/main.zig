@@ -22,6 +22,17 @@ pub const std_options: std.Options = .{
 pub fn main() uefi.Status {
     logger.init(serial.Port.COM1);
     Globals.init();
+    var trampoline_page: [*]u8 = @ptrFromInt(0x10000);
+    var status = Globals.boot_services._allocatePages(.max_address, MemHelper.MemoryType.TRAMPOLINE.toUefi(), 1, @ptrCast(&trampoline_page));
+    switch (status) {
+        .success => {
+            std.log.info("Reserved trampoline page {*}", .{trampoline_page});
+        },
+        else => {
+            std.log.err("Failed to create trampoline page", .{});
+            return uefi.Status.aborted;
+        },
+    }
     FileSystem.init() catch {
         std.log.err("Failed to initialize filesystem subsystem", .{});
         return uefi.Status.aborted;
@@ -152,7 +163,7 @@ pub fn main() uefi.Status {
         return uefi.Status.aborted;
     };
     mapMemory(&addr_space, bootloader_config.page_offset, memory_limit) catch {
-        std.log.err("Could not map low memory", .{});
+        std.log.err("Could not map memory", .{});
         return uefi.Status.aborted;
     };
     const map_key = Mmap.getMmapKey() catch |e| {
@@ -160,18 +171,20 @@ pub fn main() uefi.Status {
         return uefi.Status.aborted;
     };
 
+    const trampoline_addr = @intFromPtr(trampoline_page);
     std.log.info(
         \\ preparing to exit boot services
+        \\ trampoline page -> 0x{x}
         \\ page map -> 0x{x}
         \\ kernel_entry -> 0x{x}
         \\ memory limit -> 0x{x}
-    , .{ addr_space.root, kernel_info.entrypoint, memory_limit });
+    , .{ trampoline_addr, addr_space.root, kernel_info.entrypoint, memory_limit });
 
     // TODO: exit boot services
-    const status = Globals.boot_services._exitBootServices(uefi.handle, map_key);
+    status = Globals.boot_services._exitBootServices(uefi.handle, map_key);
     switch (status) {
         .success => {
-            std.log.info("Exited boot services. Handling execution to kernel ...", .{});
+            std.log.info("Exited boot services. Handlng execution to kernel ...", .{});
         },
         else => {
             std.log.err("Could not exit boot services, bad map key", .{});
@@ -181,12 +194,15 @@ pub fn main() uefi.Status {
 
     // WARN: Don't use boot_services after this line
 
-    // NOTE: We currently randomly page fault on setting the new page map to CR3
-    // if UEFI chooses to load the bootloader too high in memory (around 3G)
-    // this means that we need to keep about 4Gb identity mapped and pray
-    // FIXME: This needs to be written to a trampoline page we are SURE stays (identity) mapped
-    const page_map = addr_space.root + bootloader_config.page_offset;
     asm volatile (
+        \\ leaq .trampoline(%%rip), %rsi
+        \\ leaq .trampoline_end(%%rip), %rcx
+        \\ subq %rsi, %rcx
+        \\ movq %[trampoline_addr], %rdi
+        \\ rep movsb
+        \\ jmp *%[trampoline_addr]
+        \\ 
+        \\ .trampoline:
         \\ mov %cr4, %rax
         \\ or $0x620, %rax
         \\ mov %rax, %cr4
@@ -195,17 +211,25 @@ pub fn main() uefi.Status {
         \\ jmp *%rax
         \\ _catch:
         \\ jmp _catch
+        \\ .trampoline_end:
         :
-        : [page_map] "r" (page_map),
+        : [trampoline_addr] "r" (trampoline_addr),
+          [page_map] "r" (addr_space.root),
           [kernel_entry] "r" (kernel_info.entrypoint),
-        : .{ .rax = true });
+        : .{
+          .rax = true,
+          .rsi = true,
+          .rcx = true,
+          .rdi = true,
+        });
 
+    while (true) {}
     return uefi.Status.timeout;
 }
 
 fn mapLowMemory(addr_space: *AddressSpace) BootloaderError!void {
     const log = std.log.scoped(.KernelSpaceMapper);
-    const low_memory_limit: u64 = 0x400000;
+    const low_memory_limit: u64 = 0x100000;
     log.debug("Mapping identity low memory 0 -> 0x{x}", .{low_memory_limit});
     var i: u64 = 0;
     while (i < low_memory_limit) : (i += Constants.arch_page_size) {
@@ -263,11 +287,20 @@ fn mapMemory(addr_space: *AddressSpace, page_offset: u64, memory_limit: ?u64) Bo
     log.info("Mapping physical memory to 0x{x}", .{page_offset});
     while (i < memory_size) : (i += Constants.arch_page_size) {
         try addr_space.mmap(
-            .{ .vaddr = @bitCast(i + page_offset) },
+            .{ .vaddr = @bitCast(i +% page_offset) },
             .{ .paddr = @bitCast(i) },
             AddressSpace.DefaultMmapFlags,
         );
     }
+    // i = 0x400000;
+    // log.info("Mapping physical memory to 0x{x}", .{page_offset});
+    // while (i < memory_size) : (i += Constants.arch_page_size) {
+    //     try addr_space.mmap(
+    //         .{ .vaddr = @bitCast(i) },
+    //         .{ .paddr = @bitCast(i) },
+    //         AddressSpace.DefaultMmapFlags,
+    //     );
+    // }
 }
 
 fn mapKernel(

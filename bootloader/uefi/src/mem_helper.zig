@@ -43,6 +43,7 @@ pub const MemoryType = enum(u32) {
     FRAMEBUFFER,
     KERNEL_MODULE,
     PAGING,
+    TRAMPOLINE,
 
     pub fn toUefi(self: MemoryType) std.os.uefi.tables.MemoryType {
         return @enumFromInt(@intFromEnum(self));

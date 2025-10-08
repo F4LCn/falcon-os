@@ -22,6 +22,7 @@ pub const BootInfo = extern struct {
             FRAMEBUFFER,
             KERNEL_MODULE,
             PAGING,
+            TRAMPOLINE,
         };
 
         ptr: u64,

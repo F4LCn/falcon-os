@@ -74,6 +74,7 @@ pub fn buildMmap(bootinfo: *BootInfo) BootloaderError!u64 {
             .BOOTINFO => .BOOTINFO,
             .KERNEL_MODULE => .KERNEL_MODULE,
             .FRAMEBUFFER => .FRAMEBUFFER,
+            .TRAMPOLINE => .TRAMPOLINE,
             else => .USED,
         };
 
