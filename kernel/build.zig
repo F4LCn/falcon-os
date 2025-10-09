@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) !void {
     });
     const optimize = b.standardOptimizeOption(.{});
 
+    const constants_module = createConstantsModule(b, optimize);
     const kernel_module = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -24,8 +25,9 @@ pub fn build(b: *std.Build) !void {
         .sanitize_thread = false,
         .dwarf_format = .@"64",
     });
-    attachConstantsModule(b, kernel_module);
+    attachLibModule(b, kernel_module, constants_module);
     try attachArchModule(alloc, b, kernel_module);
+    kernel_module.addImport("constants", constants_module);
 
     const kernel_exe = b.addExecutable(.{
         .name = "kernel64.elf",
@@ -54,7 +56,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = .Debug,
         .target = default_target,
     });
-    attachConstantsModule(b, tests_module);
+    tests_module.addImport("constants", constants_module);
 
     const tests = b.addTest(.{
         .name = "all_tests",
@@ -91,18 +93,18 @@ pub fn build(b: *std.Build) !void {
     generate_arch_step.dependOn(&arch_file_copy.step);
 }
 
-fn attachConstantsModule(b: *std.Build, module: *std.Build.Module) void {
+fn createConstantsModule(b: *std.Build, optimize: std.builtin.OptimizeMode) *std.Build.Module {
     const constants = b.addOptions();
     if (b.available_options_map.get("max_cpu")) |_| {} else {
         const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
         constants.addOption(u64, "max_cpu", max_cpu_option);
     }
 
-    constants.addOption(bool, "safety", module.optimize.? == .Debug or module.optimize.? == .ReleaseSafe);
+    constants.addOption(bool, "safety", optimize == .Debug or optimize == .ReleaseSafe);
     constants.addOption(comptime_int, "num_stack_trace", 5);
     constants.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
     constants.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
-    module.addOptions("constants", constants);
+    return constants.createModule();
 }
 
 fn attachArchModule(alloc: std.mem.Allocator, b: *std.Build, module: *std.Build.Module) !void {
@@ -113,4 +115,11 @@ fn attachArchModule(alloc: std.mem.Allocator, b: *std.Build, module: *std.Build.
     module.addAnonymousImport("arch", .{
         .root_source_file = b.path(path),
     });
+}
+
+fn attachLibModule(b: *std.Build, module: *std.Build.Module, constants: *std.Build.Module) void {
+    const path = "src/flcn/flcn.zig";
+    module.addAnonymousImport("flcn", .{ .root_source_file = b.path(path), .imports = &.{
+        .{ .name = "constants", .module = constants },
+    } });
 }
