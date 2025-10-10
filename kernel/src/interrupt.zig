@@ -1,11 +1,11 @@
 const std = @import("std");
-const constants = @import("constants");
+const options = @import("options");
 const arch = @import("arch");
 const descriptors = @import("descriptors.zig");
 const IDT = @import("descriptors/idt.zig");
 const Context = @import("interrupt/types.zig").Context;
 const x64 = @import("interrupt/x64.zig");
-const SinglyLinkedList = @import("list.zig").SinglyLinkedList;
+const SinglyLinkedList = @import("flcn").list.SinglyLinkedList;
 
 const log = std.log.scoped(.interrupt);
 

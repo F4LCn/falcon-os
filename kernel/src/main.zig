@@ -1,13 +1,14 @@
 const std = @import("std");
-const constants = @import("constants");
-const BootInfo = @import("bootinfo.zig").BootInfo;
+const options = @import("options");
 const logger = @import("log/logger.zig");
 const cpu = @import("cpu.zig");
 const serial = @import("log/serial.zig");
 const mem = @import("memory.zig");
 const descriptors = @import("descriptors.zig");
-const debug = @import("debug.zig");
 const arch = @import("arch");
+const flcn = @import("flcn");
+const debug = flcn.debug;
+const BootInfo = flcn.bootinfo.BootInfo;
 const Memory = @import("memory.zig");
 const panicFn = @import("panic.zig").panicFn;
 
@@ -58,16 +59,12 @@ pub fn failableMain() !void {
     try Memory.init();
 
     std.log.info("Quick mapping", .{});
-    const addr = Memory.kernel_vmem.quickMap(0x1400000);
+    const addr = Memory.kernel_vmem.physToVirt(0x1400000);
     const v_id_mapped: *u64 = @ptrFromInt(0x1400000);
     v_id_mapped.* = 456;
-    const v: *u64 = @ptrFromInt(addr);
+    const v: *u64 = @ptrFromInt(addr.toAddr());
     v.* = 123;
     std.log.info("quick mapped value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
-    Memory.kernel_vmem.quickUnmap();
-
-    v_id_mapped.* = 654;
-    std.log.info("value @ {d}", .{v_id_mapped.*});
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
@@ -80,12 +77,12 @@ pub fn failableMain() !void {
     try debug.init(kernel_alloc);
 
     Memory.printStats();
-    std.log.info("page allocator test",.{});
+    std.log.info("page allocator test", .{});
     const page_alloc = Memory.pageAllocator();
     Memory.kernel_vmem.printRanges();
     const allocated2 = try page_alloc.alloc([arch.constants.default_page_size]u8, 1000);
     defer page_alloc.free(allocated2);
-    std.log.info("allocated pages at 0x{x} with length {x}", .{@intFromPtr(allocated2.ptr), allocated2.len});
+    std.log.info("allocated pages at 0x{x} with length {x}", .{ @intFromPtr(allocated2.ptr), allocated2.len });
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });

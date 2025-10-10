@@ -1,15 +1,16 @@
 const std = @import("std");
-const constants = @import("constants");
-const DoubleLinkedList = @import("../list.zig").DoublyLinkedList;
+const options = @import("options");
 const pmem = @import("pmem.zig");
 const vmem = @import("vmem.zig");
-const mem_allocator = @import("allocator.zig");
-const buddy = @import("buddy.zig");
+const flcn = @import("flcn");
+const mem_allocator = flcn.allocator;
+const buddy = flcn.buddy;
 const arch = @import("arch");
+const DoubleLinkedList = @import("flcn").list.DoublyLinkedList;
 
 const log = std.log.scoped(.heap);
-var permanent_heap: [constants.permanent_heap_size]u8 linksection(".kernel_heap") = undefined;
-var kernel_heap: [constants.heap_size]u8 linksection(".kernel_heap") = undefined;
+var permanent_heap: [options.permanent_heap_size]u8 linksection(".kernel_heap") = undefined;
+var kernel_heap: [options.heap_size]u8 linksection(".kernel_heap") = undefined;
 
 var _permanent_alloc = std.heap.FixedBufferAllocator.init(@constCast(&permanent_heap));
 var _kernel_alloc = std.heap.FixedBufferAllocator.init(@constCast(&kernel_heap));
@@ -66,6 +67,7 @@ const SubHeap = struct {
 const SubHeapList = DoubleLinkedList(SubHeap, .prev, .next);
 
 const Self = @This();
+page_allocator: buddy.Buddy(.{ .min_size = arch.constants.default_page_size }),
 virt_alloc: *vmem.VirtualAllocator,
 subheaps: SubHeapList = .{},
 total_free_memory: u64 = 0,
@@ -75,13 +77,20 @@ total_allocated_memory: u64 = 0,
 
 pub fn earlyInit() !Self {
     const perm_alloc = permanentAllocator();
-    var heap: Self = .{ .virt_alloc = undefined };
+    var heap: Self = .{ .virt_alloc = undefined, .page_allocator = undefined };
     const early_subheap = try perm_alloc.create(SubHeap);
     const subheap_allocator = try mem_allocator.adaptFixedBufferAllocator(perm_alloc, &_kernel_alloc);
     early_subheap.* = .initFromSlice(subheap_allocator.subHeapAllocator(), &kernel_heap);
     heap.subheaps.append(early_subheap);
     heap.total_free_memory += kernel_heap.len;
     return heap;
+}
+pub fn initPageAllocator(self: *Self, count: u64) !void {
+    const alloc = self.allocator();
+    const pages = try pmem.allocatePages(count, .{});
+    const memory: [*] align(arch.constants.default_page_size) u8 = @ptrFromInt(pages.start);
+    const memory_slice = memory[0..pages.length];
+    self.page_allocator = try .initFromSlice(alloc, memory_slice);
 }
 pub fn setVmm(self: *Self, virt_alloc: *vmem.VirtualAllocator) void {
     self.virt_alloc = virt_alloc;
@@ -101,7 +110,7 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
     if (args.zero) {
         @memset(allocated_ptr[0 .. count * arch.constants.default_page_size], 0);
     } else {
-        if (constants.safety) {
+        if (options.safety) {
             // FIXME: we should figure out how to generate and splat a known (predictable) pattern
             const u64_slice = std.mem.bytesAsSlice(u64, allocated_ptr[0 .. count * arch.constants.default_page_size]);
             @memset(u64_slice, 0xAABBCCDD11223344);
@@ -111,7 +120,7 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
 }
 
 pub fn freePages(self: *Self, memory: []align(arch.constants.default_page_size) u8, args: struct { committed: bool = false, poison: bool = false }) void {
-    if (constants.safety and args.poison) {
+    if (options.safety and args.poison) {
         // FIXME: we should figure out how to generate and splat a known (predictable) pattern
         const u64_slice = std.mem.bytesAsSlice(u64, memory);
         @memset(u64_slice, 0x99887766FFEEDDCC);
@@ -135,7 +144,7 @@ pub fn extend(self: *Self, len: u64) !void {
     const memory = self.allocatePages(page_count, .{}) catch unreachable;
     const memory_slice = memory[0 .. page_count * arch.constants.default_page_size];
     log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
-    buddy_allocator.* = try .init(alloc, memory_slice);
+    buddy_allocator.* = try .initFromSlice(alloc, memory_slice);
     log.info("permanentAllocator: {x} {x}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
     subheap.* = .{
         .memory_start = @intFromPtr(memory_slice.ptr),

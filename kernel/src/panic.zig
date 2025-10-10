@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const arch = @import("arch");
-const constants = @import("constants");
-const debug = @import("debug.zig");
+const options = @import("options");
+const debug = @import("flcn").debug;
 
 const log = std.log.scoped(.@"************************* PANICC *************************");
 
@@ -11,7 +11,7 @@ pub fn panicFn(msg: []const u8, first_trace_addr: ?usize) noreturn {
     var stacktrace = debug.StackTrace{
         .addresses = .{0} ** 5,
     };
-    if (constants.safety) {
+    if (options.safety) {
         _ = stacktrace.capture(first_trace_addr orelse @returnAddress());
     }
 

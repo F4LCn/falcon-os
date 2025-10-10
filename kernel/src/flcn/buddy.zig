@@ -1,9 +1,9 @@
 const std = @import("std");
-const debug = @import("../debug.zig");
+const debug = @import("debug.zig");
 const builtin = @import("builtin");
 const mem_allocator = @import("allocator.zig");
 
-const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
+const DoublyLinkedList = @import("list.zig").DoublyLinkedList;
 
 // TODO: replace all instances of std.mem.Allocator by a wrapped version of our Allocator
 // TODO: check that the memory_start is page aligned
@@ -138,11 +138,15 @@ pub fn Buddy(comptime config: BuddyConfig) type {
         max_order: u6,
         safety_data: if (config.safety) SafetyData else void,
 
-        pub fn init(alloc: std.mem.Allocator, memory: []u8) !Self {
-            if (!std.mem.Alignment.fromByteUnits(4096).check(@intFromPtr(memory.ptr))) {
+        pub fn initFromSlice(alloc: std.mem.Allocator, memory: []u8) !Self {
+            return try .init(alloc, @intFromPtr(memory.ptr), memory.len);
+        }
+
+        pub fn init(alloc: std.mem.Allocator, start: u64, length: u64) !Self {
+            if (!std.mem.Alignment.fromByteUnits(4096).check(start)) {
                 @panic("Expected page aligned memory");
             }
-            const max_block_size_log: u64 = @intCast(std.math.log2(memory.len));
+            const max_block_size_log: u64 = @intCast(std.math.log2(length));
             const max_order: u6 = @intCast(max_block_size_log - min_block_size_log + 1);
             const num_nodes = (@as(u64, 1) << max_order) - 1;
             const node_state_count = (@as(u64, 1) << (max_order - 1)) - 1;
@@ -152,8 +156,8 @@ pub fn Buddy(comptime config: BuddyConfig) type {
                 .max_order = max_order,
                 .buckets = try alloc.alloc(BucketFreeList, max_order),
                 .node_state = try .initEmpty(alloc, node_state_count),
-                .memory_start = @intFromPtr(memory.ptr),
-                .memory_length = memory.len,
+                .memory_start = start,
+                .memory_length = length,
                 .safety_data = if (config.safety) try .init(alloc, num_nodes) else {},
             };
             for (buddy.buckets) |*bucket| {

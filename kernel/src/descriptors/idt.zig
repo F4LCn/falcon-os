@@ -1,5 +1,5 @@
 const std = @import("std");
-const constants = @import("constants");
+const options = @import("options");
 const arch = @import("arch");
 const Segment = @import("types.zig").Segment;
 

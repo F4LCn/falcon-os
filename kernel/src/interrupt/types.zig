@@ -1,4 +1,4 @@
-const constants = @import("constants");
+const options = @import("options");
 const arch = @import("arch");
 pub const ISR = *const fn () callconv(.naked) void;
 

@@ -1,9 +1,10 @@
 const std = @import("std");
-const constants = @import("constants");
+const options = @import("options");
 const arch = @import("arch");
-const BootInfo = @import("../bootinfo.zig").BootInfo;
-const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
-const SpinLock = @import("../synchronization.zig").SpinLock;
+const flcn = @import("flcn");
+const BootInfo = flcn.bootinfo.BootInfo;
+const DoublyLinkedList = flcn.list.DoublyLinkedList;
+const SpinLock = flcn.synchronization.SpinLock;
 const Allocator = std.mem.Allocator;
 
 extern var bootinfo: BootInfo;
@@ -12,78 +13,14 @@ var mmap_entries: []BootInfo.MmapEntry = undefined;
 const log = std.log.scoped(.pmem);
 const Error = error{OutOfPhysMemory};
 
-const PhysRangeType = enum {
-    used,
-    free,
-    acpi,
-    reclaimable,
-    bootinfo,
-    framebuffer,
-    kernel_module,
-    paging,
-    trampoline,
-
-    pub fn fromMmapEntryType(typ: BootInfo.MmapEntry.Type) @This() {
-        // TODO: make this a bit more resilient
-        return @enumFromInt(@intFromEnum(typ));
-    }
-};
-pub const PAddrSize = arch.memory.PAddrSize;
 pub const PAddr = arch.memory.PAddr;
-pub const PhysMemRange = struct {
-    start: PAddr,
-    length: PAddrSize,
-    typ: PhysRangeType,
+pub const PAddrSize = arch.memory.PAddrSize;
+pub const PhysicalMemoryManager = flcn.pmm.PhysicalMemoryManager;
+pub const PhysMemRange = flcn.pmm.PhysMemRange;
+pub const PhysRangeType = flcn.pmm.PhysRangeType;
 
-    pub fn format(
-        self: *const @This(),
-        writer: anytype,
-    ) !void {
-        try writer.print("{*}[0x{X} -> 0x{X} (sz={X}) {s}]", .{ self, self.start, self.start + self.length, self.length, @tagName(self.typ) });
-    }
-};
-const PhysMemRangeListItem = struct {
-    const Self = @This();
-    range: PhysMemRange,
-    prev: ?*Self = null,
-    next: ?*Self = null,
-
-    pub fn format(
-        self: *const @This(),
-        writer: anytype,
-    ) !void {
-        try writer.print("{*}[range={f}]", .{ self, &self.range });
-    }
-};
-const PhysMemRangeList = DoublyLinkedList(PhysMemRangeListItem, .prev, .next);
-const PhysicalMemoryManager = struct {
-    const Self = @This();
-    lock: SpinLock,
-    alloc: Allocator,
-    memory_ranges: PhysMemRangeList,
-    free_ranges: PhysMemRangeList,
-    reserved_ranges: PhysMemRangeList,
-    total_memory: PAddrSize,
-    free_pages_count: PAddrSize,
-    reserved_pages_count: PAddrSize,
-    uncommitted_pages_count: PAddrSize,
-    committed_pages_count: PAddrSize,
-
-    pub fn init(alloc: Allocator) Self {
-        return .{
-            .lock = .create(),
-            .alloc = alloc,
-            .memory_ranges = PhysMemRangeList{},
-            .free_ranges = PhysMemRangeList{},
-            .reserved_ranges = PhysMemRangeList{},
-            .total_memory = 0,
-            .free_pages_count = 0,
-            .reserved_pages_count = 0,
-            .uncommitted_pages_count = 0,
-            .committed_pages_count = 0,
-        };
-    }
-};
+const PhysMemRangeListItem = flcn.pmm.PhysMemRangeListItem;
+const PhysMemRangeAllocator = flcn.pmm.PhysMemRangeAllocator;
 
 var mm: PhysicalMemoryManager = undefined;
 
@@ -150,6 +87,7 @@ fn reclaimFreeableMemory() void {
     }
 }
 
+const PageAllocator = flcn.buddy.Buddy(.{ .min_size = arch.constants.default_page_size });
 fn initRanges() !void {
     for (mmap_entries) |entry| {
         const ptr = entry.getPtr();
@@ -173,6 +111,14 @@ fn initRanges() !void {
         range_list_item.* = .{ .range = range };
         list.append(range_list_item);
         pages_count.* += @divExact(len, arch.constants.default_page_size);
+
+        if (typ == .free) {
+            const phys_range_allocator = try mm.alloc.create(PhysMemRangeAllocator);
+            const page_allocator = try mm.alloc.create(PageAllocator);
+            page_allocator.* = try .init(mm.alloc, range.start, range.length);
+            phys_range_allocator.* = .init(page_allocator.subHeapAllocator(), range);
+            mm.page_allocators.append(phys_range_allocator);
+        }
     }
 }
 

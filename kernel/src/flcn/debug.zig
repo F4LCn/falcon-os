@@ -1,66 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const options = @import("options");
 const native_endian = builtin.cpu.arch.endian();
 const Dwarf = std.debug.Dwarf;
 const BootInfo = @import("bootinfo.zig").BootInfo;
-const constants = @import("constants");
-
-// TODO: on the bootloaders side
-// debug info should be loaded by the bootloader if the relevant sections exist
-// in the elf binary. A new field should be added to the bootinfo struct pointing to a mapped page
-// containing the debug info (parsed? prob not just load the sections into memory and we'll read them).
-
-// NOTE: Design goals ..
-// This module should handle parsing the dwarf data from debug sections and provide an API that
-// lets us find a symbol (variable/function/module) given an address (a stack trace entry for example)
 
 extern var bootinfo: BootInfo;
-
-fn EnumFieldPackedStruct(comptime E: type, comptime Data: type, comptime field_default: ?Data) type {
-    @setEvalBranchQuota(1000);
-    var struct_fields: [@typeInfo(E).@"enum".fields.len]std.builtin.Type.StructField = undefined;
-    for (&struct_fields, @typeInfo(E).@"enum".fields) |*struct_field, enum_field| {
-        struct_field.* = .{
-            .name = enum_field.name,
-            .type = Data,
-            .default_value_ptr = if (field_default) |d| @as(?*const anyopaque, @ptrCast(&d)) else null,
-            .is_comptime = false,
-            .alignment = 0,
-        };
-    }
-    return @Type(.{ .@"struct" = .{
-        .layout = .@"packed",
-        .fields = &struct_fields,
-        .decls = &.{},
-        .is_tuple = false,
-    } });
-}
-
-pub const Section = packed struct {
-    const num_types = std.enums.directEnumArrayLen(Type, 0) - 1;
-    pub const Type = enum(u8) {
-        debug_info,
-        debug_abbrev,
-        debug_str,
-        debug_str_offsets,
-        debug_line,
-        debug_line_str,
-        debug_ranges,
-        debug_loclists,
-        debug_rnglists,
-        debug_addr,
-        debug_names,
-        debug_frame,
-        eh_frame,
-        eh_frame_hdr,
-    };
-
-    paddr: u64 = 0,
-    len: u64 = 0,
-    vaddr: u64 = undefined,
-};
-
-pub const Sections = EnumFieldPackedStruct(Section.Type, Section, .{});
 
 const log = std.log.scoped(.debug);
 var debug_info: ?Dwarf = null;
@@ -113,8 +58,54 @@ pub fn init(alloc: std.mem.Allocator) !void {
     }
 }
 
+fn EnumFieldPackedStruct(comptime E: type, comptime Data: type, comptime field_default: ?Data) type {
+    @setEvalBranchQuota(1000);
+    var struct_fields: [@typeInfo(E).@"enum".fields.len]std.builtin.Type.StructField = undefined;
+    for (&struct_fields, @typeInfo(E).@"enum".fields) |*struct_field, enum_field| {
+        struct_field.* = .{
+            .name = enum_field.name,
+            .type = Data,
+            .default_value_ptr = if (field_default) |d| @as(?*const anyopaque, @ptrCast(&d)) else null,
+            .is_comptime = false,
+            .alignment = 0,
+        };
+    }
+    return @Type(.{ .@"struct" = .{
+        .layout = .@"packed",
+        .fields = &struct_fields,
+        .decls = &.{},
+        .is_tuple = false,
+    } });
+}
+
+pub const Section = packed struct {
+    const num_types = std.enums.directEnumArrayLen(Type, 0) - 1;
+    pub const Type = enum(u8) {
+        debug_info,
+        debug_abbrev,
+        debug_str,
+        debug_str_offsets,
+        debug_line,
+        debug_line_str,
+        debug_ranges,
+        debug_loclists,
+        debug_rnglists,
+        debug_addr,
+        debug_names,
+        debug_frame,
+        eh_frame,
+        eh_frame_hdr,
+    };
+
+    paddr: u64 = 0,
+    len: u64 = 0,
+    vaddr: u64 = undefined,
+};
+
+pub const Sections = EnumFieldPackedStruct(Section.Type, Section, .{});
+
 pub const StackTrace = struct {
-    const num_traces = constants.num_stack_trace;
+    const num_traces = options.num_stack_trace;
     addresses: [num_traces]usize = .{0} ** num_traces,
     index: usize = 0,
 

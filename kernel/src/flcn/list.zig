@@ -1,5 +1,5 @@
 const std = @import("std");
-const constants = @import("constants");
+const options = @import("options");
 
 pub fn Iterator(comptime T: anytype, field: std.meta.FieldEnum(T)) type {
     return struct {
@@ -164,7 +164,7 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
         }
 
         pub fn insertBefore(self: *Self, node: *T, new_node: *T) void {
-            if (constants.safety) {
+            if (options.safety) {
                 if (self.head != null and self.tail == null or self.head == null and self.tail != null) @panic("Bug: Head and Tail not concordent on nullity");
             }
             const node_prev = @field(node, prev);
@@ -180,7 +180,7 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
         }
 
         pub fn insertAfter(self: *Self, node: *T, new_node: *T) void {
-            if (constants.safety) {
+            if (options.safety) {
                 if (self.head != null and self.tail == null or self.head == null and self.tail != null) @panic("Bug: Head and Tail not concordent on nullity");
             }
             const node_next = @field(node, next);
@@ -234,7 +234,7 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
         }
 
         pub fn isEmpty(self: *Self) bool {
-            if (constants.safety) {
+            if (options.safety) {
                 if (self.head != null and self.tail == null or self.head == null and self.tail != null) @panic("Bug: Head and Tail not concordent on nullity");
             }
             return self.head == null;

@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) !void {
     });
     const optimize = b.standardOptimizeOption(.{});
 
-    const constants_module = createConstantsModule(b, optimize);
+    const options_module = createOptionsModule(b, optimize);
     const kernel_module = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -25,9 +25,14 @@ pub fn build(b: *std.Build) !void {
         .sanitize_thread = false,
         .dwarf_format = .@"64",
     });
-    attachLibModule(b, kernel_module, constants_module);
-    try attachArchModule(alloc, b, kernel_module);
-    kernel_module.addImport("constants", constants_module);
+    const lib_module = createLibModule(b);
+    lib_module.addImport("options", options_module);
+    const arch_module = try createArchModule(alloc, b, kernel_module.resolved_target.?.result.cpu.arch);
+    arch_module.addImport("flcn", lib_module);
+    arch_module.addImport("options", options_module);
+    kernel_module.addImport("options", options_module);
+    kernel_module.addImport("flcn", lib_module);
+    kernel_module.addImport("arch", arch_module);
 
     const kernel_exe = b.addExecutable(.{
         .name = "kernel64.elf",
@@ -56,7 +61,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = .Debug,
         .target = default_target,
     });
-    tests_module.addImport("constants", constants_module);
+    tests_module.addImport("constants", options_module);
 
     const tests = b.addTest(.{
         .name = "all_tests",
@@ -93,33 +98,36 @@ pub fn build(b: *std.Build) !void {
     generate_arch_step.dependOn(&arch_file_copy.step);
 }
 
-fn createConstantsModule(b: *std.Build, optimize: std.builtin.OptimizeMode) *std.Build.Module {
-    const constants = b.addOptions();
+fn createOptionsModule(b: *std.Build, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+    const options = b.addOptions();
     if (b.available_options_map.get("max_cpu")) |_| {} else {
         const max_cpu_option = b.option(u64, "max_cpu", "Max platform CPUs") orelse 0;
-        constants.addOption(u64, "max_cpu", max_cpu_option);
+        options.addOption(u64, "max_cpu", max_cpu_option);
     }
 
-    constants.addOption(bool, "safety", optimize == .Debug or optimize == .ReleaseSafe);
-    constants.addOption(comptime_int, "num_stack_trace", 5);
-    constants.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
-    constants.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
-    return constants.createModule();
+    options.addOption(bool, "safety", optimize == .Debug or optimize == .ReleaseSafe);
+    options.addOption(comptime_int, "num_stack_trace", 5);
+    options.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
+    options.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
+    return options.createModule();
 }
 
-fn attachArchModule(alloc: std.mem.Allocator, b: *std.Build, module: *std.Build.Module) !void {
-    const build_arch = module.resolved_target.?.result.cpu.arch;
-    const path = try std.mem.concat(alloc, u8, &.{ "src/arch/", @tagName(build_arch), "/arch.zig" });
+fn createArchModule(alloc: std.mem.Allocator, b: *std.Build, arch: std.Target.Cpu.Arch) !*std.Build.Module {
+    const path = try std.mem.concat(alloc, u8, &.{ "src/arch/", @tagName(arch), "/arch.zig" });
     defer alloc.free(path);
 
-    module.addAnonymousImport("arch", .{
-        .root_source_file = b.path(path),
-    });
+    return std.Build.Module.create(
+        b,
+        .{
+            .root_source_file = b.path(path),
+        },
+    );
 }
 
-fn attachLibModule(b: *std.Build, module: *std.Build.Module, constants: *std.Build.Module) void {
+fn createLibModule(b: *std.Build) *std.Build.Module {
     const path = "src/flcn/flcn.zig";
-    module.addAnonymousImport("flcn", .{ .root_source_file = b.path(path), .imports = &.{
-        .{ .name = "constants", .module = constants },
-    } });
+    return std.Build.Module.create(
+        b,
+        .{ .root_source_file = b.path(path) },
+    );
 }

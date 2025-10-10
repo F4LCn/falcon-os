@@ -27,6 +27,7 @@ pub fn init() !void {
     log.info("Initializing virtual memory manager", .{});
     kernel_vmem = try vmem.init(permanent_allocator);
     kernel_vmem.printRanges();
+    try kernel_heap.initPageAllocator(1000);
     kernel_heap.setVmm(&kernel_vmem);
 }
 
@@ -56,6 +57,5 @@ pub fn printStats() void {
 test {
     _ = @import("memory/pmem.zig");
     _ = @import("memory/vmem.zig");
-    _ = @import("memory/buddy.zig");
     _ = @import("memory/heap.zig");
 }

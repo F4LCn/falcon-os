@@ -2,7 +2,7 @@ const std = @import("std");
 const Segment = @import("types.zig").Segment;
 const builtin = @import("builtin");
 const common = @import("common.zig");
-const constants = @import("constants");
+const options = @import("options");
 const arch = @import("arch");
 
 const log = std.log.scoped(.gdt);
@@ -13,7 +13,7 @@ const GDTR = packed struct {
     base: *[gdt_entries_size]u8,
 };
 const max_gdt_entries = 5;
-const max_tsd_entries = constants.max_cpu;
+const max_tsd_entries = options.max_cpu;
 const gdt_entries_size = @sizeOf(Segment.GlobalDescriptor) * max_gdt_entries + @sizeOf(Segment.TaskSegmentDescriptor) * max_tsd_entries;
 gdt_entries_buffer: [gdt_entries_size]u8 align(16) = [_]u8{0} ** gdt_entries_size,
 tss_entries: [max_tsd_entries]Segment.TaskState = [_]Segment.TaskState{std.mem.zeroes(Segment.TaskState)} ** max_tsd_entries,

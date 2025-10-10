@@ -5,11 +5,11 @@ const GateDescriptor = @import("descriptors/types.zig").Segment.GateDescriptor;
 const interrupt = @import("interrupt.zig");
 const interrupt_types = @import("interrupt/types.zig");
 const arch = @import("arch");
-const constants = @import("constants");
+const options = @import("options");
 
 const log = std.log.scoped(.descriptors);
 
-var stacks: [constants.max_cpu * arch.constants.default_page_size]u8 align(arch.constants.default_page_size) = [_]u8{0} ** (constants.max_cpu * arch.constants.default_page_size);
+var stacks: [options.max_cpu * arch.constants.default_page_size]u8 align(arch.constants.default_page_size) = [_]u8{0} ** (options.max_cpu * arch.constants.default_page_size);
 
 pub var gdt: GDT = undefined;
 pub var idt: IDT = undefined;
