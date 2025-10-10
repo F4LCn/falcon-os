@@ -23,9 +23,12 @@ const PhysMemRangeListItem = flcn.pmm.PhysMemRangeListItem;
 const PhysMemRangeAllocator = flcn.pmm.PhysMemRangeAllocator;
 
 var mm: PhysicalMemoryManager = undefined;
+var alloc: std.mem.Allocator = undefined;
 
-pub fn init(alloc: Allocator) !void {
-    mm = .init(alloc);
+pub fn init(a: Allocator) !void {
+    alloc = a;
+    mm = .init();
+
     mm.lock.lock();
     defer mm.lock.unlock();
 
@@ -87,15 +90,15 @@ fn reclaimFreeableMemory() void {
     }
 }
 
-const PageAllocator = flcn.buddy.Buddy(.{ .min_size = arch.constants.default_page_size });
-fn initRanges() !void {
+const PageAllocator = flcn.buddy.Buddy(.{ .min_size = arch.constants.default_page_size, .safety = false });
+pub fn initRanges() !void {
     for (mmap_entries) |entry| {
         const ptr = entry.getPtr();
         const len = entry.getLen();
         const typ = PhysRangeType.fromMmapEntryType(entry.getType());
         if (len == 0) continue;
         const range: PhysMemRange = .{ .start = ptr, .length = len, .typ = typ };
-        const list_item = try mm.alloc.create(PhysMemRangeListItem);
+        const list_item = try alloc.create(PhysMemRangeListItem);
         list_item.* = .{ .range = range };
         mm.memory_ranges.append(list_item);
         mm.total_memory += range.length;
@@ -107,15 +110,15 @@ fn initRanges() !void {
             }
         };
 
-        const range_list_item = try mm.alloc.create(PhysMemRangeListItem);
+        const range_list_item = try alloc.create(PhysMemRangeListItem);
         range_list_item.* = .{ .range = range };
         list.append(range_list_item);
         pages_count.* += @divExact(len, arch.constants.default_page_size);
 
         if (typ == .free) {
-            const phys_range_allocator = try mm.alloc.create(PhysMemRangeAllocator);
-            const page_allocator = try mm.alloc.create(PageAllocator);
-            page_allocator.* = try .init(mm.alloc, range.start, range.length);
+            const phys_range_allocator = try alloc.create(PhysMemRangeAllocator);
+            const page_allocator = try alloc.create(PageAllocator);
+            page_allocator.* = try .init(alloc, range.start, range.length);
             phys_range_allocator.* = .init(page_allocator.subHeapAllocator(), range);
             mm.page_allocators.append(phys_range_allocator);
         }
@@ -165,7 +168,7 @@ pub fn allocatePages(count: PAddrSize, args: struct { committed: bool = false })
         if (list_item.range.length == requested_size) {
             const range = list_item.range;
             mm.free_ranges.remove(list_item);
-            mm.alloc.destroy(list_item);
+            alloc.destroy(list_item);
             return range;
         } else if (list_item.range.length > requested_size) {
             const range = PhysMemRange{ .start = list_item.range.start, .length = requested_size, .typ = .used };

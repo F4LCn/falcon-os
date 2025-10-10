@@ -88,7 +88,7 @@ pub fn earlyInit() !Self {
 pub fn initPageAllocator(self: *Self, count: u64) !void {
     const alloc = self.allocator();
     const pages = try pmem.allocatePages(count, .{});
-    const memory: [*] align(arch.constants.default_page_size) u8 = @ptrFromInt(pages.start);
+    const memory: [*]align(arch.constants.default_page_size) u8 = @ptrFromInt(pages.start);
     const memory_slice = memory[0..pages.length];
     self.page_allocator = try .initFromSlice(alloc, memory_slice);
 }
@@ -192,6 +192,9 @@ fn _alloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: u
             return subheap_alloc.rawAlloc(len, alignment, ret_addr);
         }
     }
+    log.err("could not allocate {d} bytes with alignment {d}", .{ len, alignment.toByteUnits() });
+    log.err("permanent heap {d}/{d}", .{ _permanent_alloc.end_index, _permanent_alloc.buffer.len });
+    log.err("early heap {d}/{d}", .{ _kernel_alloc.end_index, _kernel_alloc.buffer.len });
     return null;
 }
 

@@ -60,29 +60,24 @@ pub fn failableMain() !void {
 
     std.log.info("Quick mapping", .{});
     const addr = Memory.kernel_vmem.physToVirt(0x1400000);
-    const v_id_mapped: *u64 = @ptrFromInt(0x1400000);
-    v_id_mapped.* = 456;
+    // const v_id_mapped: *u64 = @ptrFromInt(0x1400000);
+    // v_id_mapped.* = 456;
     const v: *u64 = @ptrFromInt(addr.toAddr());
     v.* = 123;
-    std.log.info("quick mapped value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
+    std.log.info("quick mapped value @ {*} {d}", .{ v, v.* });
 
-    // v.* = 321;
-    // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
     std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
-
     descriptors.init();
-
-    try Memory.lateInit();
+    // try Memory.lateInit();
+    try debug.init(Memory.permanent_allocator);
     Memory.printStats();
-    try debug.init(kernel_alloc);
 
-    Memory.printStats();
-    std.log.info("page allocator test", .{});
-    const page_alloc = Memory.pageAllocator();
-    Memory.kernel_vmem.printRanges();
-    const allocated2 = try page_alloc.alloc([arch.constants.default_page_size]u8, 1000);
-    defer page_alloc.free(allocated2);
-    std.log.info("allocated pages at 0x{x} with length {x}", .{ @intFromPtr(allocated2.ptr), allocated2.len });
+    // std.log.info("page allocator test", .{});
+    // const page_alloc = Memory.pageAllocator();
+    // Memory.kernel_vmem.printRanges();
+    // const allocated2 = try page_alloc.alloc([arch.constants.default_page_size]u8, 1000);
+    // defer page_alloc.free(allocated2);
+    // std.log.info("allocated pages at 0x{x} with length {x}", .{ @intFromPtr(allocated2.ptr), allocated2.len });
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });

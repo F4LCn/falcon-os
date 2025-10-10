@@ -74,7 +74,7 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
         defer vmm.lock.unlock();
         try vmm.registerRange(0xfffffffff0000000, 128 * sizes.mb, .{ .typ = .mmio });
         try vmm.registerRange(@intFromPtr(&fb), 64 * sizes.mb, .{ .typ = .framebuffer });
-        const kernel_range_start = 0xfffffffffc000000;
+        const kernel_range_start = 0xffffffff80000000;
         const kernel_end_addr = @intFromPtr(&_kernel_end);
         const kernel_range_size = kernel_end_addr -% kernel_range_start;
         log.debug("kernel size: {x}", .{kernel_range_size});
@@ -88,7 +88,7 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
         try vmm.registerRange(quickmap_start, quickmap_length, .{ .typ = .quickmap });
         const quickmap_end = quickmap_start + quickmap_length;
         try vmm.registerRange(quickmap_end + 2 * arch.constants.default_page_size, quickmap_pt_entry_start - quickmap_end - 4 * arch.constants.default_page_size, .{});
-        try vmm.registerRange(0xffffffffc0000000, 0xfffffffff0000000 - 0xffffffffc0000000, .{});
+        // try vmm.registerRange(0xffffffff88000000, 0xfffffffff0000000 - 0xffffffffc0000000, .{});
     }
     var self: VirtualAllocator = .{ .impl = inner, .vmm = vmm };
 

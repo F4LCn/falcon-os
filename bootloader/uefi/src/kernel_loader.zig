@@ -21,17 +21,17 @@ pub const KernelInfo = struct {
     env_addr: ?u64 = null,
 };
 
-pub fn loadExecutable(kernel_file: []const u8) BootloaderError!KernelInfo {
+pub fn loadExecutable(kernel_file: []const u8, page_offset: u64) BootloaderError!KernelInfo {
     const kernel_signature = kernel_file[0..4];
     if (std.mem.eql(u8, kernel_signature, elf.MAGIC)) {
         log.info("Kernel matched ELF signature", .{});
-        return loadElf(kernel_file);
+        return loadElf(kernel_file, page_offset);
     }
 
     return BootloaderError.InvalidKernelExecutable;
 }
 
-fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
+fn loadElf(kernel_file: []const u8, page_offset: u64) BootloaderError!KernelInfo {
     // var status: uefi.Status = undefined;
     const ehdr: *elf.Elf64_Ehdr = @as(*elf.Elf64_Ehdr, @ptrCast(@alignCast(@constCast(kernel_file.ptr))));
     if (ehdr.e_ident[elf.EI_CLASS] != elf.ELFCLASS64) {
@@ -144,24 +144,24 @@ fn loadElf(kernel_file: []const u8) BootloaderError!KernelInfo {
                     @memcpy(dest_slice, section_slice);
                     defer debug_section_cursor += section_slice.len;
                     switch (debug_section_type) {
-                        .debug_info => debug_info.debug_info = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_abbrev => debug_info.debug_abbrev = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_str => debug_info.debug_str = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_str_offsets => debug_info.debug_str_offsets = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_line => debug_info.debug_line = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_line_str => debug_info.debug_line_str = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_ranges => debug_info.debug_ranges = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_loclists => debug_info.debug_loclists = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_rnglists => debug_info.debug_rnglists = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_addr => debug_info.debug_addr = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_names => debug_info.debug_names = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .debug_frame => debug_info.debug_frame = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .eh_frame => debug_info.eh_frame = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
-                        .eh_frame_hdr => debug_info.eh_frame_hdr = .{ .paddr = @intFromPtr(dest_slice.ptr), .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_info => debug_info.debug_info = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_abbrev => debug_info.debug_abbrev = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_str => debug_info.debug_str = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_str_offsets => debug_info.debug_str_offsets = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_line => debug_info.debug_line = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_line_str => debug_info.debug_line_str = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_ranges => debug_info.debug_ranges = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_loclists => debug_info.debug_loclists = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_rnglists => debug_info.debug_rnglists = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_addr => debug_info.debug_addr = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_names => debug_info.debug_names = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .debug_frame => debug_info.debug_frame = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .eh_frame => debug_info.eh_frame = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
+                        .eh_frame_hdr => debug_info.eh_frame_hdr = .{ .paddr = @intFromPtr(dest_slice.ptr) + page_offset, .len = section_slice.len, .vaddr = shdr.sh_addr },
                     }
                 }
             }
-            kernel_info.debug_info_ptr = @intFromPtr(debug_info_bytes);
+            kernel_info.debug_info_ptr = @intFromPtr(debug_info_bytes) + page_offset;
         }
 
         if (symtabOpt) |symtab_shdr| {

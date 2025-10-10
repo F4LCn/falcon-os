@@ -101,7 +101,7 @@ pub fn main() uefi.Status {
         return uefi.Status.aborted;
     };
 
-    const kernel_info = KernelLoader.loadExecutable(kernel.getContents()) catch {
+    const kernel_info = KernelLoader.loadExecutable(kernel.getContents(), bootloader_config.page_offset) catch {
         std.log.err("Could not load kernel executable", .{});
         return uefi.Status.aborted;
     };
@@ -312,7 +312,7 @@ fn mapKernel(
     const log = std.log.scoped(.KernelSpaceMapper);
     // env
     if (kernel_info.env_addr) |env_addr| {
-        log.debug("Mapping env 0x{x} -> 0x{x}", .{ env_ptr, env_addr });
+        log.info("Mapping env map 0x{x} -> 0x{x}", .{ env_ptr, env_addr });
         try addr_space.mmap(
             .{ .vaddr = @bitCast(env_addr) },
             .{ .paddr = env_ptr },

@@ -20,7 +20,7 @@ pub const VAddr = packed struct(u64) {
 
     pub fn toAddr(self: VAddr) VAddrSize {
         return @bitCast(self);
-    } 
+    }
 };
 pub const ReadWrite = enum(u1) {
     read_execute = 0,
@@ -102,7 +102,7 @@ pub const PageMapping = extern struct {
     }
 };
 
-extern var env: [*]u8;
+var env = @extern([*]u8, .{ .name = "env", .visibility = .hidden });
 pub const VirtualMemoryManager = flcn.vmm.VirtualMemoryManager(VAddr, VAddrSize, constants.default_page_size);
 pub const VirtMemRange = VirtualMemoryManager.VirtMemRange;
 pub const MMapArgs = struct {
@@ -118,6 +118,7 @@ pub const PageMapManager = struct {
     allocate_pages: *const fn (count: u64) anyerror!PAddr,
 
     pub fn init(allocate_pages: *const fn (count: PAddrSize) anyerror!PAddr) !Self {
+        log.info("reading kernel config", .{});
         const page_offset = try readPageOffset();
         const root = registers.readCR(.cr3);
         log.info("Got current pagemap: 0x{X}", .{root});
@@ -130,6 +131,7 @@ pub const PageMapManager = struct {
     }
 
     fn readPageOffset() !VAddrSize {
+        log.info("env: {*}", .{env});
         const config = env[0..constants.default_page_size];
         var line_tokenizer = std.mem.tokenizeScalar(u8, config, '\n');
         while (line_tokenizer.next()) |line| {
@@ -201,24 +203,31 @@ pub const PageMapManager = struct {
     }
 
     fn getPageTableEntry(self: *const Self, vaddr: VAddr, flags: MmapFlags, args: struct { create_if_missing: bool = true }) !*PageMapping.Entry {
-        const pml4_mapping: *PageMapping = @ptrFromInt(@as(VAddrSize, @bitCast(self.physToVirt(@intCast(self.root)))));
+        // const pml4_vaddr = @as(VAddrSize, @bitCast(self.physToVirt(@intCast(self.root))));
+        const pml4_mapping: *PageMapping = @ptrFromInt(self.root);
         log.debug("PML4: {*}", .{pml4_mapping});
         const pdp_mapping = try self.getOrCreateMapping(pml4_mapping, vaddr.pml4_idx, args.create_if_missing);
-        // log.debug("PDP: {*}", .{pdp_mapping});
+        log.debug("PDP: {*}", .{pdp_mapping});
         const pd_mapping = try self.getOrCreateMapping(pdp_mapping, vaddr.pdp_idx, args.create_if_missing);
-        // log.debug("PD: {*}", .{pd_mapping});
+        log.debug("PD: {*}", .{pd_mapping});
         const pt_mapping = try self.getOrCreateMapping(pd_mapping, vaddr.pd_idx, args.create_if_missing);
-        // log.debug("PT: {*}", .{pt_mapping});
+        log.debug("PT: {*}", .{pt_mapping});
         if (flags.page_size == .large) {
-            const entry = &pd_mapping.mappings[vaddr.pd_idx];
+            const pd_mapping_vaddr = self.physToVirt(@intFromPtr(pd_mapping)).toAddr();
+            const mapped_pd_mapping: *PageMapping = @ptrFromInt(pd_mapping_vaddr);
+            const entry = &mapped_pd_mapping.mappings[vaddr.pd_idx];
             return entry;
         }
-        const entry = &pt_mapping.mappings[vaddr.pt_idx];
+        const pt_mapping_vaddr = self.physToVirt(@intFromPtr(pt_mapping)).toAddr();
+        const mapped_pt_mapping: *PageMapping = @ptrFromInt(pt_mapping_vaddr);
+        const entry = &mapped_pt_mapping.mappings[vaddr.pt_idx];
         return entry;
     }
 
     fn getOrCreateMapping(self: Self, mapping: *PageMapping, idx: u9, create_if_missing: bool) !*PageMapping {
-        const next_level: *PageMapping.Entry = &mapping.mappings[idx];
+        const mapping_vaddr = self.physToVirt(@intFromPtr(mapping)).toAddr();
+        const mapped_mapping: *PageMapping = @ptrFromInt(mapping_vaddr);
+        const next_level: *PageMapping.Entry = &mapped_mapping.mappings[idx];
         if (!next_level.present) {
             if (!create_if_missing) return error.MissingPageMapping;
             const page_ptr = try self.allocate_pages(1);

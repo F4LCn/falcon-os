@@ -77,7 +77,6 @@ pub const PhysMemRangeAllocatorList = DoublyLinkedList(PhysMemRangeAllocator, .p
 pub const PhysicalMemoryManager = struct {
     const Self = @This();
     lock: SpinLock,
-    alloc: std.mem.Allocator,
     memory_ranges: PhysMemRangeList,
     free_ranges: PhysMemRangeList,
     reserved_ranges: PhysMemRangeList,
@@ -88,10 +87,9 @@ pub const PhysicalMemoryManager = struct {
     committed_pages_count: usize,
     page_allocators: PhysMemRangeAllocatorList,
 
-    pub fn init(alloc: std.mem.Allocator) Self {
+    pub fn init() Self {
         return .{
             .lock = .create(),
-            .alloc = alloc,
             .memory_ranges = PhysMemRangeList{},
             .free_ranges = PhysMemRangeList{},
             .reserved_ranges = PhysMemRangeList{},
