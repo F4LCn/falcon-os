@@ -21,9 +21,9 @@ pub const std_options: std.Options = .{
     .page_size_max = arch.constants.default_page_size,
 };
 
-// comptime {
-//     if (constants.max_cpu <= 0) @compileError("No max_cpu set");
-// }
+comptime {
+    if (options.max_cpu <= 0) @compileError("No max_cpu set");
+}
 
 export fn _start() callconv(.naked) noreturn {
     asm volatile (
