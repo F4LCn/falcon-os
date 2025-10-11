@@ -24,6 +24,8 @@ pub fn main() !void {
         \\
         \\
     );
+    const KV = struct { key: []const u8, value: []const u8 };
+    var list = std.ArrayList(KV){};
     const arch_dir_path = try std.fmt.allocPrint(alloc, "src/arch/{s}/", .{arch});
     const arch_dir = try std.fs.cwd().openDir(arch_dir_path, .{ .iterate = true });
     var dir_walker = try arch_dir.walk(alloc);
@@ -31,17 +33,27 @@ pub fn main() !void {
     while (try dir_walker.next()) |entry| {
         if (entry.kind != .file) continue;
         var split_iter = std.mem.splitScalar(u8, entry.basename, '.');
-        var class_name = try alloc.dupeZ(u8, split_iter.first());
-        if (std.mem.eql(u8, class_name, "arch")) continue;
-        if (std.zig.Token.getKeyword(class_name) != null) {
-            class_name[0] = std.ascii.toUpper(class_name[0]);
+        var module_name = try alloc.dupeZ(u8, split_iter.first());
+        const module_path = try alloc.dupeZ(u8, entry.path);
+        if (std.mem.eql(u8, module_name, "arch")) continue;
+        if (std.zig.Token.getKeyword(module_name) != null) {
+            module_name[0] = std.ascii.toUpper(module_name[0]);
         }
+        try list.append(alloc, .{ .key = module_name, .value = module_path });
+    }
+    const Comparer = struct {
+        fn f(_: @This(), lhs: KV, rhs: KV) bool {
+            return std.mem.order(u8, lhs.key, rhs.key).compare(.lt);
+        }
+    };
+    std.sort.pdq(KV, list.items, Comparer{}, Comparer.f);
+    for (list.items) |item| {
         _ = try output_file.write(try std.fmt.allocPrint(
             alloc,
             \\ pub const {s} = @import("{s}");
             \\
         ,
-            .{ class_name, entry.path },
+            .{ item.key, item.value },
         ));
     }
     return std.process.cleanExit();
