@@ -9,7 +9,7 @@ const log = std.log.scoped(.@"************************* PANICC *****************
 pub fn panicFn(msg: []const u8, first_trace_addr: ?usize) noreturn {
     @branchHint(.cold);
     var stacktrace = debug.StackTrace{
-        .addresses = .{0} ** 5,
+        .addresses = .{0} ** debug.StackTrace.num_traces,
     };
     if (options.safety) {
         _ = stacktrace.capture(first_trace_addr orelse @returnAddress());

@@ -7,7 +7,7 @@ const mem = @import("memory.zig");
 const descriptors = @import("descriptors.zig");
 const arch = @import("arch");
 const flcn = @import("flcn");
-const debug = flcn.debug;
+pub const debug = flcn.debug;
 const BootInfo = flcn.bootinfo.BootInfo;
 const Memory = @import("memory.zig");
 const panicFn = @import("panic.zig").panicFn;
@@ -67,11 +67,12 @@ pub fn failableMain() !void {
     std.log.info("quick mapped value @ {*} {d}", .{ v, v.* });
 
     std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
+    try debug.init(Memory.permanent_allocator);
     descriptors.init();
     // try Memory.lateInit();
-    try debug.init(Memory.permanent_allocator);
     Memory.printStats();
 
+    
     // std.log.info("page allocator test", .{});
     // const page_alloc = Memory.pageAllocator();
     // Memory.kernel_vmem.printRanges();
