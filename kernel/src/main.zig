@@ -70,15 +70,14 @@ pub fn failableMain() !void {
     try debug.init(Memory.permanent_allocator);
     descriptors.init();
     // try Memory.lateInit();
-    Memory.printStats();
 
-    
-    // std.log.info("page allocator test", .{});
-    // const page_alloc = Memory.pageAllocator();
-    // Memory.kernel_vmem.printRanges();
-    // const allocated2 = try page_alloc.alloc([arch.constants.default_page_size]u8, 1000);
-    // defer page_alloc.free(allocated2);
-    // std.log.info("allocated pages at 0x{x} with length {x}", .{ @intFromPtr(allocated2.ptr), allocated2.len });
+    std.log.info("page allocator test", .{});
+    const page_alloc = Memory.pageAllocator();
+    Memory.kernel_vmem.printRanges();
+    const allocated2 = try page_alloc.allocate(1000, .{});
+    std.log.info("allocated 1000 pages at 0x{x}", .{ @intFromPtr(allocated2) });
+    try page_alloc.free(allocated2, 1000, .{});
+    Memory.printStats();
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });

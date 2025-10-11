@@ -19,27 +19,7 @@ pub fn permanentAllocator() std.mem.Allocator {
     return _permanent_alloc.allocator();
 }
 
-// NOTE: design goals
-// 1/ 2 allocator interfaces: 1 for a basic heap allocator and the other for a page allocator
-// 1.1/ We actually are going to need a "physical page" allocator
-// 2/ I want this to handle memory allocation and virt mapping (for both types of allocator)
-// 3/ I want the memory handled by this allocation mechanism to be growable
-// 4/ We might want to start thinking about thread safety
-
-// NOTE: ideas
-// in constants.safety mode if pages dont need to be zeroed out prob write a known sequence
-// allocatePhysicalPage(count, zero)
-// page_allocator is simple -> call pmem.allocatePages() then call vmem.mmap -> then maybe zero out the pages if asked
-// allocator() -> is hard
-// build a sort of subheap list: [heap1] => [heap2] ... => [heapN]
-// while !heap.can_allocate: heap = next_heap
-
 const SubHeap = struct {
-    // For allocation we use canAlloc/canCreate to check that we can allocation with this subheap
-    // For destruction we use the memory bounds of the subheap to check that the allocated
-    // addr belongs to this subheap
-    // addr 0xADDR [ ... ] [ .. ]
-
     alloc: mem_allocator.SubHeapAllocator,
     memory_start: u64,
     memory_len: u64,
@@ -63,7 +43,6 @@ const SubHeap = struct {
     }
 };
 
-// TODO: kernel alloc gets adapted to be the first subheap
 const SubHeapList = DoubleLinkedList(SubHeap, .prev, .next);
 
 const Self = @This();
@@ -103,9 +82,8 @@ pub fn setVmm(self: *Self, virt_alloc: *vmem.VirtualAllocator) void {
 
 pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false, committed: bool = false }) ![*]align(arch.constants.default_page_size) u8 {
     const pmem_range = try pmem.allocatePages(count, .{ .committed = args.committed });
-    const vmem_range = try self.virt_alloc.allocateRange(count, .{});
-    try self.virt_alloc.mmap(pmem_range, vmem_range, vmem.DefaultMmapFlags, .{});
-    const allocated_range_addr: u64 = @bitCast(vmem_range.start);
+    const allocated_vaddr = self.virt_alloc.physToVirt(pmem_range.start);
+    const allocated_range_addr: u64 = @bitCast(allocated_vaddr);
     var allocated_ptr: [*]align(arch.constants.default_page_size) u8 = @ptrFromInt(allocated_range_addr);
     if (args.zero) {
         @memset(allocated_ptr[0 .. count * arch.constants.default_page_size], 0);
@@ -119,17 +97,15 @@ pub fn allocatePages(self: *Self, count: u64, args: struct { zero: bool = false,
     return allocated_ptr;
 }
 
-pub fn freePages(self: *Self, memory: []align(arch.constants.default_page_size) u8, args: struct { committed: bool = false, poison: bool = false }) void {
+pub fn freePages(self: *Self, ptr: [*]align(arch.constants.default_page_size) u8, count: u64, args: struct { committed: bool = false, poison: bool = false }) void {
     if (options.safety and args.poison) {
         // FIXME: we should figure out how to generate and splat a known (predictable) pattern
-        const u64_slice = std.mem.bytesAsSlice(u64, memory);
+        const u64_slice = std.mem.bytesAsSlice(u64, ptr[0 .. count * arch.constants.default_page_size]);
         @memset(u64_slice, 0x99887766FFEEDDCC);
     }
-    const vrange = vmem.VirtMemRange{ .start = @bitCast(@intFromPtr(memory.ptr)), .length = memory.len };
-    self.virt_alloc.munmap(vrange);
+    const vrange = vmem.VirtMemRange{ .start = @bitCast(@intFromPtr(ptr)), .length = count * arch.constants.default_page_size };
     const paddr = self.virt_alloc.virtToPhys(vrange.start);
     pmem.freePages(.{ .start = paddr, .length = vrange.length, .typ = .free });
-    self.virt_alloc.freeRange(vrange, .{});
 }
 
 // TODO: (opt.) expose buddy min allocation size
@@ -167,14 +143,12 @@ pub fn allocator(self: *Self) std.mem.Allocator {
     };
 }
 
-pub fn pageAllocator(self: *Self) std.mem.Allocator {
+pub fn pageAllocator(self: *Self) arch.memory.PageAllocator {
     return .{
         .ptr = self,
         .vtable = &.{
-            .alloc = _alloc_pages,
-            .free = _free_pages,
-            .resize = std.mem.Allocator.noResize,
-            .remap = std.mem.Allocator.noRemap,
+            .allocate = _allocPages,
+            .free = _freePages,
         },
     };
 }
@@ -218,17 +192,16 @@ fn _free(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: 
     unreachable;
 }
 
-fn _alloc_pages(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
+fn _allocPages(ptr: *anyopaque, count: u64, args: arch.memory.PageAllocator.AllocateArgs) ![*]align(arch.constants.default_page_size) u8 {
     const self: *Self = @ptrCast(@alignCast(ptr));
-    const page_count = alignment.forward(len) / arch.constants.default_page_size;
-    log.debug("allocating pages: {d}", .{page_count});
-    return self.allocatePages(page_count, .{ .zero = true }) catch return null;
+    log.debug("allocating pages: {d}", .{count});
+    return try self.allocatePages(count, .{ .zero = args.zero });
 }
 
-fn _free_pages(ptr: *anyopaque, memory: []u8, _: std.mem.Alignment, _: usize) void {
+fn _freePages(ptr: *anyopaque, memory: [*]align(arch.constants.default_page_size) u8, count: u64, args: arch.memory.PageAllocator.FreeArgs) !void {
     const self: *Self = @ptrCast(@alignCast(ptr));
-    log.debug("freeing pages: 0x{x}", .{@intFromPtr(memory.ptr)});
-    self.freePages(@alignCast(memory), .{ .poison = true });
+    log.debug("freeing pages: 0x{x}", .{@intFromPtr(memory)});
+    self.freePages(memory, count, .{ .poison = args.poison });
 }
 
 test "Test subheap with fixed buffer allocator" {

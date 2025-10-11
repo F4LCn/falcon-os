@@ -2,6 +2,7 @@ const std = @import("std");
 const pmem = @import("memory/pmem.zig");
 const vmem = @import("memory/vmem.zig");
 const Heap = @import("memory/heap.zig");
+const arch = @import("arch");
 pub const sizes = @import("memory/sizes.zig");
 
 // NOTE: this module is the entrypoint to everything memory related
@@ -39,7 +40,7 @@ pub fn allocator() std.mem.Allocator {
     return kernel_heap.allocator();
 }
 
-pub fn pageAllocator() std.mem.Allocator {
+pub fn pageAllocator() arch.memory.PageAllocator {
     return kernel_heap.pageAllocator();
 }
 

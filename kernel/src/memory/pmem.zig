@@ -5,7 +5,7 @@ const flcn = @import("flcn");
 const BootInfo = flcn.bootinfo.BootInfo;
 const DoublyLinkedList = flcn.list.DoublyLinkedList;
 const SpinLock = flcn.synchronization.SpinLock;
-const Allocator = std.mem.Allocator;
+const mem_allocator = @import("flcn").allocator;
 
 extern var bootinfo: BootInfo;
 var mmap_entries: []BootInfo.MmapEntry = undefined;
@@ -15,17 +15,20 @@ const Error = error{OutOfPhysMemory};
 
 pub const PAddr = arch.memory.PAddr;
 pub const PAddrSize = arch.memory.PAddrSize;
+const PageAllocator = flcn.buddy.Buddy(.{ .min_size = arch.constants.default_page_size, .safety = false });
 pub const PhysicalMemoryManager = flcn.pmm.PhysicalMemoryManager;
 pub const PhysMemRange = flcn.pmm.PhysMemRange;
 pub const PhysRangeType = flcn.pmm.PhysRangeType;
 
 const PhysMemRangeListItem = flcn.pmm.PhysMemRangeListItem;
-const PhysMemRangeAllocator = flcn.pmm.PhysMemRangeAllocator;
+const PhysMemRangeAllocator = flcn.pmm.PhysMemRangeAllocator(PageAllocator);
+const PhysMemRangeAllocatorList = flcn.pmm.PhysMemRangeAllocatorList(PageAllocator);
 
 var mm: PhysicalMemoryManager = undefined;
+var page_allocators: PhysMemRangeAllocatorList = .{};
 var alloc: std.mem.Allocator = undefined;
 
-pub fn init(a: Allocator) !void {
+pub fn init(a: std.mem.Allocator) !void {
     alloc = a;
     mm = .init();
 
@@ -90,7 +93,6 @@ fn reclaimFreeableMemory() void {
     }
 }
 
-const PageAllocator = flcn.buddy.Buddy(.{ .min_size = arch.constants.default_page_size, .safety = false });
 pub fn initRanges() !void {
     for (mmap_entries) |entry| {
         const ptr = entry.getPtr();
@@ -117,10 +119,13 @@ pub fn initRanges() !void {
 
         if (typ == .free) {
             const phys_range_allocator = try alloc.create(PhysMemRangeAllocator);
-            const page_allocator = try alloc.create(PageAllocator);
-            page_allocator.* = try .init(alloc, range.start, range.length);
-            phys_range_allocator.* = .init(page_allocator.subHeapAllocator(), range);
-            mm.page_allocators.append(phys_range_allocator);
+            phys_range_allocator.* = .{
+                .alloc = try .init(alloc, range.start, range.length),
+                .region = range_list_item,
+                .memory_start = range.start,
+                .memory_len = range.length,
+            };
+            page_allocators.append(phys_range_allocator);
         }
     }
 }
@@ -163,23 +168,51 @@ pub fn allocatePages(count: PAddrSize, args: struct { committed: bool = false })
     }
 
     const requested_size = count * arch.constants.default_page_size;
-    var iter = mm.free_ranges.iter();
-    while (iter.next()) |list_item| {
-        if (list_item.range.length == requested_size) {
-            const range = list_item.range;
-            mm.free_ranges.remove(list_item);
-            alloc.destroy(list_item);
-            return range;
-        } else if (list_item.range.length > requested_size) {
-            const range = PhysMemRange{ .start = list_item.range.start, .length = requested_size, .typ = .used };
-            list_item.range.start += requested_size;
-            list_item.range.length -= requested_size;
-            return range;
+    const alignment: std.mem.Alignment = .fromByteUnits(arch.constants.default_page_size);
+
+    var allocators_iter = page_allocators.iter();
+    while (allocators_iter.next()) |a| {
+        if (a.canAlloc(requested_size, alignment)) {
+            @branchHint(.likely);
+            const std_alloc: std.mem.Allocator = a.allocator();
+            const pages_ptr = std_alloc.rawAlloc(requested_size, alignment, 0);
+            const pages_addr = @intFromPtr(pages_ptr);
+            return .{ .start = pages_addr, .length = requested_size, .typ = .free };
+            // FIXME: we lost tracking free ranges/committed pages here
         }
     }
+    // return null;
+
+    // var iter = mm.free_ranges.iter();
+    // while (iter.next()) |list_item| {
+    //     if (list_item.range.length == requested_size) {
+    //         const range = list_item.range;
+    //         mm.free_ranges.remove(list_item);
+    //         alloc.destroy(list_item);
+    //         return range;
+    //     } else if (list_item.range.length > requested_size) {
+    //         const range = PhysMemRange{ .start = list_item.range.start, .length = requested_size, .typ = .used };
+    //         list_item.range.start += requested_size;
+    //         list_item.range.length -= requested_size;
+    //         return range;
+    //     }
+    // }
     return error.OutOfPhysMemory;
 }
 
 pub fn freePages(range: PhysMemRange) void {
-    _ = range;
+    var allocators_iter = page_allocators.iter();
+    const memory_addr = range.start;
+    while (allocators_iter.next()) |a| {
+        const allocator_mem_start = a.memory_start;
+        const allocator_mem_end = allocator_mem_start + a.memory_len;
+        if (allocator_mem_start <= memory_addr and memory_addr <= allocator_mem_end) {
+            @branchHint(.likely);
+            const std_alloc: std.mem.Allocator = a.allocator();
+            const memory_ptr: [*]u8 = @ptrFromInt(memory_addr);
+            std_alloc.rawFree(memory_ptr[0..range.length], .fromByteUnits(arch.constants.default_page_size), 0);
+            return;
+        }
+    }
+    unreachable;
 }

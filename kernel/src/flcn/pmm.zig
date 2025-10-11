@@ -3,6 +3,7 @@ const BootInfo = @import("bootinfo.zig").BootInfo;
 const DoublyLinkedList = @import("list.zig").DoublyLinkedList;
 const SpinLock = @import("synchronization.zig").SpinLock;
 const mem_allocator = @import("allocator.zig");
+const buddy = @import("buddy.zig");
 
 pub const PhysRangeType = enum {
     used,
@@ -45,35 +46,35 @@ pub const PhysMemRangeListItem = struct {
     }
 };
 pub const PhysMemRangeList = DoublyLinkedList(PhysMemRangeListItem, .prev, .next);
-pub const PhysMemRangeAllocator = struct {
-    // For allocation we use canAlloc/canCreate to check that we can allocation with this subheap
-    // For destruction we use the memory bounds of the subheap to check that the allocated
-    // addr belongs to this subheap
-    // addr 0xADDR [ ... ] [ .. ]
+pub fn PhysMemRangeAllocator(comptime T: type) type {
+    return struct {
+        alloc: T,
+        region: *PhysMemRangeListItem,
+        memory_start: u64,
+        memory_len: u64,
+        prev: ?*PhysMemRangeAllocator(T) = null,
+        next: ?*PhysMemRangeAllocator(T) = null,
 
-    alloc: mem_allocator.SubHeapAllocator,
-    memory_start: u64,
-    memory_len: u64,
-    prev: ?*PhysMemRangeAllocator = null,
-    next: ?*PhysMemRangeAllocator = null,
+        pub fn init(alloc: T, prange: PhysMemRange) PhysMemRangeAllocator(T) {
+            return .{
+                .alloc = alloc,
+                .memory_start = prange.start,
+                .memory_len = prange.length,
+            };
+        }
 
-    pub fn init(alloc: mem_allocator.SubHeapAllocator, prange: PhysMemRange) PhysMemRangeAllocator {
-        return .{
-            .alloc = alloc,
-            .memory_start = prange.start,
-            .memory_len = prange.length,
-        };
-    }
+        pub fn canAlloc(self: *PhysMemRangeAllocator(T), len: usize, alignment: std.mem.Alignment) bool {
+            return self.alloc.canAlloc(len, alignment);
+        }
 
-    pub fn canAlloc(self: *PhysMemRangeAllocator, len: usize, alignment: std.mem.Alignment) bool {
-        return self.alloc.canAlloc(len, alignment);
-    }
-
-    pub fn allocator(self: *PhysMemRangeAllocator) std.mem.Allocator {
-        return self.alloc.allocator();
-    }
-};
-pub const PhysMemRangeAllocatorList = DoublyLinkedList(PhysMemRangeAllocator, .prev, .next);
+        pub fn allocator(self: *PhysMemRangeAllocator(T)) std.mem.Allocator {
+            return self.alloc.allocator();
+        }
+    };
+}
+pub fn PhysMemRangeAllocatorList(comptime T: type) type {
+    return DoublyLinkedList(PhysMemRangeAllocator(T), .prev, .next);
+}
 pub const PhysicalMemoryManager = struct {
     const Self = @This();
     lock: SpinLock,
@@ -85,7 +86,6 @@ pub const PhysicalMemoryManager = struct {
     reserved_pages_count: usize,
     uncommitted_pages_count: usize,
     committed_pages_count: usize,
-    page_allocators: PhysMemRangeAllocatorList,
 
     pub fn init() Self {
         return .{
@@ -98,7 +98,6 @@ pub const PhysicalMemoryManager = struct {
             .reserved_pages_count = 0,
             .uncommitted_pages_count = 0,
             .committed_pages_count = 0,
-            .page_allocators = .{},
         };
     }
 };

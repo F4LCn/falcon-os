@@ -242,3 +242,5 @@ pub const PageMapManager = struct {
         entry.* = @bitCast(paddr | @as(u64, @bitCast(flags)));
     }
 };
+
+pub const PageAllocator = flcn.allocator.PageAllocator(.fromByteUnits(constants.default_page_size));

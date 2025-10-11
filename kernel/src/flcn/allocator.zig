@@ -1,4 +1,5 @@
 const std = @import("std");
+const DoublyLinkedList = @import("list.zig").DoublyLinkedList;
 
 pub const SubHeapAllocator = struct {
     ptr: *anyopaque,
@@ -13,6 +14,28 @@ pub const SubHeapAllocator = struct {
         return self.create_allocator(self.ptr);
     }
 };
+
+pub fn PageAllocator(comptime alignment: std.mem.Alignment) type {
+    return struct {
+        pub const AllocateArgs = struct { zero: bool = true };
+        pub const FreeArgs = struct { poison: bool = true };
+        const page_alignment = alignment.toByteUnits();
+        const Self = @This();
+        ptr: *anyopaque,
+        vtable: *const VTable,
+        pub const VTable = struct {
+            allocate: *const fn (*anyopaque, count: u64, args: AllocateArgs) anyerror![*]align(page_alignment) u8,
+            free: *const fn (*anyopaque, ptr: [*]align(page_alignment) u8, count: u64, args: FreeArgs) anyerror!void,
+        };
+
+        pub fn allocate(self: Self, count: u64, args: AllocateArgs) ![*]align(page_alignment) u8 {
+            return try self.vtable.allocate(self.ptr, count, .{ .zero = args.zero });
+        }
+        pub fn free(self: Self, ptr: [*]align(page_alignment) u8, count: u64, args: FreeArgs) !void {
+            return try self.vtable.free(self.ptr, ptr, count, .{ .poison = args.poison });
+        }
+    };
+}
 
 pub fn AllocatorAdapter(comptime T: type) type {
     const CanAllocFn = *const fn (*T, usize, std.mem.Alignment) bool;
