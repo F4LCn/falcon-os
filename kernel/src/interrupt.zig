@@ -3,9 +3,11 @@ const options = @import("options");
 const arch = @import("arch");
 const descriptors = @import("descriptors.zig");
 const IDT = @import("descriptors/idt.zig");
-const Context = @import("interrupt/types.zig").Context;
+const Context = @import("interrupt/types.zig").InterruptContext;
+const toCpuContext = @import("interrupt/types.zig").toCpuContext;
 const x64 = @import("interrupt/x64.zig");
 const SinglyLinkedList = @import("flcn").list.SinglyLinkedList;
+const debug = @import("flcn").debug;
 
 const log = std.log.scoped(.interrupt);
 
@@ -41,6 +43,11 @@ export fn dispatchInterrupt(context: *Context) callconv(.c) void {
 }
 
 fn defaultHandler(context: *Context) void {
+    const cpu_context = toCpuContext(context);
+    var stacktrace = debug.Stacktrace{
+        .addresses = .{0} ** debug.Stacktrace.num_traces,
+    };
+    stacktrace.capture(context.rip, .{ .cpu_context = cpu_context });
     log.err(
         \\
         \\ ---------- EXCEPTION ----------
@@ -68,7 +75,8 @@ fn defaultHandler(context: *Context) void {
         \\ R14: 0x{X:0>16}
         \\ R15: 0x{X:0>16}
         \\ CS : 0x{X}
-        \\ ---------- EXCEPTION ----------
+        \\ ----------   TRACE   ----------
+        \\ {f}
         \\
     , .{
         context.vector,        vectorToName(context.vector),
@@ -84,11 +92,10 @@ fn defaultHandler(context: *Context) void {
         context.registers.r9,  context.registers.r10,
         context.registers.r11, context.registers.r12,
         context.registers.r13, context.registers.r14,
-        context.registers.r15,
-        context.cs,
+        context.registers.r15, context.cs,
+        stacktrace,
     });
 
-    // arch.assembly.haltEternally();
     unreachable;
 }
 
@@ -116,7 +123,7 @@ fn vectorToName(vector: u64) []const u8 {
         19 => "#XM: SIMD floating-point exception",
         20 => "#VE: Virtualization exception",
         21 => "#CP: Control protection exception",
-        else => unreachable,
+        else => "",
     };
 }
 
@@ -128,6 +135,10 @@ pub fn init(idt: *IDT) void {
             .isr = x64.genVectorISR(v),
         }));
     }
+    idt.registerGate(0xfe, .create(.{
+        .typ = .trap_gate,
+        .isr = x64.genVectorISR(0xfe),
+    }));
 
     idt.loadIDTR();
     asm volatile ("sti");

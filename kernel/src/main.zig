@@ -7,7 +7,7 @@ const mem = @import("memory.zig");
 const descriptors = @import("descriptors.zig");
 const arch = @import("arch");
 const flcn = @import("flcn");
-pub const debug = flcn.debug;
+pub const debug = @import("debug.zig");
 const BootInfo = flcn.bootinfo.BootInfo;
 const Memory = @import("memory.zig");
 const panicFn = @import("panic.zig").panicFn;
@@ -72,10 +72,10 @@ pub fn failableMain() !void {
     // try Memory.lateInit();
 
     std.log.info("page allocator test", .{});
-    const page_alloc = Memory.pageAllocator();
-    Memory.kernel_vmem.printRanges();
+    const page_alloc = Memory.page_allocator;
+    std.log.debug("page allocator: {any}", .{page_alloc});
     const allocated2 = try page_alloc.allocate(1000, .{});
-    std.log.info("allocated 1000 pages at 0x{x}", .{ @intFromPtr(allocated2) });
+    std.log.info("allocated 1000 pages at 0x{x}", .{@intFromPtr(allocated2)});
     try page_alloc.free(allocated2, 1000, .{});
     Memory.printStats();
 

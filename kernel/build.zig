@@ -18,7 +18,6 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/main.zig"),
-        // .omit_frame_pointer = true,
         .red_zone = false,
         .pic = true,
         .code_model = .default,

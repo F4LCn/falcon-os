@@ -46,7 +46,6 @@ const SubHeap = struct {
 const SubHeapList = DoubleLinkedList(SubHeap, .prev, .next);
 
 const Self = @This();
-page_allocator: buddy.Buddy(.{ .min_size = arch.constants.default_page_size }),
 virt_alloc: *vmem.VirtualAllocator,
 subheaps: SubHeapList = .{},
 total_free_memory: u64 = 0,
@@ -56,20 +55,13 @@ total_allocated_memory: u64 = 0,
 
 pub fn earlyInit() !Self {
     const perm_alloc = permanentAllocator();
-    var heap: Self = .{ .virt_alloc = undefined, .page_allocator = undefined };
+    var heap: Self = .{ .virt_alloc = undefined };
     const early_subheap = try perm_alloc.create(SubHeap);
     const subheap_allocator = try mem_allocator.adaptFixedBufferAllocator(perm_alloc, &_kernel_alloc);
     early_subheap.* = .initFromSlice(subheap_allocator.subHeapAllocator(), &kernel_heap);
     heap.subheaps.append(early_subheap);
     heap.total_free_memory += kernel_heap.len;
     return heap;
-}
-pub fn initPageAllocator(self: *Self, count: u64) !void {
-    const alloc = self.allocator();
-    const pages = try pmem.allocatePages(count, .{});
-    const memory: [*]align(arch.constants.default_page_size) u8 = @ptrFromInt(pages.start);
-    const memory_slice = memory[0..pages.length];
-    self.page_allocator = try .initFromSlice(alloc, memory_slice);
 }
 pub fn setVmm(self: *Self, virt_alloc: *vmem.VirtualAllocator) void {
     self.virt_alloc = virt_alloc;

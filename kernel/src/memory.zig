@@ -13,22 +13,24 @@ const log = std.log.scoped(.memory);
 var kernel_heap: Heap = undefined;
 pub var kernel_vmem: vmem.VirtualAllocator = undefined;
 pub const permanent_allocator = Heap.permanentAllocator();
+pub var page_allocator: arch.memory.PageAllocator = undefined;
+pub const pa: arch.memory.PageAllocator = undefined;
 
 pub fn earlyInit() !void {
     kernel_heap = try Heap.earlyInit();
+    page_allocator = kernel_heap.pageAllocator();
 }
 
 pub fn init() !void {
     std.log.info("Initializing physical memory manager", .{});
     try pmem.init(permanent_allocator);
-    const range = try pmem.allocatePages(10, .{});
-    log.info("Allocated range: {any}", .{range});
+    // const range = try pmem.allocatePages(10, .{});
+    // log.info("Allocated range: {any}", .{range});
     pmem.printRanges();
 
     log.info("Initializing virtual memory manager", .{});
     kernel_vmem = try vmem.init(permanent_allocator);
     kernel_vmem.printRanges();
-    try kernel_heap.initPageAllocator(1000);
     kernel_heap.setVmm(&kernel_vmem);
 }
 
@@ -39,11 +41,6 @@ pub fn lateInit() !void {
 pub fn allocator() std.mem.Allocator {
     return kernel_heap.allocator();
 }
-
-pub fn pageAllocator() arch.memory.PageAllocator {
-    return kernel_heap.pageAllocator();
-}
-
 
 pub fn printStats() void {
     log.debug(

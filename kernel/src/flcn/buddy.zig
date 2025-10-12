@@ -108,15 +108,15 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             allocated_size: u64 = 0,
             allocated_aligned_size: u64 = 0,
             allocated: std.bit_set.DynamicBitSetUnmanaged,
-            stacktraces: [][num_trace_types]debug.StackTrace,
+            stacktraces: [][num_trace_types]debug.Stacktrace,
 
             pub fn init(alloc: std.mem.Allocator, num_nodes: u64) !@This() {
                 const safety_data: @This() = .{
                     .allocated = try .initEmpty(alloc, num_nodes),
-                    .stacktraces = try alloc.alloc([num_trace_types]debug.StackTrace, num_nodes + 1),
+                    .stacktraces = try alloc.alloc([num_trace_types]debug.Stacktrace, num_nodes + 1),
                 };
                 for (safety_data.stacktraces) |*stacktrace| {
-                    stacktrace.* = .{debug.StackTrace{}} ** num_trace_types;
+                    stacktrace.* = .{debug.Stacktrace{}} ** num_trace_types;
                 }
                 return safety_data;
             }
@@ -438,7 +438,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const addr = self.ptrFromNodeIdx(bucket_idx, node_idx);
             const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
             const free_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .free);
-            var stacktrace: debug.StackTrace = .{};
+            var stacktrace: debug.Stacktrace = .{};
             stacktrace.capture(ret_addr);
             const report_format =
                 \\ ------------------- DOUBLE FREE !!!! ----------------------
@@ -480,7 +480,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             }
         }
 
-        fn getCapturedStackTrace(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx, trace_type: SafetyData.TraceType) *const debug.StackTrace {
+        fn getCapturedStackTrace(self: *Self, bucket_idx: BucketIdx, node_idx: NodeIdx, trace_type: SafetyData.TraceType) *const debug.Stacktrace {
             if (!config.safety) @panic("Safety disabled");
             const bucket_node_count = @as(u64, 1) << @as(u6, @intCast(self.max_order - bucket_idx - 1));
             const total_nodes = (@as(u64, 1) << @as(u6, @intCast(self.max_order))) - 1;

@@ -19,7 +19,7 @@ const DemoInterruptHandler = struct {
         return .{.ctx = self, .handler = handleInterrupt};
     }
 
-    fn handleInterrupt(ctx: *anyopaque, context: *const interrupt_types.Context) bool {
+    fn handleInterrupt(ctx: *anyopaque, context: *const interrupt_types.InterruptContext) bool {
         log.info("Demo interrupt handle called !!!!", .{});
         log.info("with ctx {any} and context {any}", .{ctx, context});
         return false;

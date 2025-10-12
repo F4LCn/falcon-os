@@ -183,15 +183,23 @@ pub const Section = packed struct {
 
 pub const Sections = EnumFieldPackedStruct(Section.Type, Section, .{});
 
-pub const StackTrace = struct {
+pub const Stacktrace = struct {
+    pub const StacktraceArgs = struct { cpu_context: ?std.debug.cpu_context.Native = null };
     pub const num_traces = options.num_stack_trace;
     addresses: [num_traces]usize = .{0} ** num_traces,
     index: usize = 0,
 
-    pub fn capture(self: *@This(), ret_addr: usize) void {
+    pub fn initFromAddr(ret_addr: usize, args: StacktraceArgs) Stacktrace {
+        var self: Stacktrace = .{};
+        self.capture(ret_addr, .{ .cpu_context = args.cpu_context });
+        return self;
+    }
+
+    pub fn capture(self: *@This(), ret_addr: usize, args: StacktraceArgs) void {
         // NOTE: this is actually important because we look for 0 to decide how deep we go in the stacktrace
         @memset(&self.addresses, 0);
-        const stacktrace = std.debug.captureCurrentStackTrace(.{ .first_address = ret_addr }, &self.addresses);
+        const cpu_context_ptr = if (args.cpu_context != null) &args.cpu_context.? else null;
+        const stacktrace = std.debug.captureCurrentStackTrace(.{ .first_address = ret_addr, .context = cpu_context_ptr, .allow_unsafe_unwind = true }, &self.addresses);
         self.index = stacktrace.index;
     }
 
@@ -215,12 +223,16 @@ pub const StackTrace = struct {
 };
 
 pub fn writeStackTrace(
-    stack_trace: StackTrace,
+    stack_trace: Stacktrace,
     writer: *std.Io.Writer,
 ) !void {
     if (debug_info) |*di| {
         var frame_index: usize = 0;
         var frames_left: usize = @min(stack_trace.index, stack_trace.addresses.len);
+
+        if (frames_left == 0) {
+            try writer.print("Empty stacktrace..\n", .{});
+        }
 
         while (frames_left != 0) : ({
             frames_left -= 1;
