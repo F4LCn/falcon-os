@@ -66,10 +66,6 @@ pub fn PhysMemRangeAllocator(comptime T: type) type {
         pub fn canAlloc(self: *PhysMemRangeAllocator(T), len: usize, alignment: std.mem.Alignment) bool {
             return self.alloc.canAlloc(len, alignment);
         }
-
-        pub fn allocator(self: *PhysMemRangeAllocator(T)) std.mem.Allocator {
-            return self.alloc.allocator();
-        }
     };
 }
 pub fn PhysMemRangeAllocatorList(comptime T: type) type {
