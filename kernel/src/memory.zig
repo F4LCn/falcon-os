@@ -2,6 +2,7 @@ const std = @import("std");
 const pmem = @import("memory/pmem.zig");
 const vmem = @import("memory/vmem.zig");
 const Heap = @import("memory/heap.zig");
+const Cache = @import("memory/slab.zig");
 const arch = @import("arch");
 pub const sizes = @import("memory/sizes.zig");
 
@@ -35,7 +36,15 @@ pub fn init() !void {
 }
 
 pub fn lateInit() !void {
-    try kernel_heap.extend(200 * sizes.mb);
+    // try kernel_heap.extend(200 * sizes.mb);
+    const U32Cache = Cache.Cache(u32, .{});
+    var cache = try U32Cache.init(permanent_allocator, page_allocator);
+    log.debug("created cache {any}", .{cache});
+    var a = try cache.allocate();
+    for (0..1022) |_| {
+        a = try cache.allocate();
+    }
+    log.debug("Allocated from {*}", .{a});
 }
 
 pub fn allocator() std.mem.Allocator {

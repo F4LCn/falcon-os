@@ -71,7 +71,8 @@ pub fn failableMain() !void {
     std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
     try debug.init(Memory.permanent_allocator);
     descriptors.init();
-    // try Memory.lateInit();
+    Memory.printStats();
+    try Memory.lateInit();
 
     std.log.info("page allocator test", .{});
     const page_alloc = Memory.page_allocator;
