@@ -75,7 +75,8 @@ pub fn failableMain() !void {
     cpu.initCore(0);
 
     descriptors.init();
-    // try Memory.lateInit();
+    Memory.printStats();
+    try Memory.lateInit();
 
     std.log.info("page allocator test", .{});
     const page_alloc = Memory.page_allocator;
