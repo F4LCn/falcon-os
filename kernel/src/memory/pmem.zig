@@ -15,7 +15,7 @@ const Error = error{OutOfPhysMemory};
 
 pub const PAddr = arch.memory.PAddr;
 pub const PAddrSize = arch.memory.PAddrSize;
-const PageAllocator = flcn.buddy.Buddy(.{ .min_size = arch.constants.default_page_size, .safety = false });
+const PageAllocator = flcn.buddy2.BuddyAllocator(.{ .min_size = arch.constants.default_page_size, .safety = false });
 pub const PhysicalMemoryManager = flcn.pmm.PhysicalMemoryManager;
 pub const PhysMemRange = flcn.pmm.PhysMemRange;
 pub const PhysRangeType = flcn.pmm.PhysRangeType;
@@ -174,10 +174,10 @@ pub fn allocatePages(count: PAddrSize, args: struct { committed: bool = false })
     while (allocators_iter.next()) |a| {
         if (a.canAlloc(requested_size, alignment)) {
             @branchHint(.likely);
-            const std_alloc: std.mem.Allocator = a.allocator();
-            const pages_ptr = std_alloc.rawAlloc(requested_size, alignment, 0);
-            const pages_addr = @intFromPtr(pages_ptr);
-            return .{ .start = pages_addr, .length = requested_size, .typ = .free };
+            log.debug("allocating from region {f}", .{a.region});
+            var allocator = a.alloc;
+            const range = allocator.allocate(requested_size, alignment, 0) catch return error.OutOfPhysMemory;
+            return range;
             // FIXME: we lost tracking free ranges/committed pages here
         }
     }
@@ -208,9 +208,8 @@ pub fn freePages(range: PhysMemRange) void {
         const allocator_mem_end = allocator_mem_start + a.memory_len;
         if (allocator_mem_start <= memory_addr and memory_addr <= allocator_mem_end) {
             @branchHint(.likely);
-            const std_alloc: std.mem.Allocator = a.allocator();
-            const memory_ptr: [*]u8 = @ptrFromInt(memory_addr);
-            std_alloc.rawFree(memory_ptr[0..range.length], .fromByteUnits(arch.constants.default_page_size), 0);
+            var allocator = a.alloc;
+            allocator.free(range, 0) catch @panic("Failed to free");
             return;
         }
     }
