@@ -41,8 +41,9 @@ pub fn lateInit() !void {
     var cache = try U32Cache.init(permanent_allocator, page_allocator);
     log.debug("created cache {any}", .{cache});
     var a = try cache.allocate();
-    for (0..1022) |_| {
+    for (0..24) |_| {
         a = try cache.allocate();
+        try cache.free(a);
     }
     log.debug("Allocated from {*}", .{a});
 }

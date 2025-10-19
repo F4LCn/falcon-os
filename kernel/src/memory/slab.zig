@@ -63,7 +63,7 @@ pub fn Cache(comptime T: type, comptime config: CacheConfig) type {
 
         fn create_slab(self: *Self) !void {
             log.debug("Allocating {d} pages for slab", .{page_count});
-            const pages: [*]allowzero align(arch.constants.default_page_size) u8 = try self.page_allocator.allocate(page_count, .{});
+            const pages = try self.page_allocator.allocate(page_count, .{});
             log.debug("Allocated {d} pages for slab {*}", .{ page_count, pages });
             const slab = try self.alloc.create(Slab);
             slab.* = .{ .pages = pages, .freelist = @intFromPtr(pages) };
@@ -80,15 +80,6 @@ pub fn Cache(comptime T: type, comptime config: CacheConfig) type {
         }
 
         pub fn allocate(self: *Self) !*T {
-            // if (self.free_pointer) |ptr| {
-            //     @branchHint(.likely);
-            //     const typ_addr: u64 = @intFromPtr(ptr);
-            //     const free_pointer_addr = std.mem.alignPointer(typ_addr, @alignOf(*anyopaque));
-            //     const free_pointer = @intFromPtr(free_pointer_addr);
-            //     ptr.* = free_pointer.*;
-            //     return @ptrFromInt(typ_addr);
-            // }
-
             const list: *SlabList = &self.partial_list;
             if (self.partial_list.isEmpty()) {
                 log.debug("partial list empty", .{});
@@ -97,25 +88,57 @@ pub fn Cache(comptime T: type, comptime config: CacheConfig) type {
                     log.debug("free list empty", .{});
                     try self.create_slab();
                 }
-                const free = self.free_list.popFirst();
-                if (free) |f| self.partial_list.prepend(f);
+                const free_slab: ?*Slab = self.free_list.popFirst();
+                if (free_slab) |f| self.partial_list.prepend(f);
             }
 
             var iter = list.iter();
             while (iter.next()) |slab| {
-                log.debug("allocating from slab {*} freelist {x}", .{slab.pages, slab.freelist});
+                if (slab.freelist == 0) {
+                    @branchHint(.cold);
+                    list.remove(slab);
+                    self.full_list.prepend(slab);
+                }
+                log.debug("allocating from slab {*} freelist {x}", .{ slab.pages, slab.freelist });
                 const typ_addr: u64 = slab.freelist;
                 const free_pointer_addr = typ_addr;
                 const free_pointer_ptr: *u64 = @ptrFromInt(free_pointer_addr);
                 slab.freelist = free_pointer_ptr.*;
-                if(slab.freelist == 0) {
+                if (slab.freelist == 0) {
+                    @branchHint(.unlikely);
                     list.remove(slab);
                     self.full_list.prepend(slab);
                 }
-                // self.free_pointer = free_pointer;
                 return @ptrFromInt(typ_addr);
             }
             return error.Allocate;
+        }
+
+        pub fn free(self: *Self, ptr: *T) !void {
+            const ptr_addr = @intFromPtr(ptr);
+            var slab: *Slab = blk: {
+                var iter = self.partial_list.iter();
+                while (iter.next()) |s| {
+                    if (ptr_addr >= @intFromPtr(s.pages) and ptr_addr <= @intFromPtr(s.pages) + arch.constants.default_page_size * page_count) {
+                        break :blk s;
+                    }
+                }
+
+                iter = self.full_list.iter();
+                while (iter.next()) |s| {
+                    if (ptr_addr >= @intFromPtr(s.pages) and ptr_addr <= @intFromPtr(s.pages) + arch.constants.default_page_size * page_count) {
+                        // NOTE: premature, but we move this slab to the partiallist because we are freeing from it
+                        self.full_list.remove(s);
+                        self.partial_list.append(s);
+                        break :blk s;
+                    }
+                }
+                unreachable;
+            };
+            const old_freepointer = slab.freelist;
+            const object: *u64 = @ptrCast(@alignCast(ptr));
+            object.* = old_freepointer;
+            slab.freelist = ptr_addr;
         }
     };
 }
@@ -135,6 +158,6 @@ const Slab = extern struct {
     const Self = @This();
     prev: ?*Self = null,
     next: ?*Self = null,
-    pages: [*]allowzero align(arch.constants.default_page_size) u8,
+    pages: [*]align(arch.constants.default_page_size) u8,
     freelist: u64,
 };
