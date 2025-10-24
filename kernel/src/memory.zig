@@ -36,16 +36,16 @@ pub fn init() !void {
 }
 
 pub fn lateInit() !void {
-    // try kernel_heap.extend(200 * sizes.mb);
-    const U32Cache = Cache.Cache(u32, .{});
-    var cache = try U32Cache.init(permanent_allocator, page_allocator);
-    log.debug("created cache {any}", .{cache});
-    var a = try cache.allocate();
-    for (0..24) |_| {
-        a = try cache.allocate();
-        try cache.free(a);
+    const CacheManager = Cache.CacheManager(.{});
+    var cache_manager: CacheManager = try .init(allocator(), page_allocator);
+    const alloc = cache_manager.allocator();
+    var a = try alloc.alloc(u32, 1);
+    log.debug("Allocated from {*} {d}", .{a.ptr, a.len});
+    for (1..24) |i| {
+        a = try alloc.alloc(u32, i);
+        log.debug("Allocated from {*} {d}", .{a.ptr, a.len});
+        // alloc.free(a);
     }
-    log.debug("Allocated from {*}", .{a});
 }
 
 pub fn allocator() std.mem.Allocator {
