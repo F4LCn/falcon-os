@@ -246,7 +246,6 @@ pub fn BuddyAllocator(comptime config: BuddyConfig) type {
 
             var bucket = matching_bucket;
             if (bucket == self.max_order - 1) {
-                log.debug("bucket {*}", .{&self.buckets[matching_bucket]});
                 const maybe_node = self.buckets[matching_bucket].popFirst();
                 if (maybe_node) |node| {
                     defer self.alloc.destroy(node);
