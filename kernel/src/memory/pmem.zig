@@ -130,6 +130,10 @@ pub fn initRanges() !void {
     }
 }
 
+pub fn totalMemory() u64 {
+    return mm.total_memory;
+}
+
 pub fn commitPages(count: PAddrSize) bool {
     mm.lock.lock();
     defer mm.lock.unlock();
@@ -174,7 +178,7 @@ pub fn allocatePages(count: PAddrSize, args: struct { committed: bool = false })
     while (allocators_iter.next()) |a| {
         if (a.canAlloc(requested_size, alignment)) {
             @branchHint(.likely);
-            log.debug("allocating from region {f}", .{a.region});
+            // log.debug("allocating from region {f}", .{a.region});
             var allocator = a.alloc;
             const range = allocator.allocate(requested_size, alignment, 0) catch return error.OutOfPhysMemory;
             return range;
