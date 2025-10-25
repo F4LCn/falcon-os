@@ -10,6 +10,8 @@ const flcn = @import("flcn");
 pub const debug = @import("debug.zig");
 const BootInfo = flcn.bootinfo.BootInfo;
 const Memory = @import("memory.zig");
+const acpi = @import("acpi.zig");
+const smp = @import("smp.zig");
 const panicFn = @import("panic.zig").panicFn;
 
 pub const panic = std.debug.FullPanic(panicFn);
@@ -78,6 +80,9 @@ pub fn failableMain() !void {
     std.log.info("allocated 1000 pages at 0x{x}", .{@intFromPtr(allocated2)});
     try page_alloc.free(allocated2, 1000, .{});
     Memory.printStats();
+
+    try acpi.init();
+    try smp.init();
 
     // v.* = 321;
     // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });

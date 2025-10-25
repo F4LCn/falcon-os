@@ -49,12 +49,14 @@
 
   - Core features
     * [ ] Allocators hierarchy
-      * [-] Physical memory manager / Frame allocator
-      * [-] Virtual memory manager / Page allocator
+      * [x] Physical memory manager / Frame allocator
+      * [x] Virtual memory manager / Page allocator
       * [x] Buddy allocator
-      * [ ] Slab allocator
-      * [-] General purpose heap allocator
+      * [-] Slab allocator
+      * [x] General purpose heap allocator
     * [ ] SMP
+      * [x] Locate & Parse ACPI tables
+      * [-] Madt entry iteration
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] Processes, Threads & context switching
     * [ ] Task / Task queues ?

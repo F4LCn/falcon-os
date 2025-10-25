@@ -171,6 +171,24 @@ pub fn main() uefi.Status {
         return uefi.Status.aborted;
     };
 
+    std.log.info("Num table Entries: {d}", .{Globals.sys_table.number_of_table_entries});
+    const rsdp_ptr = blk: {
+        var table_ptr: *anyopaque = undefined;
+        for (0..Globals.sys_table.number_of_table_entries) |i| {
+            const config_table = Globals.sys_table.configuration_table[i];
+            if (config_table.vendor_guid.eql(uefi.tables.ConfigurationTable.acpi_20_table_guid)) {
+                std.log.debug("Found ACPI v2.0 table {*}", .{config_table.vendor_table});
+                break :blk config_table.vendor_table;
+            } else if (config_table.vendor_guid.eql(uefi.tables.ConfigurationTable.acpi_10_table_guid)) {
+                std.log.debug("Found ACPI v1.0 table {*}", .{config_table.vendor_table});
+                table_ptr = config_table.vendor_table;
+            }
+        }
+        break :blk table_ptr;
+    };
+    std.log.info("Config table: {*}", .{rsdp_ptr});
+    bootinfo.acpi_ptr = @intFromPtr(rsdp_ptr);
+
     const trampoline_addr = @intFromPtr(trampoline_page);
     std.log.info(
         \\ preparing to exit boot services
@@ -207,7 +225,7 @@ pub fn main() uefi.Status {
         \\ or $0x620, %rax
         \\ mov %rax, %cr4
         \\ mov %[kernel_entry], %rax
-        \\ mov %[page_map], %cr3  // <- this causes the problem
+        \\ mov %[page_map], %cr3
         \\ jmp *%rax
         \\ _catch:
         \\ jmp _catch
