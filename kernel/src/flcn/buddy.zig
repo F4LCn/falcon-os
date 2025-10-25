@@ -243,7 +243,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const stack_trace_node_idx = node_offset + node_idx.value;
             const stack_trace_node = &self.safety_data.stacktraces[stack_trace_node_idx];
             const stacktrace = &stack_trace_node[@intFromEnum(trace_type)];
-            _ = stacktrace.capture(ret_addr);
+            _ = stacktrace.capture(ret_addr, .{});
         }
 
         pub fn canAlloc(self: *Self, requested_length: usize, alignment: std.mem.Alignment) bool {
@@ -439,7 +439,7 @@ pub fn Buddy(comptime config: BuddyConfig) type {
             const alloc_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .allocate);
             const free_stack_trace = self.getCapturedStackTrace(bucket_idx, node_idx, .free);
             var stacktrace: debug.Stacktrace = .{};
-            stacktrace.capture(ret_addr);
+            stacktrace.capture(ret_addr, .{});
             const report_format =
                 \\ ------------------- DOUBLE FREE !!!! ----------------------
                 \\ A double free was detected at address 0x{X}
@@ -567,7 +567,7 @@ test "buddy init test" {
     const buffer = try test_alloc.alignedAlloc(u8, .fromByteUnits(4096), 128);
     defer test_alloc.free(buffer);
     const TestBuddy = Buddy(.{});
-    var buddy: TestBuddy = try .init(test_alloc, buffer);
+    var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
     defer buddy.deinit();
 
     try std.testing.expectEqual(0, buddy.min_block_size_log);
@@ -582,7 +582,7 @@ test "buddy test" {
     const buffer = try test_alloc.alignedAlloc(u8, .fromByteUnits(4096), 128);
     defer test_alloc.free(buffer);
     const TestBuddy = Buddy(.{});
-    var buddy: TestBuddy = try .init(test_alloc, buffer);
+    var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
     defer buddy.deinit();
     const buffer_start = @intFromPtr(buffer.ptr);
 
@@ -624,7 +624,7 @@ test "Buddy allocate" {
     {
         // Case 1: allocate the full memory
         const TestBuddy = Buddy(.{ .safety = false });
-        var buddy: TestBuddy = try .init(test_alloc, buffer);
+        var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
         defer buddy.deinit();
         const allocated = try buddy.allocate(128, .@"1", 0);
         defer buddy.free(allocated, 128, .@"1", 0) catch unreachable;
@@ -634,7 +634,7 @@ test "Buddy allocate" {
     {
         // Case 2: allocate 8b from a non split memory then allocate 8b
         const TestBuddy = Buddy(.{ .safety = false });
-        var buddy: TestBuddy = try .init(test_alloc, buffer);
+        var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
         defer buddy.deinit();
         const allocated = try buddy.allocate(8, .@"1", 0);
         defer buddy.free(allocated, 8, .@"1", 0) catch unreachable;
@@ -646,7 +646,7 @@ test "Buddy allocate" {
     {
         // Case 3: allocate 16b then allocate 8b
         const TestBuddy = Buddy(.{ .safety = false });
-        var buddy: TestBuddy = try .init(test_alloc, buffer);
+        var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
         defer buddy.deinit();
         const allocated = try buddy.allocate(16, .@"1", 0);
         defer buddy.free(allocated, 16, .@"1", 0) catch unreachable;
@@ -658,7 +658,7 @@ test "Buddy allocate" {
     {
         // Case 4: allocate 8b then allocate 16b then 2b then 1b
         const TestBuddy = Buddy(.{ .safety = false });
-        var buddy: TestBuddy = try .init(test_alloc, buffer);
+        var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
         defer buddy.deinit();
         const allocated = try buddy.allocate(8, .@"1", 0);
         defer buddy.free(allocated, 8, .@"1", 0) catch unreachable;
@@ -683,7 +683,7 @@ test "Buddy free" {
     {
         // Case 1
         const TestBuddy = Buddy(.{ .safety = false });
-        var buddy: TestBuddy = try .init(test_alloc, buffer);
+        var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
         defer buddy.deinit();
         const alloc8b0 = try buddy.allocate(8, .@"1", 0);
         const alloc16b = try buddy.allocate(16, .@"1", 0);
@@ -708,7 +708,7 @@ test "buddy allocator" {
     const buffer = try test_alloc.alignedAlloc(u8, .fromByteUnits(4096), 128);
     defer test_alloc.free(buffer);
     const TestBuddy = Buddy(.{});
-    var buddy: TestBuddy = try .init(test_alloc, buffer);
+    var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
     defer buddy.deinit();
 
     const alloc = buddy.allocator();
@@ -723,7 +723,7 @@ test "buddy allocator alignment" {
     const buffer = try test_alloc.alignedAlloc(u8, .fromByteUnits(4096), 256);
     defer test_alloc.free(buffer);
     const TestBuddy = Buddy(.{ .min_size = @sizeOf(u8) });
-    var buddy: TestBuddy = try .init(test_alloc, buffer);
+    var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
     defer buddy.deinit();
 
     var validationAlloc = std.mem.validationWrap(&buddy);
@@ -756,7 +756,7 @@ test "can allocate" {
     const buffer = try test_alloc.alloc(u8, 256);
     defer test_alloc.free(buffer);
     const TestBuddy = Buddy(.{ .min_size = @sizeOf(u8) });
-    var buddy: TestBuddy = try .init(test_alloc, buffer);
+    var buddy: TestBuddy = try .init(test_alloc, @intFromPtr(buffer.ptr), buffer.len);
     defer buddy.deinit();
 
     const alloc = buddy.allocator();
