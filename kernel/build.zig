@@ -55,22 +55,40 @@ pub fn build(b: *std.Build) !void {
     kernel_exe.setLinkerScript(b.path("linker.ld"));
     b.installArtifact(kernel_exe);
 
+    const flcn_tests_module = b.createModule(.{
+        .root_source_file = b.path("src/flcn/flcn.zig"),
+        .optimize = .Debug,
+        .target = default_target,
+    });
+    flcn_tests_module.addImport("options", options_module);
+    flcn_tests_module.addImport("flcn", lib_module);
+    flcn_tests_module.addImport("arch", arch_module);
+
     const tests_module = b.createModule(.{
         .root_source_file = b.path("src/tests.zig"),
         .optimize = .Debug,
         .target = default_target,
     });
-    tests_module.addImport("constants", options_module);
+    tests_module.addImport("options", options_module);
+    tests_module.addImport("flcn", lib_module);
+    tests_module.addImport("arch", arch_module);
 
     const tests = b.addTest(.{
         .name = "all_tests",
         .root_module = tests_module,
         .use_llvm = true,
     });
+    const flcn_tests = b.addTest(.{
+        .name = "all_tests",
+        .root_module = flcn_tests_module,
+        .use_llvm = true,
+    });
 
     const run_tests = b.addRunArtifact(tests);
+    const run_flcn_tests = b.addRunArtifact(flcn_tests);
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_flcn_tests.step);
 
     const run_lldb = b.addSystemCommand(&.{ "lldb", "--" });
     run_lldb.addArtifactArg(tests);
@@ -107,7 +125,7 @@ fn createOptionsModule(b: *std.Build, optimize: std.builtin.OptimizeMode) *std.B
     options.addOption(bool, "safety", optimize == .Debug or optimize == .ReleaseSafe);
     options.addOption(comptime_int, "num_stack_trace", 4);
     options.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
-    options.addOption(comptime_int, "permanent_heap_size", 4 * 1024 * 1024);
+    options.addOption(comptime_int, "permanent_heap_size", 5 * 1024 * 1024);
     return options.createModule();
 }
 
