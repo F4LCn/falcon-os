@@ -221,6 +221,16 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
                 }
                 return;
             }
+            if (self.tail == node) {
+                if (self.tail) |t| {
+                    self.tail = @field(t, prev);
+                    if (self.tail) |new_tail| {
+                        @field(new_tail, next) = null;
+                    } else {
+                        self.head = null;
+                    }
+                }
+            }
 
             const node_prev = @field(node, prev);
             const node_next = @field(node, next);
@@ -231,6 +241,9 @@ pub fn DoublyLinkedList(comptime T: anytype, prev_field: std.meta.FieldEnum(T), 
             if (node_next) |n| {
                 @field(n, prev) = node_prev;
             }
+
+            @field(node, prev) = null;
+            @field(node, next) = null;
         }
 
         pub fn isEmpty(self: *Self) bool {
