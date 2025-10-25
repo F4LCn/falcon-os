@@ -62,8 +62,6 @@ pub fn failableMain() !void {
 
     std.log.info("Quick mapping", .{});
     const addr = Memory.kernel_vmem.physToVirt(0x1400000);
-    // const v_id_mapped: *u64 = @ptrFromInt(0x1400000);
-    // v_id_mapped.* = 456;
     const v: *u64 = @ptrFromInt(addr.toAddr());
     v.* = 123;
     std.log.info("quick mapped value @ {*} {d}", .{ v, v.* });
@@ -75,8 +73,9 @@ pub fn failableMain() !void {
     try cpu.initCore(0);
 
     descriptors.init();
-    Memory.printStats();
+    try Memory.printStats();
     try Memory.lateInit();
+    try debug.init(Memory.permanent_allocator);
 
     std.log.info("page allocator test", .{});
     const page_alloc = Memory.page_allocator;
@@ -84,12 +83,23 @@ pub fn failableMain() !void {
     const allocated2 = try page_alloc.allocate(1000, .{});
     std.log.info("allocated 1000 pages at 0x{x}", .{@intFromPtr(allocated2)});
     try page_alloc.free(allocated2, 1000, .{});
-    Memory.printStats();
+    try Memory.printStats();
+
+    var list = std.ArrayList([]u32){};
+    for (0..1000) |_| {
+        const a = try kernel_alloc.alloc(u32, 16*16);
+        try list.append(kernel_alloc, a);
+    }
+    try Memory.printStats();
+
+    for (list.items) |a| {
+        kernel_alloc.free(a);
+    }
+    list.deinit(kernel_alloc);
+    try Memory.printStats();
 
     try acpi.init();
     try smp.init();
 
-    // v.* = 321;
-    // std.log.info("value @ {*} {d} {d}", .{ v, v.*, v_id_mapped.* });
     @panic("test");
 }

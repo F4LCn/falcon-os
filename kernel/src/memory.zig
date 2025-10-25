@@ -36,30 +36,15 @@ pub fn init() !void {
 }
 
 pub fn lateInit() !void {
-    const CacheManager = Cache.CacheManager(.{});
-    var cache_manager: CacheManager = try .init(allocator(), page_allocator);
-    const alloc = cache_manager.allocator();
-    var a = try alloc.alloc(u32, 1);
-    log.debug("Allocated from {*} {d}", .{a.ptr, a.len});
-    for (1..24) |i| {
-        a = try alloc.alloc(u32, i);
-        log.debug("Allocated from {*} {d}", .{a.ptr, a.len});
-        // alloc.free(a);
-    }
+    try kernel_heap.init();
 }
 
 pub fn allocator() std.mem.Allocator {
     return kernel_heap.allocator();
 }
 
-pub fn printStats() void {
-    log.debug(
-        \\
-        \\ Kernel allocator stats:
-        \\      - Free Mem: {d}
-        \\      - Allocated Mem: {d}
-        \\      - Total Mem: {d}
-    , .{ kernel_heap.total_free_memory, kernel_heap.total_allocated_memory, kernel_heap.total_allocated_memory + kernel_heap.total_free_memory });
+pub fn printStats() !void {
+    try kernel_heap.printMemoryStats();
 }
 
 test {
