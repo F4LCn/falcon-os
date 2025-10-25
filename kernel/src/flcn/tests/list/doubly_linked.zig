@@ -37,6 +37,12 @@ test "append should correctly set next and prev" {
     var node1 = TestType{ .value = 123 };
     var node2 = TestType{ .value = 321 };
     list.append(&node1);
+
+    try std.testing.expectEqual(&node1, list.head);
+    try std.testing.expectEqual(null, @field(list.head.?, "prev"));
+    try std.testing.expectEqual(&node1, list.tail);
+    try std.testing.expectEqual(null, @field(list.tail.?, "next"));
+
     list.append(&node2);
 
     try std.testing.expectEqual(&node1, list.head);
@@ -59,6 +65,9 @@ test "popFirst should return the first element" {
     try std.testing.expectEqual(&node2, popped_node1);
     try std.testing.expectEqual(null, @field(popped_node1.?, "prev"));
     try std.testing.expectEqual(null, @field(popped_node1.?, "next"));
+
+    try std.testing.expectEqual(&node1, list.head);
+    try std.testing.expectEqual(&node1, list.tail);
 
     const popped_node2 = list.popFirst();
 
@@ -235,4 +244,42 @@ test "iter" {
     try std.testing.expectEqual(&node4, fourth_node.?);
     const null_node = iter.next();
     try std.testing.expectEqual(null, null_node);
+}
+
+test "two lists" {
+    var list1 = TestTypeList{};
+    var list2 = TestTypeList{};
+
+    var node1 = TestType{ .value = 123 };
+    var node2 = TestType{ .value = 321 };
+    var node3 = TestType{ .value = 456 };
+    var node4 = TestType{ .value = 654 };
+    list1.append(&node1);
+    list1.append(&node2);
+    list1.append(&node3);
+    list1.append(&node4);
+
+    list1.remove(&node1);
+    list2.append(&node1);
+
+    try std.testing.expectEqual(&node2, list1.head);
+    try std.testing.expectEqual(&node4, list1.tail);
+    try std.testing.expectEqual(&node1, list2.head);
+    try std.testing.expectEqual(&node1, list2.tail);
+
+    const n = list1.popFirst();
+    if(n) |nn| list2.append(nn);
+
+    try std.testing.expectEqual(&node3, list1.head);
+    try std.testing.expectEqual(&node4, list1.tail);
+    try std.testing.expectEqual(&node1, list2.head);
+    try std.testing.expectEqual(&node2, list2.tail);
+
+    list1.remove(&node4);
+    list2.append(&node4);
+
+    try std.testing.expectEqual(&node3, list1.head);
+    try std.testing.expectEqual(&node3, list1.tail);
+    try std.testing.expectEqual(&node1, list2.head);
+    try std.testing.expectEqual(&node4, list2.tail);
 }
