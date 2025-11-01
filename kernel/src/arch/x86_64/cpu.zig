@@ -1,6 +1,18 @@
 const std = @import("std");
 const assembly = @import("assembly.zig");
 
+const CpuId = u32;
+
+const CpuData = struct {
+    // NOTE: Should contain all cpu related data
+    // included in core CpuData struct
+    // TSS, APIC controller
+
+    pub fn init(cpu_id: CpuId) void {
+        _ = cpu_id;
+    }
+};
+
 const max_basic_level = 32;
 const max_extended_level = 32;
 const max_fn04_level = 8;

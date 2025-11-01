@@ -39,7 +39,7 @@ export fn _start() callconv(.naked) noreturn {
 
 pub export fn kernelMain() callconv(.c) void {
     logger.init(serial.Port.COM1);
-    cpu.init() catch unreachable;
+    cpu.identify() catch unreachable;
     std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str[0..12]});
 
     failableMain() catch |e| {
@@ -70,6 +70,10 @@ pub fn failableMain() !void {
 
     std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
     try debug.init(Memory.permanent_allocator);
+
+    // assuming BSP is always cpu#0
+    cpu.initCore(0);
+
     descriptors.init();
     // try Memory.lateInit();
 
