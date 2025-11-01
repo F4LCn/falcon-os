@@ -45,14 +45,16 @@
     * [x] GDT/IDT/TSS definition
     * [x] Hardware exceptions & interrupts
     * [ ] CPU resolution & init
+      * [x] Cpu identification & features
+      * [ ] per-cpu variables
     * [ ] Synchronization (Mutex, lock, ...)
 
   - Core features
-    * [ ] Allocators hierarchy
+    * [x] Allocators hierarchy
       * [x] Physical memory manager / Frame allocator
       * [x] Virtual memory manager / Page allocator
       * [x] Buddy allocator
-      * [-] Slab allocator
+      * [x] Slab allocator
       * [x] General purpose heap allocator
     * [ ] SMP
       * [x] Locate & Parse ACPI tables
