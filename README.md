@@ -16,7 +16,7 @@
 - vm: bochs, qemu
 - assembler: fasm
 - c compiler: clang
-- zig compiler (currently used version: 0.16.0-dev.747+493ad58ff)
+- zig compiler (currently used version: 0.16.0-dev.1316+181b25ce4)
 - binutils (llvm or gnu): objdump, objcopy, ... or better yet some sort of gnu env (linux, wsl, cygwin)
 
 ## References

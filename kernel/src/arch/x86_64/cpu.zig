@@ -429,6 +429,13 @@ pub const CpuContext = struct {
         return ctx;
     }
 
+    pub fn getFp(ctx: *const CpuContext) usize {
+        return @intCast(ctx.gprs.get(.rbp));
+    }
+    pub fn getPc(ctx: *const CpuContext) usize {
+        return @intCast(ctx.gprs.get(.rip));
+    }
+
     pub fn dwarfRegisterBytes(ctx: *CpuContext, register_num: u16) std.debug.cpu_context.DwarfRegisterError![]u8 {
         // System V Application Binary Interface AMD64 Architecture Processor Supplement
         //   § 3.6.2 "DWARF Register Number Mapping"
