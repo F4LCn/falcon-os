@@ -3,14 +3,23 @@ const assembly = @import("assembly.zig");
 
 pub const CpuId = u32;
 
-pub const CpuData = struct {
+pub const IdentificationData = struct {
+    apic_id: CpuId,
+    lapic_addr: u32,
+};
+
+pub const CpuData = extern struct {
     // NOTE: Should contain all cpu related data
     // included in core CpuData struct
     // TSS, APIC controller
+    apic_base_addr: u32,
+    apic_id: CpuId,
 
-    pub fn init(cpu_id: CpuId) CpuData {
-        _ = cpu_id;
-        return .{};
+    pub fn init(_: CpuId, id_data: IdentificationData) CpuData {
+        return .{
+            .apic_base_addr = id_data.lapic_addr,
+            .apic_id = id_data.apic_id,
+        };
     }
 };
 

@@ -2,17 +2,19 @@ const std = @import("std");
 const BootInfo = @import("flcn").bootinfo.BootInfo;
 const Memory = @import("memory.zig");
 const arch = @import("arch");
-const acpi_types = @import("flcn").acpi;
+const flcn = @import("flcn");
+const acpi_types = flcn.acpi;
+const acpi_events = flcn.acpi_events;
 
 extern var bootinfo: BootInfo;
 const log = std.log.scoped(.acpi);
 
-pub const AcpiTableIterationContext2 = struct {
+pub const AcpiTableIterationContext = struct {
     ptr: *const anyopaque,
-    cb: *const fn (*const anyopaque, []const u8, args: anytype) void,
+    cb: *const fn (*const anyopaque, args: anytype) void,
 
-    pub fn notify(self: *const AcpiTableIterationContext2, token: []const u8, args: anytype) void {
-        self.cb(self.ptr, token, args);
+    pub fn notify(self: *const AcpiTableIterationContext, args: anytype) void {
+        self.cb(self.ptr, args);
     }
 };
 
@@ -51,15 +53,15 @@ pub fn init() !void {
     log.info("Initialized tables {any}", .{acpi_tables});
 }
 
-pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationContext2) !void {
+pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationContext) !void {
     const table_opt = acpi_tables.getPtrConst(sig);
     if (table_opt) |table| {
         switch (sig) {
             .apic => {
                 if (!table.is_valid) return error.BadChecksum;
                 const madt: *const acpi_types.AcpiMadt = @ptrFromInt(table.virt_addr);
-                ctx.notify("lapic_addr", madt.lapic_addr);
-                if (madt.flags.pcat_compat) ctx.notify("pic_compat", {});
+                ctx.notify(acpi_events.MadtParsingEvent{ .local_apic_addr = madt.lapic_addr });
+                if (madt.flags.pcat_compat) ctx.notify(acpi_events.MadtParsingEvent{ .pic_compatibility = {} });
                 const table_end: u64 = table.virt_addr + table.header.len;
                 var interruptControllerHeader: *const acpi_types.AcpiMadt.InterruptControllerHeader = @ptrFromInt(table.virt_addr + @sizeOf(acpi_types.AcpiMadt));
 
@@ -69,14 +71,22 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                         .processorLocalApic => {
                             const processorLocalApic: *const acpi_types.AcpiMadt.ProcessorLocalApic = @ptrCast(interruptControllerHeader);
                             log.debug("local apic {any}", .{processorLocalApic});
+                            ctx.notify(acpi_events.MadtParsingEvent{
+                                .apic = .{
+                                    .id = processorLocalApic.processor_uid,
+                                    .apic_id = processorLocalApic.apic_id,
+                                    .enabled = processorLocalApic.flags.enabled,
+                                    .online_capable = processorLocalApic.flags.online_capable,
+                                },
+                            });
                         },
                         .ioApic => {
                             const ioapic: *const acpi_types.AcpiMadt.ProcessorLocalApic = @ptrCast(interruptControllerHeader);
-                            log.debug("ioapic {any}", .{ioapic});
+                            log.err("ioapic {any}", .{ioapic});
                         },
                         .interruptSourceOverride => {
                             const intSourceOverride: *const acpi_types.AcpiMadt.InterruptSourceOverride = @ptrCast(interruptControllerHeader);
-                            log.debug("interrupt source override {any}", .{intSourceOverride});
+                            log.err("interrupt source override {any}", .{intSourceOverride});
                         },
                         else => {
                             log.warn("Unhandled interrupt controller type {t}", .{interruptControllerHeader.typ});

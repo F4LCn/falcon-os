@@ -8,6 +8,7 @@ pub const vmm = @import("vmm.zig");
 pub const synchronization = @import("synchronization.zig");
 pub const debug = @import("debug.zig");
 pub const acpi = @import("acpi.zig");
+pub const acpi_events = @import("acpi_events.zig");
 
 test {
     _ = @import("list.zig");

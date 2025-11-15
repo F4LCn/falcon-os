@@ -6,7 +6,7 @@ const options = @import("options");
 // to any core related query. It will be put in GS
 // so that access to GS:0 would be the cpu_id (for example)
 // TODO: move everything core related here
-pub const CpuData = struct {
+pub const CpuData = extern struct {
     id: arch.cpu.CpuId,
     cpu_data: arch.cpu.CpuData,
     // add scheduling vars (current task, etc)
@@ -32,20 +32,24 @@ pub fn earlyInit() !void {
 
 pub fn initCore(cpu_id: arch.cpu.CpuId) !void {
     if (!possible_cpus_mask.isSet(cpu_id)) return error.ImpossibleCpu;
-    cpu_data[cpu_id].id = cpu_id;
-    cpu_data[cpu_id].cpu_data = .init(cpu_id);
+    if (!present_cpus_mask.isSet(cpu_id)) return error.CpuNotPresent;
+
+    setCpuOnline(cpu_id);
 }
 
 pub fn hasFeature(feature: arch.cpu.Feature) bool {
     return arch.cpu.hasFeature(feature);
 }
 
-pub fn setCpuPresent(cpu_id: arch.cpu.CpuId) void {
+pub fn setCpuPresent(cpu_id: arch.cpu.CpuId, id_data: arch.cpu.IdentificationData) void {
     present_cpus_mask.set(cpu_id);
-    present_cpus_count = present_cpus_mask.count();
+    present_cpus_count = @intCast(present_cpus_mask.count());
+
+    cpu_data[cpu_id].id = cpu_id;
+    cpu_data[cpu_id].cpu_data = .init(cpu_id, id_data);
 }
 
 pub fn setCpuOnline(cpu_id: arch.cpu.CpuId) void {
     online_cpus_mask.set(cpu_id);
-    online_cpus_count = online_cpus_mask.count();
+    online_cpus_count = @intCast(online_cpus_mask.count());
 }

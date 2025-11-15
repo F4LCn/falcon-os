@@ -30,6 +30,9 @@ comptime {
 export fn _start() callconv(.naked) noreturn {
     asm volatile (
         \\ .global kernelMain
+        // Are we an AP ?
+        // set up the AP stack
+        // jump to AP specific startup code
         \\ mov $0, %rbp
         \\ mov %rbp, %rsp
         \\ call kernelMain
@@ -69,9 +72,6 @@ pub fn failableMain() !void {
     std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
     try debug.init(Memory.permanent_allocator);
 
-    // assuming BSP is always cpu#0
-    try cpu.initCore(0);
-
     descriptors.init();
     try Memory.printStats();
     try Memory.lateInit();
@@ -87,7 +87,7 @@ pub fn failableMain() !void {
 
     var list = std.ArrayList([]u32){};
     for (0..1000) |_| {
-        const a = try kernel_alloc.alloc(u32, 16*16);
+        const a = try kernel_alloc.alloc(u32, 16 * 16);
         try list.append(kernel_alloc, a);
     }
     try Memory.printStats();
@@ -100,6 +100,11 @@ pub fn failableMain() !void {
 
     try acpi.init();
     try smp.init();
+
+    // assuming BSP is always cpu#0
+    try cpu.initCore(0);
+    std.log.info("Present cpus: #{d}, mask: {any}", .{cpu.present_cpus_count, cpu.present_cpus_mask});
+    std.log.info("Online cpus: #{d}, mask: {any}", .{cpu.online_cpus_count, cpu.online_cpus_mask});
 
     @panic("test");
 }
