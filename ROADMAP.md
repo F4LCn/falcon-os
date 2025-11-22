@@ -56,9 +56,12 @@
       * [x] Buddy allocator
       * [x] Slab allocator
       * [x] General purpose heap allocator
-    * [ ] SMP
+    * [-] SMP
       * [x] Locate & Parse ACPI tables
-      * [-] Madt entry iteration
+      * [x] Madt entry iteration
+      * [-] Trampoline start up code
+      * [ ] Apic initialization
+      * [ ] AP initialization
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] Processes, Threads & context switching
     * [ ] Task / Task queues ?

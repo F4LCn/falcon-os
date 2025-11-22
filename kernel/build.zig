@@ -133,12 +133,31 @@ fn createArchModule(alloc: std.mem.Allocator, b: *std.Build, arch: std.Target.Cp
     const path = try std.mem.concat(alloc, u8, &.{ "src/arch/", @tagName(arch), "/arch.zig" });
     defer alloc.free(path);
 
-    return std.Build.Module.create(
+    const module = std.Build.Module.create(
         b,
         .{
             .root_source_file = b.path(path),
         },
     );
+
+    try addArchSpecificSteps(arch, alloc, b, module);
+    return module;
+}
+
+fn addArchSpecificSteps(arch: std.Target.Cpu.Arch, alloc: std.mem.Allocator, b: *std.Build, module: *std.Build.Module) !void {
+    switch (arch) {
+        .x86_64 => try x86_64SpecificSteps(alloc, b, module),
+        else => @panic("Unhandled architecture"),
+    }
+}
+
+fn x86_64SpecificSteps(_: std.mem.Allocator, b: *std.Build, module: *std.Build.Module) !void {
+    const trampoline_path = "src/arch/x86_64/asm/ap_trampoline.asm";
+    const trampoline_bin_assemble = b.addSystemCommand(&.{"fasm"});
+    trampoline_bin_assemble.addFileArg(b.path(trampoline_path));
+    const trampoline_bin = trampoline_bin_assemble.addOutputFileArg("trampoline.bin");
+
+    module.addAnonymousImport("trampoline", .{ .root_source_file = trampoline_bin });
 }
 
 fn createLibModule(b: *std.Build) *std.Build.Module {

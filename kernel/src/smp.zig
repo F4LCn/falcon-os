@@ -2,6 +2,7 @@ const std = @import("std");
 const acpi = @import("acpi.zig");
 const acpi_events = @import("flcn").acpi_events;
 const cpu = @import("cpu.zig");
+const trampoline = @import("arch").trampoline;
 
 const log = std.log.scoped(.smp);
 
@@ -35,6 +36,7 @@ var pic_compatibility: bool = false;
 pub fn init() !void {
     const madtIterationContext = MadtIterationContext{};
     try acpi.iterateTable(.apic, madtIterationContext.acpiIterationContext());
+    log.info("trampoline data {s} {d} {*}", .{ std.fmt.bytesToHex(trampoline.trampoline_data, .lower), trampoline.trampoline_data.len, trampoline.trampoline_data });
 }
 
 // EL PLAN:

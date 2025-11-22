@@ -81,7 +81,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                             });
                         },
                         .ioApic => {
-                            const ioapic: *const acpi_types.AcpiMadt.ProcessorLocalApic = @ptrCast(interruptControllerHeader);
+                            const ioapic: *const acpi_types.AcpiMadt.IoApic = @ptrCast(interruptControllerHeader);
                             log.err("ioapic {any}", .{ioapic});
                         },
                         .interruptSourceOverride => {
