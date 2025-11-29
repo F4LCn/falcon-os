@@ -1,5 +1,6 @@
 const std = @import("std");
 const memory = @import("memory.zig");
+const cpu = @import("cpu.zig");
 
 pub const CpuidResult = struct {
     eax: u32,
@@ -30,24 +31,23 @@ pub fn cpuid(regs: *CpuidResult) void {
     regs.edx = edx;
 }
 
-pub fn rdmsr(msr: u32) u64 {
+pub fn rdmsr(msr: cpu.MSR) u64 {
     var low: u32 = undefined;
     var high: u32 = undefined;
     asm volatile (
         \\ rdmsr
-        : [val] "r" (-> u64),
-          [low] "={eax}" (low),
+        : [low] "={eax}" (low),
           [high] "={edx}" (high),
-        : [msr] "{ecx}" (msr),
+        : [msr] "{ecx}" (@intFromEnum(msr)),
     );
     return (@as(u64, @intCast(high)) << 32) | (@as(u64, @intCast(low)));
 }
 
-pub fn wrmsr(msr: u32, val: u64) void {
+pub fn wrmsr(msr: cpu.MSR, val: u64) void {
     asm volatile (
         \\ wrmsr
         :
-        : [msr] "{ecx}" (msr),
+        : [msr] "{ecx}" (@intFromEnum(msr)),
           [val_upper] "{edx}" (val >> 32),
           [val_lower] "{eax}" (val & std.math.maxInt(u32)),
     );

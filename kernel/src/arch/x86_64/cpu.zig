@@ -471,3 +471,9 @@ pub const CpuContext = struct {
         }
     }
 };
+
+pub const MSR = enum(u32) {
+    IA32_PAT = 0x277,
+    IA32_MTRRCAP = 0xFE,
+    IA32_MTRRdefType = 0x2FF,
+};

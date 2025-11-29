@@ -5,7 +5,7 @@ const options = @import("options");
 const registers = @import("registers.zig");
 const flcn = @import("flcn");
 const assembly = @import("assembly.zig");
-const msr = @import("msr.zig");
+const cpu = @import("cpu.zig");
 
 pub const PAddrSize = u64;
 pub const PAddr = u64;
@@ -360,9 +360,41 @@ pub const PageMapManager = struct {
         const page_offset = try readPageOffset();
         const root = registers.readCR(.cr3);
         log.info("Got current pagemap: 0x{X}", .{root});
-        const pat: PAT = .{};
-        assembly.wrmsr(msr.IA32_PAT, @bitCast(pat));
-        log.info("Writing PAT values {any}", .{pat});
+        if (cpu.hasFeature(.mtrr)) {
+            // RANT: I might have understood this wrong,
+            // but I thought that MTRRs were declining in favour of the
+            // more recent/finegrained control offered by the PAT
+            // Turns out that might not be the case and the interplay of the two
+            // makes it hard to know how the caching of a memory page will be affected.
+            // Simply disabling MTRR (clearing bit 11 of IA32_MTRRdefType) is a *VERY BAD* idea
+            // as it will simply force all memory to be uncacheable (what I understand from reading the
+            // intel SDM)
+            // The plan for now is to figure out how this MTRR business works and implement
+            // a sort of basic handling that would let the PAT take charge of the final decision
+            // for cache control
+
+            // CAVEAT: PAT will break things if the same page is mapped with different cache types
+            // we need some sort of api with ioremap semantics that would ensure that pages with
+            // strong caching behaviours are uniquely mapped (mmio mainly, probably DMA to a lesser extent).
+
+            log.debug("cpu has MTRR feature", .{});
+            const mtrr_capabilities = assembly.rdmsr(.IA32_MTRRCAP);
+            const variable_count = mtrr_capabilities & 0xff;
+            const has_fixed = (mtrr_capabilities & (1 << 8)) != 0;
+
+            const mtrr_default_type = assembly.rdmsr(.IA32_MTRRdefType);
+            log.debug("MTRR capabilities: {x}. Variable count {d}, has fixed: {any}", .{ mtrr_capabilities, variable_count, has_fixed });
+            log.debug("MTRR default type {x}, MTRR {s}", .{ mtrr_default_type, switch (mtrr_default_type & (1 << 11)) {
+                0 => "disabled",
+                else => "enabled",
+            } });
+        }
+        if (cpu.hasFeature(.pat)) {
+            log.debug("cpu has PAT feature", .{});
+            const pat: PAT = .{};
+            assembly.wrmsr(.IA32_PAT, @bitCast(pat));
+            log.info("Writing PAT values {any}", .{pat});
+        }
         return .{
             .root = root,
             .levels = 4,
@@ -403,7 +435,7 @@ pub const PageMapManager = struct {
 
         var physical_addr = prange.start;
         var virtual_addr: u64 = @bitCast(vrange.start);
-        const page_size: u64 = switch (flags.size){
+        const page_size: u64 = switch (flags.size) {
             .page => constants.default_page_size,
             .large => 512 * constants.default_page_size,
             .huge => 512 * 512 * constants.default_page_size,
