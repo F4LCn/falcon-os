@@ -109,7 +109,7 @@ pub fn failableMain() !void {
 
     const count50ms = PIT.millis(50);
     std.log.info("counting down from {d}", .{count50ms});
-    var i: u64 = 32;
+    var i: u64 = @divExact(5000, 50);
     while(i > 0) : (i -= 1) {
         PIT.wait(count50ms);
     }
