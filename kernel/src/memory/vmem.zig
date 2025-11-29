@@ -15,7 +15,7 @@ const Error = error{OutOfVirtMemory};
 
 pub const VAddrSize = arch.memory.VAddrSize;
 pub const VAddr = arch.memory.VAddr;
-const MmapFlags = arch.memory.MmapFlags;
+const MmapFlags = arch.memory.Flags;
 pub const DefaultMmapFlags: MmapFlags = arch.memory.DefaultMmapFlags;
 const PageMapping = arch.memory.PageMapping;
 
@@ -33,9 +33,9 @@ vmm: VirtualMemoryManager,
 extern const _kernel_end: u64;
 extern const fb: u64;
 
-pub fn init(alloc: Allocator) !VirtualAllocator {
+pub fn init(alloc: Allocator, page_allocator: arch.memory.PageAllocator) !VirtualAllocator {
     var vmm = VirtualMemoryManager.init(alloc);
-    const inner: PlatformVirtualMapper = try .init(_allocatePages);
+    const inner: PlatformVirtualMapper = try .init(page_allocator);
     log.info("after init. kernel_end 0x{*}", .{&_kernel_end});
 
     const quickmap_start = @intFromPtr(&_kernel_end) + 2 * arch.constants.default_page_size;
@@ -92,12 +92,16 @@ pub fn init(alloc: Allocator) !VirtualAllocator {
     }
     var self: VirtualAllocator = .{ .impl = inner, .vmm = vmm };
 
+    const testee: u64 = 0x2000000;
+    try self.mmap(.{ .start = testee, .length = 4 * sizes.mb, .typ = .free }, .{ .start = @bitCast(testee), .length = 4 * sizes.mb }, .{
+        .present = true,
+        .size = .large,
+        .cache_control = .write_through,
+    }, .{});
+
     // unmap nullptr page
-    try self.mmap(
-        .{ .start = 0, .length = arch.constants.default_page_size, .typ = .used },
+    self.munmap(
         .{ .start = @bitCast(@as(u64, 0)), .length = arch.constants.default_page_size },
-        .{ .present = false },
-        .{ .force = true },
     );
     return self;
 }
@@ -148,9 +152,4 @@ pub fn virtToPhys(self: *VirtualAllocator, vaddr: VAddr) arch.memory.PAddr {
 
 pub fn physToVirt(self: *VirtualAllocator, paddr: arch.memory.PAddr) VAddr {
     return self.impl.physToVirt(paddr);
-}
-
-fn _allocatePages(count: u64) anyerror!pmem.PAddr {
-    const prange = try pmem.allocatePages(count, .{});
-    return prange.start;
 }

@@ -30,7 +30,7 @@ pub fn init() !void {
     pmem.printRanges();
 
     log.info("Initializing virtual memory manager", .{});
-    kernel_vmem = try vmem.init(permanent_allocator);
+    kernel_vmem = try vmem.init(permanent_allocator, page_allocator);
     kernel_vmem.printRanges();
     kernel_heap.setVmm(&kernel_vmem);
 }
