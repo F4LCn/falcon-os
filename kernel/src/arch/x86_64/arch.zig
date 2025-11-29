@@ -6,5 +6,6 @@
  pub const constants = @import("constants.zig");
  pub const cpu = @import("cpu.zig");
  pub const memory = @import("memory.zig");
+ pub const msr = @import("msr.zig");
  pub const registers = @import("registers.zig");
  pub const trampoline = @import("trampoline.zig");

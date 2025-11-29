@@ -2,22 +2,15 @@ const std = @import("std");
 
 fn EnumFieldPackedStruct(comptime E: type, comptime Data: type, comptime field_default: ?Data) type {
     @setEvalBranchQuota(1000);
-    var struct_fields: [@typeInfo(E).@"enum".fields.len]std.builtin.Type.StructField = undefined;
-    for (&struct_fields, @typeInfo(E).@"enum".fields) |*struct_field, enum_field| {
-        struct_field.* = .{
-            .name = enum_field.name,
-            .type = Data,
-            .default_value_ptr = if (field_default) |d| @as(?*const anyopaque, @ptrCast(&d)) else null,
-            .is_comptime = false,
-            .alignment = 0,
-        };
+    var field_names: [@typeInfo(E).@"enum".fields.len][]const u8 = undefined;
+    var field_types: [@typeInfo(E).@"enum".fields.len]type = undefined;
+    var field_attributes: [@typeInfo(E).@"enum".fields.len]std.builtin.Type.StructField.Attributes = undefined;
+    for (&field_names, &field_types, &field_attributes, @typeInfo(E).@"enum".fields) |*field_name, *field_type, *field_attribute, enum_field| {
+        field_name.* = enum_field.name;
+        field_type.* = Data;
+        field_attribute.* = .{ .default_value_ptr = if (field_default) |d| @as(?*const anyopaque, @ptrCast(&d)) else null };
     }
-    return @Type(.{ .@"struct" = .{
-        .layout = .@"packed",
-        .fields = &struct_fields,
-        .decls = &.{},
-        .is_tuple = false,
-    } });
+    return @Struct(.@"packed", null, &field_names, &field_types, &field_attributes);
 }
 
 pub const Section = packed struct {
