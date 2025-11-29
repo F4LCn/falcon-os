@@ -67,6 +67,10 @@
     * [ ] Task / Task queues ?
     * [ ] Scheduling
     * [ ] Timers
+      * [x] PIT
+      * [ ] Local APIC timer
+      * [ ] HPET
+      * [ ] (x64) TSC
     * [ ] Basic graphics (Console + basic font rendering)
 
   - Nice to haves

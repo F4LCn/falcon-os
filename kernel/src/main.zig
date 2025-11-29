@@ -12,6 +12,7 @@ const BootInfo = flcn.bootinfo.BootInfo;
 const Memory = @import("memory.zig");
 const acpi = @import("acpi.zig");
 const smp = @import("smp.zig");
+const PIT = @import("pit.zig");
 const panicFn = @import("panic.zig").panicFn;
 
 pub const panic = std.debug.FullPanic(panicFn);
@@ -103,8 +104,16 @@ pub fn failableMain() !void {
 
     // assuming BSP is always cpu#0
     try cpu.initCore(0);
-    std.log.info("Present cpus: #{d}, mask: {any}", .{cpu.present_cpus_count, cpu.present_cpus_mask});
-    std.log.info("Online cpus: #{d}, mask: {any}", .{cpu.online_cpus_count, cpu.online_cpus_mask});
+    std.log.info("Present cpus: #{d}, mask: {any}", .{ cpu.present_cpus_count, cpu.present_cpus_mask });
+    std.log.info("Online cpus: #{d}, mask: {any}", .{ cpu.online_cpus_count, cpu.online_cpus_mask });
+
+    const count50ms = PIT.millis(50);
+    std.log.info("counting down from {d}", .{count50ms});
+    var i: u64 = 32;
+    while(i > 0) : (i -= 1) {
+        PIT.wait(count50ms);
+    }
+    std.log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
 
     @panic("test");
 }

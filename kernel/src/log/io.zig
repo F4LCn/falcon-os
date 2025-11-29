@@ -1,3 +1,4 @@
+// TODO: this was moved to arch, remove
 pub inline fn outb(port: u16, value: u8) void {
     return asm volatile (
         \\ outb %[value], %[port]
