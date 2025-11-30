@@ -29,6 +29,8 @@ pub fn init() !void {
     // log.info("Allocated range: {any}", .{range});
     pmem.printRanges();
 
+    arch.memory.init();
+
     log.info("Initializing virtual memory manager", .{});
     kernel_vmem = try vmem.init(permanent_allocator, page_allocator);
     kernel_vmem.printRanges();

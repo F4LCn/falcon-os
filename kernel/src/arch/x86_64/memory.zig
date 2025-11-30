@@ -342,6 +342,152 @@ pub const PageMapping = extern struct {
     }
 };
 
+pub fn init() void {
+    initMTRR();
+    initPAT();
+}
+
+const MTRRCapabilites = packed struct(u64) {
+    variable_ranges_count: u8,
+    fixed_ranges_supported: bool,
+    _res0: u1,
+    write_combine_supported: bool,
+    smrr_supported: bool,
+    _res1: u52,
+};
+const MTRRDefType = packed struct(u64) {
+    default_type: CacheControl,
+    _res0: u2,
+    fixed_ranges_enabled: bool,
+    enabled: bool,
+    _res1: u52,
+};
+const MTRRFixed = packed struct(u64) {
+    range0: CacheControl,
+    range1: CacheControl,
+    range2: CacheControl,
+    range3: CacheControl,
+    range4: CacheControl,
+    range5: CacheControl,
+    range6: CacheControl,
+    range7: CacheControl,
+
+    pub fn format(
+        self: @This(),
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
+        try writer.print("0:{any} 1:{any} 2:{any} 3:{any} 4:{any} 5:{any} 6:{any} 7:{any}", .{
+            self.range0,
+            self.range1,
+            self.range2,
+            self.range3,
+            self.range4,
+            self.range5,
+            self.range6,
+            self.range7,
+        });
+    }
+};
+const MTRRPhysBase = packed struct(u64) {
+    typ: CacheControl,
+    _res0: u4,
+    addr: VAddrInt,
+    _res1: @Int(.unsigned, @bitSizeOf(u64) - @bitSizeOf(CacheControl) - @bitSizeOf(u4) - @bitSizeOf(VAddrInt)),
+
+    pub fn format(
+        self: @This(),
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
+        try writer.print("addr: 0x{x}, type: {any}", .{ @as(u64, @intCast(self.addr)) << 12, self.typ });
+    }
+};
+const MTRRPhysMask = packed struct(u64) {
+    _res0: u8,
+    _res1: u3,
+    valid: bool,
+    mask: VAddrInt,
+    _res2: @Int(.unsigned, @bitSizeOf(u64) - @bitSizeOf(u8) - @bitSizeOf(u3) - @bitSizeOf(VAddrInt) - 1),
+
+    pub fn format(
+        self: @This(),
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
+        try writer.print("mask: 0x{x}, valid: {any}", .{ @as(u64, @intCast(self.mask)) << 12, self.valid });
+    }
+};
+fn initMTRR() void {
+    if (cpu.hasFeature(.mtrr)) {
+        // RANT: I might have understood this wrong,
+        // but I thought that MTRRs were declining in favour of the
+        // more recent/finegrained control offered by the PAT
+        // Turns out that might not be the case and the interplay of the two
+        // makes it hard to know how the caching of a memory page will be affected.
+        // Simply disabling MTRR (clearing bit 11 of IA32_MTRRdefType) is a *VERY BAD* idea
+        // as it will simply force all memory to be uncacheable (what I understand from reading the
+        // intel SDM)
+        // The plan for now is to figure out how this MTRR business works and implement
+        // a sort of basic handling that would let the PAT take charge of the final decision
+        // for cache control
+
+        // CAVEAT: PAT will break things if the same page is mapped with different cache types
+        // we need some sort of api with ioremap semantics that would ensure that pages with
+        // strong caching behaviours are uniquely mapped (mmio mainly, probably DMA to a lesser extent).
+
+        // NOTE: the plan for now is to hope the bios/uefi inits the MTRR to something sane
+        // like write-back for (at least) all variable ranges. If not maybe we should disable
+        // the variable ranges, set the default type to write-back
+        // we do not care about fixed ranges unless should they overlap a framebuffer/BAR/mmio
+        // device space then we're in trouble.
+
+        log.debug("cpu has MTRR feature", .{});
+        const mtrr_capabilities: MTRRCapabilites = @bitCast(assembly.rdmsr(.IA32_MTRRCAP));
+        log.debug("MTRR capabilities: {any}", .{mtrr_capabilities});
+
+        const mtrr_default_type: MTRRDefType = @bitCast(assembly.rdmsr(.IA32_MTRRdefType));
+        log.debug("MTRR default type {any}", .{mtrr_default_type});
+
+        const mtrr_fixed_64k: MTRRFixed = @bitCast(assembly.rdmsr(.IA32_MTRRfix64K_00000));
+        log.debug("MTRR fixed 64k {f}", .{mtrr_fixed_64k});
+
+        for ([_]cpu.MSR{ .IA32_MTRRfix16K_80000, .IA32_MTRRfix16K_A0000 }) |msr| {
+            const mtrr_fixed_16k: MTRRFixed = @bitCast(assembly.rdmsr(msr));
+            log.debug("MTRR fixed 16k {f}", .{mtrr_fixed_16k});
+        }
+
+        for ([_]cpu.MSR{
+            .IA32_MTRRfix4K_C0000,
+            .IA32_MTRRfix4K_C8000,
+            .IA32_MTRRfix4K_D0000,
+            .IA32_MTRRfix4K_D8000,
+            .IA32_MTRRfix4K_E0000,
+            .IA32_MTRRfix4K_E8000,
+            .IA32_MTRRfix4K_F0000,
+            .IA32_MTRRfix4K_F8000,
+        }) |msr| {
+            const mtrr_fixed_4k: MTRRFixed = @bitCast(assembly.rdmsr(msr));
+            log.debug("MTRR fixed 4k {f}", .{mtrr_fixed_4k});
+        }
+
+        for (0..mtrr_capabilities.variable_ranges_count) |i| {
+            const msr_physbase: cpu.MSR = @enumFromInt(@intFromEnum(cpu.MSR.IA32_MTRR_PHYSBASE0) + 2 * i);
+            const msr_physmask: cpu.MSR = @enumFromInt(@intFromEnum(cpu.MSR.IA32_MTRR_PHYSMASK0) + 2 * i + 1);
+            const physbase: MTRRPhysBase = @bitCast(assembly.rdmsr(msr_physbase));
+            const physmask: MTRRPhysMask = @bitCast(assembly.rdmsr(msr_physmask));
+
+            log.debug("MTRR var#{d} base: {f} mask: {f}", .{ i, physbase, physmask });
+        }
+    }
+}
+
+fn initPAT() void {
+    if (cpu.hasFeature(.pat)) {
+        log.debug("cpu has PAT feature", .{});
+        const pat: PAT = .{};
+        assembly.wrmsr(.IA32_PAT, @bitCast(pat));
+        log.info("Writing PAT values {any}", .{pat});
+    }
+}
+
 var env = @extern([*]u8, .{ .name = "env", .visibility = .hidden });
 pub const VirtualMemoryManager = flcn.vmm.VirtualMemoryManager(VAddr, VAddrSize, constants.default_page_size);
 pub const VirtMemRange = VirtualMemoryManager.VirtMemRange;
@@ -360,41 +506,6 @@ pub const PageMapManager = struct {
         const page_offset = try readPageOffset();
         const root = registers.readCR(.cr3);
         log.info("Got current pagemap: 0x{X}", .{root});
-        if (cpu.hasFeature(.mtrr)) {
-            // RANT: I might have understood this wrong,
-            // but I thought that MTRRs were declining in favour of the
-            // more recent/finegrained control offered by the PAT
-            // Turns out that might not be the case and the interplay of the two
-            // makes it hard to know how the caching of a memory page will be affected.
-            // Simply disabling MTRR (clearing bit 11 of IA32_MTRRdefType) is a *VERY BAD* idea
-            // as it will simply force all memory to be uncacheable (what I understand from reading the
-            // intel SDM)
-            // The plan for now is to figure out how this MTRR business works and implement
-            // a sort of basic handling that would let the PAT take charge of the final decision
-            // for cache control
-
-            // CAVEAT: PAT will break things if the same page is mapped with different cache types
-            // we need some sort of api with ioremap semantics that would ensure that pages with
-            // strong caching behaviours are uniquely mapped (mmio mainly, probably DMA to a lesser extent).
-
-            log.debug("cpu has MTRR feature", .{});
-            const mtrr_capabilities = assembly.rdmsr(.IA32_MTRRCAP);
-            const variable_count = mtrr_capabilities & 0xff;
-            const has_fixed = (mtrr_capabilities & (1 << 8)) != 0;
-
-            const mtrr_default_type = assembly.rdmsr(.IA32_MTRRdefType);
-            log.debug("MTRR capabilities: {x}. Variable count {d}, has fixed: {any}", .{ mtrr_capabilities, variable_count, has_fixed });
-            log.debug("MTRR default type {x}, MTRR {s}", .{ mtrr_default_type, switch (mtrr_default_type & (1 << 11)) {
-                0 => "disabled",
-                else => "enabled",
-            } });
-        }
-        if (cpu.hasFeature(.pat)) {
-            log.debug("cpu has PAT feature", .{});
-            const pat: PAT = .{};
-            assembly.wrmsr(.IA32_PAT, @bitCast(pat));
-            log.info("Writing PAT values {any}", .{pat});
-        }
         return .{
             .root = root,
             .levels = 4,
