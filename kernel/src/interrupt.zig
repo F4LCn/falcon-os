@@ -147,5 +147,5 @@ pub fn init(idt: *IDT) void {
 pub fn registerHandler(vector: u64, interrupt_handler: *InterruptHandler) void {
     var handle_list = &handlers_list[vector];
     handle_list.prepend(interrupt_handler);
-    log.info("registering demo handler {any}", .{handle_list});
+    log.debug("registering demo handler {any}", .{handle_list});
 }

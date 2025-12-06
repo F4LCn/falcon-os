@@ -88,7 +88,7 @@ pub fn fillTss(self: *Self, stacks: *[max_tsd_entries * arch.constants.default_p
 }
 
 pub fn loadGDTR(self: *Self) void {
-    log.info("loading GDTR {*}", .{self.gdtr.base});
+    log.debug("loading GDTR {*}", .{self.gdtr.base});
     asm volatile (
         \\lgdt (%[gdtr])
         :
@@ -99,7 +99,7 @@ pub fn loadGDTR(self: *Self) void {
 pub fn loadTR(self: *Self, args: struct { cpu_id: u32 = 0 }) void {
     _ = self;
     const tss_selector = @as(u16, @bitCast(Segment.Selector{ .index = max_gdt_entries + @as(u13, @truncate(args.cpu_id)) }));
-    log.info("loading TR 0x{X}", .{tss_selector});
+    log.debug("loading TR 0x{X}", .{tss_selector});
     asm volatile (
         \\ltr %[tss_selector]
         :
@@ -108,9 +108,9 @@ pub fn loadTR(self: *Self, args: struct { cpu_id: u32 = 0 }) void {
 }
 
 pub fn flushGDT(self: *Self) void {
-    log.info("flushing data segment", .{});
+    log.debug("flushing data segment", .{});
     self.loadDataSegment(common.kernel_data_segment_selector);
-    log.info("flushing code segment", .{});
+    log.debug("flushing code segment", .{});
     self.loadCodeSegment(common.kernel_code_segment_selector);
 }
 

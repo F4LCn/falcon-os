@@ -20,6 +20,9 @@ pub const panic = std.debug.FullPanic(panicFn);
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
+    .log_scope_levels = &.{
+        .{ .scope = .debug, .level = .info },
+    },
     .page_size_min = arch.constants.default_page_size,
     .page_size_max = arch.constants.default_page_size,
 };
@@ -74,7 +77,6 @@ pub fn failableMain() !void {
     try debug.init(Memory.permanent_allocator);
 
     descriptors.init();
-    try Memory.printStats();
     try Memory.lateInit();
     try debug.init(Memory.permanent_allocator);
 
@@ -84,19 +86,18 @@ pub fn failableMain() !void {
     const allocated2 = try page_alloc.allocate(1000, .{});
     std.log.info("allocated 1000 pages at 0x{x}", .{@intFromPtr(allocated2)});
     try page_alloc.free(allocated2, 1000, .{});
-    try Memory.printStats();
 
     var list = std.ArrayList([]u32){};
     for (0..1000) |_| {
         const a = try kernel_alloc.alloc(u32, 16 * 16);
         try list.append(kernel_alloc, a);
     }
-    try Memory.printStats();
 
     for (list.items) |a| {
         kernel_alloc.free(a);
     }
     list.deinit(kernel_alloc);
+
     try Memory.printStats();
 
     try acpi.init();
@@ -110,7 +111,7 @@ pub fn failableMain() !void {
     const count50ms = PIT.millis(50);
     std.log.info("counting down from {d}", .{count50ms});
     var i: u64 = @divExact(5000, 50);
-    while(i > 0) : (i -= 1) {
+    while (i > 0) : (i -= 1) {
         PIT.wait(count50ms);
     }
     std.log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
