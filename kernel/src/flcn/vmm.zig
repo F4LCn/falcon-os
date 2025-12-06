@@ -13,11 +13,10 @@ pub const VirtRangeType = enum(u8) {
     free,
 };
 
-pub fn VirtualMemoryManager(comptime TAddr: type, comptime TAddrSize: type, page_size: comptime_int) type {
+pub fn VirtualMemoryManager(comptime TAddr: type, comptime TAddrSize: type) type {
     return struct {
         const Self = @This();
         const log = std.log.scoped(.vmm);
-        const default_page_size = page_size;
         pub const VirtMemRange = struct {
             start: TAddr,
             length: u64,
@@ -219,8 +218,7 @@ pub fn VirtualMemoryManager(comptime TAddr: type, comptime TAddrSize: type, page
             try self.registerRange(start, length, .{ .typ = dst_typ });
         }
 
-        pub fn allocateRange(self: *Self, count: TAddrSize, args: RangeArgs) !VirtMemRange {
-            const length = count * page_size;
+        pub fn allocateRange(self: *Self, length: TAddrSize, args: RangeArgs) !VirtMemRange {
             const typ = args.typ orelse .free;
             const range_list = &self.memory_map[@intFromEnum(typ)];
             var iter = range_list.iter();

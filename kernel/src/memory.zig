@@ -1,6 +1,6 @@
 const std = @import("std");
-const pmem = @import("memory/pmem.zig");
-const vmem = @import("memory/vmem.zig");
+pub const pmem = @import("memory/pmem.zig");
+pub const vmem = @import("memory/vmem.zig");
 const Heap = @import("memory/heap.zig");
 const Cache = @import("memory/slab.zig");
 const arch = @import("arch");

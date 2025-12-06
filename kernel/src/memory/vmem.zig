@@ -16,7 +16,7 @@ const Error = error{OutOfVirtMemory};
 pub const VAddrSize = arch.memory.VAddrSize;
 pub const VAddr = arch.memory.VAddr;
 const MmapFlags = arch.memory.Flags;
-pub const DefaultMmapFlags: MmapFlags = arch.memory.DefaultMmapFlags;
+pub const DefaultFlags: MmapFlags = arch.memory.DefaultFlags;
 const PageMapping = arch.memory.PageMapping;
 
 pub const VirtMemRange = arch.memory.VirtMemRange;
@@ -92,17 +92,14 @@ pub fn init(alloc: Allocator, page_allocator: arch.memory.PageAllocator) !Virtua
     }
     var self: VirtualAllocator = .{ .impl = inner, .vmm = vmm };
 
-    const testee: u64 = 0x2000000;
-    try self.mmap(.{ .start = testee, .length = 4 * sizes.mb, .typ = .free }, .{ .start = @bitCast(testee), .length = 4 * sizes.mb }, .{
-        .present = true,
-        .size = .large,
-        .cache_control = .write_through,
-    }, .{});
-
     // unmap nullptr page
     self.munmap(
-        .{ .start = @bitCast(@as(u64, 0)), .length = arch.constants.default_page_size },
+        .{
+            .start = @bitCast(@as(u64, 0)),
+            .length = arch.constants.default_page_size,
+        },
     );
+
     return self;
 }
 
@@ -125,7 +122,8 @@ pub fn reserveRange(self: *VirtualAllocator, start: u64, length: u64, typ: VirtR
 const VirtualAllocArgs = struct { typ: ?VirtRangeType = null };
 
 pub fn allocateRange(self: *VirtualAllocator, count: u64, args: VirtualAllocArgs) !VirtMemRange {
-    return try self.vmm.allocateRange(count, .{ .typ = args.typ });
+    const length = count * arch.constants.default_page_size;
+    return try self.vmm.allocateRange(length, .{ .typ = args.typ });
 }
 
 pub fn freeRange(self: *VirtualAllocator, vrange: VirtMemRange, args: VirtualAllocArgs) void {
@@ -139,11 +137,23 @@ pub fn freeRange(self: *VirtualAllocator, vrange: VirtMemRange, args: VirtualAll
 }
 
 pub fn mmap(self: *VirtualAllocator, prange: pmem.PhysMemRange, vrange: VirtMemRange, flags: MmapFlags, args: MMapArgs) !void {
+    log.debug("mapping prange {f} to vrange {f} (flags={any}, args={any})", .{ prange, vrange, flags, args });
     try self.impl.mmap(prange, vrange, flags, args);
 }
 
 pub fn munmap(self: *VirtualAllocator, vrange: VirtMemRange) void {
+    log.debug("unmapping vrange {f}", .{vrange});
     self.impl.munmap(vrange);
+}
+
+pub fn mremap(self: *VirtualAllocator, prange: pmem.PhysMemRange, vrange: VirtMemRange, flags: MmapFlags) !void {
+    log.debug("remapping prange {f} to vrange {f} (flags={any})", .{ prange, vrange, flags });
+    try self.impl.mmap(prange, vrange, flags, .{ .remap = true });
+}
+
+pub fn mremap2(self: *VirtualAllocator, vrange: VirtMemRange, flags: MmapFlags) !void {
+    log.debug("remapping vrange {f} (flags={any})", .{ vrange, flags });
+    try self.impl.remap(vrange, flags);
 }
 
 pub fn virtToPhys(self: *VirtualAllocator, vaddr: VAddr) arch.memory.PAddr {

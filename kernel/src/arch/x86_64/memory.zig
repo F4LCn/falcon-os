@@ -23,7 +23,7 @@ pub const VAddr = packed struct(u64) {
         return @bitCast(self);
     }
 };
-pub const VAddrInt = std.math.IntFittingRange(0, @offsetOf(VAddr, "_pad"));
+pub const VAddrInt = std.math.IntFittingRange(0, (1 << @bitOffsetOf(VAddr, "_pad")) - 1);
 pub const ReadWrite = enum(u1) {
     read_execute = 0,
     read_write = 1,
@@ -134,7 +134,7 @@ pub const cacheTypeMapping: CacheTypeToFlagsMapping = .init(.{
 
 pub const Flags = struct {
     present: bool = false,
-    read_write: ReadWrite = .read_write,
+    read_write: ReadWrite = .read_execute,
     user_supervisor: UserSupervisor = .supervisor,
     write_through: bool = false,
     cache_disable: bool = false,
@@ -144,6 +144,36 @@ pub const Flags = struct {
     cache_control: CacheControl = .write_back,
     global: bool = false,
     execution_disable: bool = false,
+
+    pub fn extend(self: Flags, extension: struct {
+        present: ?bool = null,
+        read_write: ?ReadWrite = null,
+        user_supervisor: ?UserSupervisor = null,
+        write_through: ?bool = null,
+        cache_disable: ?bool = null,
+        accessed: ?bool = null,
+        dirty: ?bool = null,
+        size: ?PageSize = null,
+        cache_control: ?CacheControl = null,
+        global: ?bool = null,
+        execution_disable: ?bool = null,
+    }) Flags {
+        return .{
+            .present = if (extension.present) |v| v else self.present,
+            .read_write = if (extension.read_write) |v| v else self.read_write,
+            .user_supervisor = if (extension.user_supervisor) |v| v else self.user_supervisor,
+            .write_through = if (extension.write_through) |v| v else self.write_through,
+            .cache_disable = if (extension.cache_disable) |v| v else self.cache_disable,
+            .size = if (extension.size) |v| v else self.size,
+            .cache_control = if (extension.cache_control) |v| v else self.cache_control,
+            .global = if (extension.global) |v| v else self.global,
+            .execution_disable = if (extension.execution_disable) |v| v else self.execution_disable,
+        };
+    }
+};
+
+pub const DefaultFlags: Flags = .{
+    .present = true,
 };
 
 pub const DefaultMmapFlags: MmapFlags = .{
@@ -165,6 +195,10 @@ pub const PageMapping = extern struct {
         execution_disable: bool = false,
 
         pub fn getAddr(self: *const PML4Entry) PAddr {
+            return @as(PAddrSize, @intCast(self.addr)) << 12;
+        }
+
+        pub fn getEntryAddr(self: *const PML4Entry) PAddr {
             return @as(PAddrSize, @intCast(self.addr)) << 12;
         }
 
@@ -203,11 +237,25 @@ pub const PageMapping = extern struct {
         }
 
         pub fn setAddr(self: *HugePageEntry, addr: u64) void {
-            self.addr = @intCast((addr & std.math.maxInt(VAddrInt)) >> 30);
+            self.addr = @intCast(addr >> 30);
         }
 
-        pub fn setCacheControl(self: *HugePageEntry, cache_control_type: CacheControl) void {
+        pub fn setFlags(self: *HugePageEntry, flags: Flags) void {
+            log.debug("setting PDP entry flags {any}", .{flags});
+            self.present = flags.present;
+            self.read_write = flags.read_write;
+            self.user_supervisor = flags.user_supervisor;
+            self.write_through = flags.write_through;
+            self.cache_disable = flags.cache_disable;
+            self.page_size = if (flags.size == .huge) .large else .normal;
+            self.global = flags.global;
+            self.execution_disable = flags.execution_disable;
+            self.setCacheControl(flags.cache_control);
+        }
+
+        fn setCacheControl(self: *HugePageEntry, cache_control_type: CacheControl) void {
             const cache_flags = cache_control_type.toFlags();
+            log.debug("setting cache control flags {any}", .{cache_flags});
             self.write_through = cache_flags.write_through;
             self.cache_disable = cache_flags.cache_disable;
             self.pat = cache_flags.pat;
@@ -244,11 +292,25 @@ pub const PageMapping = extern struct {
         }
 
         pub fn setAddr(self: *LargePageEntry, addr: u64) void {
-            self.addr = @intCast((addr & std.math.maxInt(VAddrInt)) >> 21);
+            self.addr = @intCast(addr >> 21);
         }
 
-        pub fn setCacheControl(self: *LargePageEntry, cache_control_type: CacheControl) void {
+        pub fn setFlags(self: *LargePageEntry, flags: Flags) void {
+            log.debug("setting PD entry flags {any}", .{flags});
+            self.present = flags.present;
+            self.read_write = flags.read_write;
+            self.user_supervisor = flags.user_supervisor;
+            self.write_through = flags.write_through;
+            self.cache_disable = flags.cache_disable;
+            self.page_size = if (flags.size == .large) .large else .normal;
+            self.global = flags.global;
+            self.execution_disable = flags.execution_disable;
+            self.setCacheControl(flags.cache_control);
+        }
+
+        fn setCacheControl(self: *LargePageEntry, cache_control_type: CacheControl) void {
             const cache_flags = cache_control_type.toFlags();
+            log.debug("setting cache control flags {any}", .{cache_flags});
             self.write_through = cache_flags.write_through;
             self.cache_disable = cache_flags.cache_disable;
             self.pat = cache_flags.pat;
@@ -278,12 +340,31 @@ pub const PageMapping = extern struct {
             return @as(PAddrSize, @intCast(self.addr)) << 12;
         }
 
-        pub fn setAddr(self: *PageEntry, addr: u64) void {
-            self.addr = @intCast((addr & std.math.maxInt(VAddrInt)) >> 12);
+        pub fn getEntryAddr(self: *const PageEntry) PAddr {
+            return @as(PAddrSize, @intCast(self.addr)) << 12;
         }
 
-        pub fn setCacheControl(self: *PageEntry, cache_control_type: CacheControl) void {
+        pub fn setAddr(self: *PageEntry, addr: u64) void {
+            log.debug("addr mask {x}", .{std.math.maxInt(VAddrInt)});
+            log.debug("setting PT addr {x}", .{addr});
+            self.addr = @intCast(addr >> 12);
+        }
+
+        pub fn setFlags(self: *PageEntry, flags: Flags) void {
+            log.debug("setting PT entry flags {any}", .{flags});
+            self.present = flags.present;
+            self.read_write = flags.read_write;
+            self.user_supervisor = flags.user_supervisor;
+            self.write_through = flags.write_through;
+            self.cache_disable = flags.cache_disable;
+            self.global = flags.global;
+            self.execution_disable = flags.execution_disable;
+            self.setCacheControl(flags.cache_control);
+        }
+
+        fn setCacheControl(self: *PageEntry, cache_control_type: CacheControl) void {
             const cache_flags = cache_control_type.toFlags();
+            log.debug("setting cache control flags {any}", .{cache_flags});
             self.write_through = cache_flags.write_through;
             self.cache_disable = cache_flags.cache_disable;
             self.pat = cache_flags.pat;
@@ -299,10 +380,6 @@ pub const PageMapping = extern struct {
         huge: HugePageEntry,
         large: LargePageEntry,
         page: PageEntry,
-
-        pub fn isPresent(self: *const Entry) bool {
-            return @as(u64, @bitCast(self)) & 1;
-        }
     };
     mappings: [@divExact(constants.default_page_size, @sizeOf(Entry))]Entry,
 
@@ -422,7 +499,7 @@ fn initMTRR() void {
         // more recent/finegrained control offered by the PAT
         // Turns out that might not be the case and the interplay of the two
         // makes it hard to know how the caching of a memory page will be affected.
-        // Simply disabling MTRR (clearing bit 11 of IA32_MTRRdefType) is a *VERY BAD* idea
+        // Simply disabling MTRR (clearing bit 11 of MTRRdefType) is a *VERY BAD* idea
         // as it will simply force all memory to be uncacheable (what I understand from reading the
         // intel SDM)
         // The plan for now is to figure out how this MTRR business works and implement
@@ -440,37 +517,37 @@ fn initMTRR() void {
         // device space then we're in trouble.
 
         log.debug("cpu has MTRR feature", .{});
-        const mtrr_capabilities: MTRRCapabilites = @bitCast(assembly.rdmsr(.IA32_MTRRCAP));
+        const mtrr_capabilities: MTRRCapabilites = @bitCast(assembly.rdmsr(.MTRRCAP));
         log.debug("MTRR capabilities: {any}", .{mtrr_capabilities});
 
-        const mtrr_default_type: MTRRDefType = @bitCast(assembly.rdmsr(.IA32_MTRRdefType));
+        const mtrr_default_type: MTRRDefType = @bitCast(assembly.rdmsr(.MTRRdefType));
         log.debug("MTRR default type {any}", .{mtrr_default_type});
 
-        const mtrr_fixed_64k: MTRRFixed = @bitCast(assembly.rdmsr(.IA32_MTRRfix64K_00000));
+        const mtrr_fixed_64k: MTRRFixed = @bitCast(assembly.rdmsr(.MTRRfix64K_00000));
         log.debug("MTRR fixed 64k {f}", .{mtrr_fixed_64k});
 
-        for ([_]cpu.MSR{ .IA32_MTRRfix16K_80000, .IA32_MTRRfix16K_A0000 }) |msr| {
+        for ([_]cpu.MSR{ .MTRRfix16K_80000, .MTRRfix16K_A0000 }) |msr| {
             const mtrr_fixed_16k: MTRRFixed = @bitCast(assembly.rdmsr(msr));
             log.debug("MTRR fixed 16k {f}", .{mtrr_fixed_16k});
         }
 
         for ([_]cpu.MSR{
-            .IA32_MTRRfix4K_C0000,
-            .IA32_MTRRfix4K_C8000,
-            .IA32_MTRRfix4K_D0000,
-            .IA32_MTRRfix4K_D8000,
-            .IA32_MTRRfix4K_E0000,
-            .IA32_MTRRfix4K_E8000,
-            .IA32_MTRRfix4K_F0000,
-            .IA32_MTRRfix4K_F8000,
+            .MTRRfix4K_C0000,
+            .MTRRfix4K_C8000,
+            .MTRRfix4K_D0000,
+            .MTRRfix4K_D8000,
+            .MTRRfix4K_E0000,
+            .MTRRfix4K_E8000,
+            .MTRRfix4K_F0000,
+            .MTRRfix4K_F8000,
         }) |msr| {
             const mtrr_fixed_4k: MTRRFixed = @bitCast(assembly.rdmsr(msr));
             log.debug("MTRR fixed 4k {f}", .{mtrr_fixed_4k});
         }
 
         for (0..mtrr_capabilities.variable_ranges_count) |i| {
-            const msr_physbase: cpu.MSR = @enumFromInt(@intFromEnum(cpu.MSR.IA32_MTRR_PHYSBASE0) + 2 * i);
-            const msr_physmask: cpu.MSR = @enumFromInt(@intFromEnum(cpu.MSR.IA32_MTRR_PHYSMASK0) + 2 * i + 1);
+            const msr_physbase: cpu.MSR = @enumFromInt(@intFromEnum(cpu.MSR.MTRR_PHYSBASE0) + 2 * i);
+            const msr_physmask: cpu.MSR = @enumFromInt(@intFromEnum(cpu.MSR.MTRR_PHYSMASK0) + 2 * i + 1);
             const physbase: MTRRPhysBase = @bitCast(assembly.rdmsr(msr_physbase));
             const physmask: MTRRPhysMask = @bitCast(assembly.rdmsr(msr_physmask));
 
@@ -483,16 +560,16 @@ fn initPAT() void {
     if (cpu.hasFeature(.pat)) {
         log.debug("cpu has PAT feature", .{});
         const pat: PAT = .{};
-        assembly.wrmsr(.IA32_PAT, @bitCast(pat));
+        assembly.wrmsr(.PAT, @bitCast(pat));
         log.info("Writing PAT values {any}", .{pat});
     }
 }
 
 var env = @extern([*]u8, .{ .name = "env", .visibility = .hidden });
-pub const VirtualMemoryManager = flcn.vmm.VirtualMemoryManager(VAddr, VAddrSize, constants.default_page_size);
+pub const VirtualMemoryManager = flcn.vmm.VirtualMemoryManager(VAddr, VAddrSize);
 pub const VirtMemRange = VirtualMemoryManager.VirtMemRange;
 pub const MMapArgs = struct {
-    force: bool = false,
+    remap: bool = false,
 };
 pub const PageMapManager = struct {
     const Self = @This();
@@ -536,7 +613,8 @@ pub const PageMapManager = struct {
             if (!std.mem.Alignment.fromByteUnits(constants.default_page_size).check(vaddr)) return error.BadVirtAddrAlignment;
         }
 
-        try self.writePageTable(@bitCast(vaddr), paddr, flags, .{ .force = args.force });
+        try self.writePageTable(@bitCast(vaddr), paddr, flags, .{ .remap = args.remap });
+        assembly.invalidateVirtualAddress(vaddr);
     }
 
     pub fn mmap(self: *PageMapManager, prange: flcn.pmm.PhysMemRange, vrange: VirtMemRange, flags: Flags, args: MMapArgs) !void {
@@ -548,8 +626,8 @@ pub const PageMapManager = struct {
         var virtual_addr: u64 = @bitCast(vrange.start);
         const page_size: u64 = switch (flags.size) {
             .page => constants.default_page_size,
-            .large => 512 * constants.default_page_size,
-            .huge => 512 * 512 * constants.default_page_size,
+            .large => constants.large_page_size,
+            .huge => constants.huge_page_size,
         };
         const num_pages_to_map = @divExact(prange.length, page_size);
         log.debug("Mapping prange {f} to vrange {f} ({d} pages)", .{ prange, vrange, num_pages_to_map });
@@ -567,7 +645,60 @@ pub const PageMapManager = struct {
         log.debug("Unmapping vrange {f} ({d} pages)", .{ vrange, num_pages_to_map });
         for (0..num_pages_to_map) |_| {
             defer virtual_addr +%= constants.default_page_size;
-            self.mmapPage(0, virtual_addr, .{}, .{ .force = true }) catch unreachable;
+            self.mmapPage(0, virtual_addr, .{}, .{ .remap = true }) catch unreachable;
+        }
+    }
+
+    fn remapPage(self: *PageMapManager, vaddr: u64, flags: Flags) !void {
+        if (options.safety) {
+            if (!std.mem.Alignment.fromByteUnits(constants.default_page_size).check(vaddr)) return error.BadVirtAddrAlignment;
+        }
+
+        const entry = try self.getEntry(@bitCast(vaddr), flags);
+        var entry_addr: *u64 = undefined;
+        var entry_value: u64 = undefined;
+        switch (flags.size) {
+            .page => {
+                const pt_entry = &entry.page;
+                var pt_copy = pt_entry.*;
+                pt_copy.setFlags(flags);
+                entry_addr = @ptrCast(pt_entry);
+                entry_value = @bitCast(pt_copy);
+                log.debug("remapping pt entry {any}", .{pt_copy});
+            },
+            .large => {
+                const pd_entry = &entry.large;
+                var pd_copy = pd_entry.*;
+                pd_copy.setFlags(flags);
+                entry_addr = @ptrCast(pd_entry);
+                entry_value = @bitCast(pd_copy);
+                log.debug("remapping pd entry {any}", .{pd_copy});
+            },
+            .huge => {
+                const pdp_entry = &entry.huge;
+                var pdp_copy = pdp_entry.*;
+                pdp_copy.setFlags(flags);
+                entry_addr = @ptrCast(pdp_entry);
+                entry_value = @bitCast(pdp_copy);
+                log.debug("remapping pdp entry {any}", .{pdp_copy});
+            },
+        }
+        writeEntry(entry_addr, entry_value);
+        assembly.invalidateVirtualAddress(vaddr);
+    }
+
+    pub fn remap(self: *PageMapManager, vrange: VirtMemRange, flags: Flags) !void {
+        var virtual_addr: u64 = @bitCast(vrange.start);
+        const page_size: u64 = switch (flags.size) {
+            .page => constants.default_page_size,
+            .large => 512 * constants.default_page_size,
+            .huge => 512 * 512 * constants.default_page_size,
+        };
+        const num_pages_to_map = @divExact(vrange.length, page_size);
+        log.debug("remapping vrange {f} ({d} pages) with flags {any}", .{ vrange, num_pages_to_map, flags });
+        for (0..num_pages_to_map) |_| {
+            defer virtual_addr +%= page_size;
+            try self.remapPage(virtual_addr, flags);
         }
     }
 
@@ -579,12 +710,44 @@ pub const PageMapManager = struct {
         return @bitCast(@as(PAddrSize, paddr) + self.page_offset);
     }
 
-    fn writePageTable(self: *const Self, vaddr: VAddr, paddr: PAddr, flags: Flags, args: struct { create_if_missing: bool = true, force: bool = false }) !void {
+    fn getEntry(self: *const Self, vaddr: VAddr, flags: Flags) !*PageMapping.Entry {
         const pml4_mapping: *PageMapping = @ptrFromInt(self.physToVirt(self.root).toAddr());
         log.debug("PML4: 0x{x} ({*})", .{ self.root, pml4_mapping });
         const pml4_entry = &pml4_mapping.mappings[vaddr.pml4_idx];
 
-        const pdp_mapping_addr = try self.getOrCreateMapping2(pml4_entry, args.create_if_missing);
+        const pdp_mapping_addr = try self.getOrCreateMapping(pml4_entry, false);
+        const pdp_mapping: *PageMapping = @ptrFromInt(self.physToVirt(pdp_mapping_addr).toAddr());
+        log.debug("PDP: 0x{x} ({*})", .{ pdp_mapping_addr, pdp_mapping });
+        const pdp_entry = &pdp_mapping.mappings[vaddr.pdp_idx];
+        if (flags.size == .huge) {
+            return pdp_entry;
+        }
+
+        const pd_mapping_addr = try self.getOrCreateMapping(pdp_entry, false);
+        const pd_mapping: *PageMapping = @ptrFromInt(self.physToVirt(pd_mapping_addr).toAddr());
+        log.debug("PD: 0x{x} ({*})", .{ pd_mapping_addr, pd_mapping });
+        const pd_entry = &pd_mapping.mappings[vaddr.pd_idx];
+        if (flags.size == .large) {
+            return pd_entry;
+        }
+
+        const pt_mapping_addr = try self.getOrCreateMapping(pd_entry, false);
+        const pt_mapping: *PageMapping = @ptrFromInt(self.physToVirt(pt_mapping_addr).toAddr());
+        log.debug("PT: 0x{x} ({*})", .{ pt_mapping_addr, pt_mapping });
+        const pt_entry = &pt_mapping.mappings[vaddr.pt_idx];
+        if (flags.size == .page) {
+            return pt_entry;
+        }
+
+        return error.MappingNotFound;
+    }
+
+    fn writePageTable(self: *const Self, vaddr: VAddr, paddr: PAddr, flags: Flags, args: struct { create_if_missing: bool = true, remap: bool = false }) !void {
+        const pml4_mapping: *PageMapping = @ptrFromInt(self.physToVirt(self.root).toAddr());
+        log.debug("PML4: 0x{x} ({*})", .{ self.root, pml4_mapping });
+        const pml4_entry = &pml4_mapping.mappings[vaddr.pml4_idx];
+
+        const pdp_mapping_addr = try self.getOrCreateMapping(pml4_entry, args.create_if_missing);
         const pdp_mapping: *PageMapping = @ptrFromInt(self.physToVirt(pdp_mapping_addr).toAddr());
         log.debug("PDP: 0x{x} ({*})", .{ pdp_mapping_addr, pdp_mapping });
         const pdp_entry = &pdp_mapping.mappings[vaddr.pdp_idx];
@@ -594,12 +757,12 @@ pub const PageMapManager = struct {
                 @branchHint(.likely);
                 var pdp_copy = huge_page_entry.*;
                 pdp_copy.setAddr(paddr);
-                pdp_copy.setCacheControl(.write_back);
-                pdp_copy.present = true;
+                pdp_copy.setFlags(flags);
+                log.debug("writing PDP entry {any}", .{pdp_copy});
                 writeEntry(@ptrCast(pdp_entry), @bitCast(pdp_copy));
                 return;
             }
-            if (!args.force) {
+            if (!args.remap) {
                 @branchHint(.likely);
                 log.err("overwriting an existing PDP entry {any}", .{pdp_entry});
                 @panic("mmap overwrite");
@@ -607,13 +770,13 @@ pub const PageMapManager = struct {
 
             var pdp_copy = huge_page_entry.*;
             pdp_copy.setAddr(paddr);
-            pdp_copy.setCacheControl(.write_back);
-            pdp_copy.present = true;
+            pdp_copy.setFlags(flags);
+            log.debug("writing existing PDP entry {any}", .{pdp_copy});
             writeEntry(@ptrCast(pdp_entry), @bitCast(pdp_copy));
             return;
         }
 
-        const pd_mapping_addr = try self.getOrCreateMapping2(pdp_entry, args.create_if_missing);
+        const pd_mapping_addr = try self.getOrCreateMapping(pdp_entry, args.create_if_missing);
         const pd_mapping: *PageMapping = @ptrFromInt(self.physToVirt(pd_mapping_addr).toAddr());
         log.debug("PD: 0x{x} ({*})", .{ pd_mapping_addr, pd_mapping });
         const pd_entry = &pd_mapping.mappings[vaddr.pd_idx];
@@ -623,25 +786,25 @@ pub const PageMapManager = struct {
                 @branchHint(.likely);
                 var pd_copy = large_page_entry.*;
                 pd_copy.setAddr(paddr);
-                pd_copy.setCacheControl(.write_back);
-                pd_copy.present = true;
+                pd_copy.setFlags(flags);
+                log.debug("writing PD entry {any}", .{pd_copy});
                 writeEntry(@ptrCast(pd_entry), @bitCast(pd_copy));
                 return;
             }
-            if (!args.force) {
+            if (!args.remap) {
                 @branchHint(.likely);
                 log.err("overwriting an existing PD entry {any}", .{pd_entry});
                 @panic("mmap overwrite");
             }
             var pd_copy = large_page_entry.*;
             pd_copy.setAddr(paddr);
-            pd_copy.setCacheControl(.write_back);
-            pd_copy.present = true;
+            pd_copy.setFlags(flags);
+            log.debug("writing existing PD entry {any}", .{pd_entry});
             writeEntry(@ptrCast(pd_entry), @bitCast(pd_copy));
             return;
         }
 
-        const pt_mapping_addr = try self.getOrCreateMapping2(pd_entry, args.create_if_missing);
+        const pt_mapping_addr = try self.getOrCreateMapping(pd_entry, args.create_if_missing);
         const pt_mapping: *PageMapping = @ptrFromInt(self.physToVirt(pt_mapping_addr).toAddr());
         log.debug("PT: 0x{x} ({*})", .{ pt_mapping_addr, pt_mapping });
         const pt_entry = &pt_mapping.mappings[vaddr.pt_idx];
@@ -651,20 +814,20 @@ pub const PageMapManager = struct {
                 @branchHint(.likely);
                 var pt_copy = page_entry.*;
                 pt_copy.setAddr(paddr);
-                pt_copy.setCacheControl(.write_back);
-                pt_copy.present = true;
+                pt_copy.setFlags(flags);
+                log.debug("writing PT entry {any}", .{pt_copy});
                 writeEntry(@ptrCast(pt_entry), @bitCast(pt_copy));
                 return;
             }
-            if (!args.force) {
+            if (!args.remap) {
                 @branchHint(.likely);
                 log.err("overwriting an existing PT entry {any}", .{pt_entry});
                 @panic("mmap overwrite");
             }
             var pt_copy = page_entry.*;
             pt_copy.setAddr(paddr);
-            pt_copy.setCacheControl(.write_back);
-            pt_copy.present = true;
+            pt_copy.setFlags(flags);
+            log.debug("writing existing PT entry {any}", .{pt_copy});
             writeEntry(@ptrCast(pt_entry), @bitCast(pt_copy));
             return;
         }
@@ -672,74 +835,27 @@ pub const PageMapManager = struct {
         unreachable;
     }
 
-    fn getPageTableEntry(self: *const Self, vaddr: VAddr, flags: MmapFlags, args: struct { create_if_missing: bool = true }) !*PageMapping.Entry {
-        // const pml4_vaddr = @as(VAddrSize, @bitCast(self.physToVirt(@intCast(self.root))));
-        const pml4_mapping: *PageMapping = @ptrFromInt(self.root);
-        log.debug("PML4: {*}", .{pml4_mapping});
-
-        const pdp_mapping = try self.getOrCreateMapping(pml4_mapping, vaddr.pml4_idx, args.create_if_missing);
-        log.debug("PDP: {*}", .{pdp_mapping});
-        const pd_mapping = try self.getOrCreateMapping(pdp_mapping, vaddr.pdp_idx, args.create_if_missing);
-        log.debug("PD: {*}", .{pd_mapping});
-        if (flags.page_size == .large) {
-            const pd_mapping_vaddr = self.physToVirt(@intFromPtr(pd_mapping)).toAddr();
-            const mapped_pd_mapping: *PageMapping = @ptrFromInt(pd_mapping_vaddr);
-            const entry = &mapped_pd_mapping.mappings[vaddr.pd_idx].large;
-            return entry;
-        }
-
-        const pt_mapping = try self.getOrCreateMapping(pd_mapping, vaddr.pd_idx, args.create_if_missing);
-        log.debug("PT: {*}", .{pt_mapping});
-        const pt_mapping_vaddr = self.physToVirt(@intFromPtr(pt_mapping)).toAddr();
-        const mapped_pt_mapping: *PageMapping = @ptrFromInt(pt_mapping_vaddr);
-        const entry = &mapped_pt_mapping.mappings[vaddr.pt_idx];
-        return entry;
-    }
-
-    fn getOrCreateMapping2(self: Self, entry: *PageMapping.Entry, create_if_missing: bool) !u64 {
-        log.debug("create mapping {*}", .{entry});
+    fn getOrCreateMapping(self: Self, entry: *PageMapping.Entry, create_if_missing: bool) !u64 {
+        log.debug("get or create mapping {*}", .{entry});
         const entry_page = &entry.page;
         if (!entry_page.present) {
-            log.debug("Entry is not present {any}", .{entry_page});
+            log.debug("entry is not present {any}", .{entry_page});
             if (!create_if_missing) return error.MissingPageMapping;
             const page_ptr = try self.page_allocator.allocate(1, .{ .zero = true });
             const page_paddr = self.virtToPhys(@bitCast(@intFromPtr(page_ptr)));
             var entry_copy = entry_page.*;
             entry_copy.setAddr(page_paddr);
-            entry_copy.setCacheControl(.write_back);
             entry_copy.present = true;
-            log.debug("Filling entry data {any}", .{entry_copy});
+            log.debug("filling entry data {any}", .{entry_copy});
             writeEntry(@ptrCast(entry_page), @bitCast(entry_copy));
             return page_paddr;
         }
         return entry_page.getAddr();
     }
 
-    fn getOrCreateMapping(self: Self, mapping: *PageMapping, idx: u9, create_if_missing: bool) !*PageMapping {
-        log.debug("create mapping {*} {d}", .{ mapping, idx });
-        const mapping_vaddr = self.physToVirt(@intFromPtr(mapping)).toAddr();
-        const mapped_mapping: *PageMapping = @ptrFromInt(mapping_vaddr);
-        const entry: *PageMapping.PageEntry = &mapped_mapping.mappings[idx].page;
-        log.debug("Working on entry {d} of mapping {*}", .{ idx, mapping });
-        if (!entry.present) {
-            log.debug("Entry is not present {any}", .{entry});
-            if (!create_if_missing) return error.MissingPageMapping;
-            const page_ptr = try self.page_allocator.allocate(1, .{ .zero = true });
-            const page_paddr = self.virtToPhys(@bitCast(@intFromPtr(page_ptr)));
-            var entry_copy = entry.*;
-            entry_copy.setAddr(page_paddr);
-            entry_copy.setCacheControl(.write_back);
-            entry_copy.present = true;
-            log.debug("Filling entry data {any}", .{entry_copy});
-            writeEntry(@ptrCast(entry), @bitCast(entry_copy));
-            return @ptrFromInt(page_paddr);
-        }
-        const addr = entry.getAddr();
-        return @ptrFromInt(addr);
-    }
-
     inline fn writeEntry(entry: *u64, val: u64) void {
         entry.* = val;
+        log.debug("Written entry {*} = 0x{x}", .{ entry, val });
     }
 };
 

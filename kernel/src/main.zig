@@ -22,6 +22,7 @@ pub const std_options: std.Options = .{
     .log_level = .debug,
     .log_scope_levels = &.{
         .{ .scope = .debug, .level = .info },
+        .{ .scope = .@"x86_64.memory", .level = .info },
     },
     .page_size_min = arch.constants.default_page_size,
     .page_size_max = arch.constants.default_page_size,
