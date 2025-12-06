@@ -141,13 +141,6 @@ pub fn main() uefi.Status {
         std.log.err("Could not map kernel address space", .{});
         return uefi.Status.aborted;
     };
-    const fb_ptr = bootinfo.fb_ptr;
-    const fb_size = @as(u64, bootinfo.fb_height) * @as(u64, bootinfo.fb_scanline_bytes);
-    if (kernel_info.fb_addr) |fb_addr|
-        mapFramebuffer(&addr_space, fb_addr, fb_ptr, fb_size) catch {
-            std.log.err("Could not map framebuffer", .{});
-            return uefi.Status.aborted;
-        };
     mapLowMemory(&addr_space) catch {
         std.log.err("Could not map low memory", .{});
         return uefi.Status.aborted;
