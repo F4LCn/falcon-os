@@ -4,7 +4,6 @@ pub fn build(b: *std.Build) !void {
     const alloc = b.allocator;
     const build_arch = b.option(std.Target.Cpu.Arch, "arch", "Kernel target architecture") orelse .x86_64;
 
-    const default_target = b.standardTargetOptions(.{});
     const target = b.resolveTargetQuery(.{
         .cpu_arch = build_arch,
         .abi = .none,
@@ -23,6 +22,7 @@ pub fn build(b: *std.Build) !void {
         .code_model = .default,
         .sanitize_thread = false,
         .dwarf_format = .@"64",
+        .omit_frame_pointer = false,
     });
     const lib_module = createLibModule(b);
     lib_module.addImport("options", options_module);
@@ -58,7 +58,7 @@ pub fn build(b: *std.Build) !void {
     const flcn_tests_module = b.createModule(.{
         .root_source_file = b.path("src/flcn/flcn.zig"),
         .optimize = .Debug,
-        .target = default_target,
+        .target = b.graph.host,
     });
     flcn_tests_module.addImport("options", options_module);
     flcn_tests_module.addImport("flcn", lib_module);
@@ -67,7 +67,7 @@ pub fn build(b: *std.Build) !void {
     const tests_module = b.createModule(.{
         .root_source_file = b.path("src/tests.zig"),
         .optimize = .Debug,
-        .target = default_target,
+        .target = b.graph.host,
     });
     tests_module.addImport("options", options_module);
     tests_module.addImport("flcn", lib_module);
@@ -96,7 +96,7 @@ pub fn build(b: *std.Build) !void {
     debug_step.dependOn(&run_lldb.step);
 
     const arch_generator_module = b.createModule(.{
-        .target = default_target,
+        .target = b.graph.host,
         .optimize = optimize,
         .root_source_file = b.path("tools/generate_arch.zig"),
     });
