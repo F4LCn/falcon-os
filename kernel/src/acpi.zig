@@ -66,11 +66,10 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                 var interruptControllerHeader: *const acpi_types.AcpiMadt.InterruptControllerHeader = @ptrFromInt(table.virt_addr + @sizeOf(acpi_types.AcpiMadt));
 
                 while (@intFromPtr(interruptControllerHeader) < table_end) : (interruptControllerHeader = @ptrFromInt(@intFromPtr(interruptControllerHeader) + interruptControllerHeader.length)) {
-                    log.debug("found madt interrupt controller with type {t}", .{interruptControllerHeader.typ});
+                    log.debug("found madt entry with type {t}", .{interruptControllerHeader.typ});
                     switch (interruptControllerHeader.typ) {
                         .processorLocalApic => {
                             const processorLocalApic: *const acpi_types.AcpiMadt.ProcessorLocalApic = @ptrCast(interruptControllerHeader);
-                            log.debug("local apic {any}", .{processorLocalApic});
                             ctx.notify(acpi_events.MadtParsingEvent{
                                 .apic = .{
                                     .id = processorLocalApic.processor_uid,
@@ -82,11 +81,32 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                         },
                         .ioApic => {
                             const ioapic: *const acpi_types.AcpiMadt.IoApic = @ptrCast(interruptControllerHeader);
-                            log.err("ioapic {any}", .{ioapic});
+                            ctx.notify(acpi_events.MadtParsingEvent{
+                                .ioapic = .{
+                                    .ioapic_id = ioapic.ioapic_id,
+                                    .ioapic_addr = ioapic.ioapic_addr,
+                                    .gsi_base = ioapic.global_system_interrupt_base,
+                                },
+                            });
                         },
                         .interruptSourceOverride => {
                             const intSourceOverride: *const acpi_types.AcpiMadt.InterruptSourceOverride = @ptrCast(interruptControllerHeader);
-                            log.err("interrupt source override {any}", .{intSourceOverride});
+                            ctx.notify(acpi_events.MadtParsingEvent{
+                                .interrupt_source_override = .{
+                                    .bus = intSourceOverride.bus,
+                                    .source = intSourceOverride.source,
+                                    .gsi = intSourceOverride.global_system_interrupt,
+                                },
+                            });
+                        },
+                        .localApicNMI => {
+                            const localApicNMI: *const acpi_types.AcpiMadt.LocalApicNMI = @ptrCast(interruptControllerHeader);
+                            ctx.notify(acpi_events.MadtParsingEvent{
+                                .local_apic_nmi = .{
+                                    .processor_uid = localApicNMI.processor_uid,
+                                    .lint_num = localApicNMI.local_apic_lint_num,
+                                },
+                            });
                         },
                         else => {
                             log.warn("Unhandled interrupt controller type {t}", .{interruptControllerHeader.typ});

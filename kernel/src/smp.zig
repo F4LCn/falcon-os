@@ -28,11 +28,18 @@ const MadtIterationContext = struct {
             .apic => |apic| {
                 setCpuPresent(apic.id, apic.apic_id);
             },
+            .ioapic => |io| {
+                setIOApicAddr(io.ioapic_addr);
+                // setIOApicGSIBase(io.ioapic_id, io.gsi_base);
+            },
+            .interrupt_source_override => {},
+            .local_apic_nmi => {},
         }
     }
 };
 
 var lapic_addr: u32 = undefined;
+var ioapic_addr: u32 = undefined;
 var pic_compatibility: bool = false;
 
 pub fn init() !void {
@@ -56,6 +63,10 @@ pub fn init() !void {
 
 fn setLocalApicAddr(addr: u32) void {
     lapic_addr = addr;
+}
+
+fn setIOApicAddr(addr: u32) void {
+    ioapic_addr = addr;
 }
 
 fn setPicCompatible() void {
