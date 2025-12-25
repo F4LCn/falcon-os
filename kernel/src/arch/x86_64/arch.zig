@@ -8,3 +8,5 @@
  pub const memory = @import("memory.zig");
  pub const registers = @import("registers.zig");
  pub const trampoline = @import("trampoline.zig");
+ pub const x2apic = @import("apic/x2apic.zig");
+ pub const xapic = @import("apic/xapic.zig");

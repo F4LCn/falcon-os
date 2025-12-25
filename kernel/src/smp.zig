@@ -2,7 +2,9 @@ const std = @import("std");
 const acpi = @import("acpi.zig");
 const acpi_events = @import("flcn").acpi_events;
 const cpu = @import("cpu.zig");
-const trampoline = @import("arch").trampoline;
+const arch = @import("arch");
+const trampoline = arch.trampoline;
+const mem = @import("memory.zig");
 
 const log = std.log.scoped(.smp);
 
@@ -37,6 +39,12 @@ pub fn init() !void {
     const madtIterationContext = MadtIterationContext{};
     try acpi.iterateTable(.apic, madtIterationContext.acpiIterationContext());
     log.info("trampoline data {s} {d} {*}", .{ std.fmt.bytesToHex(trampoline.trampoline_data, .lower), trampoline.trampoline_data.len, trampoline.trampoline_data });
+
+    if (cpu.hasFeature(.x2apic)) {
+        try arch.x2apic.init();
+    } else {
+        try arch.xapic.init(lapic_addr, &mem.kernel_vmem.impl);
+    }
 }
 
 // EL PLAN:

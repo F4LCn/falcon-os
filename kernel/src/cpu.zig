@@ -28,6 +28,11 @@ comptime {
 pub fn earlyInit() !void {
     possible_cpus_mask.setRangeValue(.{ .start = 0, .end = possible_cpus_count }, true);
     cpu_info = try arch.cpu.init();
+    try doCpuChecks();
+}
+
+fn doCpuChecks() !void {
+    if(!hasFeature(.apic)) return error.NoApic;
 }
 
 pub fn initCore(cpu_id: arch.cpu.CpuId) !void {

@@ -45,7 +45,8 @@
     * [x] GDT/IDT/TSS definition
     * [x] Hardware exceptions & interrupts
     * [ ] CPU resolution & init
-      * [x] Cpu identification & features
+      * [x] cpu identification & features
+      * [ ] fpu initialization
       * [ ] per-cpu variables
     * [ ] Synchronization (Mutex, lock, ...)
 
@@ -60,7 +61,15 @@
       * [x] Locate & Parse ACPI tables
       * [x] Madt entry iteration
       * [-] Trampoline start up code
-      * [ ] Apic initialization
+      * [-] Apic initialization
+        - [-] xAPIC
+          * [ ] Interrupts
+          * [ ] IPI
+          * [ ] Timer
+        - [-] x2APIC (opt)
+          * [ ] Interrupts
+          * [ ] IPI
+          * [ ] Timer
       * [ ] AP initialization
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] Processes, Threads & context switching
