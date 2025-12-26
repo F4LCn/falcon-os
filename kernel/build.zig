@@ -106,7 +106,12 @@ pub fn build(b: *std.Build) !void {
         .root_module = arch_generator_module,
     });
     const generate_arch_run = b.addRunArtifact(arch_generator);
-    generate_arch_run.addArg(@tagName(build_arch));
+    const arch_dir_path = b.path(try std.fmt.allocPrint(
+        alloc,
+        "src/arch/{t}",
+        .{build_arch},
+    ));
+    generate_arch_run.addDirectoryArg(arch_dir_path);
     const arch_file = generate_arch_run.addOutputFileArg("arch_file.zig");
     const arch_file_copy = b.addUpdateSourceFiles();
     const dest_file_path = try std.fmt.allocPrint(alloc, "src/arch/{t}/arch.zig", .{build_arch});

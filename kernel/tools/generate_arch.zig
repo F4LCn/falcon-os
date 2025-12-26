@@ -12,7 +12,7 @@ pub fn main() !void {
         log.err("wrong number of arguments {any}", .{args});
         std.process.exit(1);
     }
-    const arch = args[1];
+    const arch_dir_path = args[1];
     const output_file_path = args[2];
 
     var output_file = try std.fs.cwd().createFile(output_file_path, .{});
@@ -26,7 +26,6 @@ pub fn main() !void {
     );
     const KV = struct { key: []const u8, value: []const u8 };
     var list = std.ArrayList(KV){};
-    const arch_dir_path = try std.fmt.allocPrint(alloc, "src/arch/{s}/", .{arch});
     const arch_dir = try std.fs.cwd().openDir(arch_dir_path, .{ .iterate = true });
     var dir_walker = try arch_dir.walkSelectively(alloc);
     defer dir_walker.deinit();
