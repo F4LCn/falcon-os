@@ -1,6 +1,8 @@
 const std = @import("std");
 const arch = @import("arch");
 const options = @import("options");
+const mem = @import("memory.zig");
+const smp = @import("smp.zig");
 
 // NOTE: this struct is to serve as an accelerator
 // to any core related query. It will be put in GS
@@ -22,9 +24,6 @@ pub var online_cpus_mask: std.bit_set.ArrayBitSet(u64, possible_cpus_count) = .i
 
 pub var cpu_data: [possible_cpus_count]CpuData align(arch.constants.default_page_size) = undefined;
 
-comptime {
-}
-
 pub fn earlyInit() !void {
     possible_cpus_mask.setRangeValue(.{ .start = 0, .end = possible_cpus_count }, true);
     cpu_info = try arch.cpu.init();
@@ -32,7 +31,7 @@ pub fn earlyInit() !void {
 }
 
 fn doCpuChecks() !void {
-    if(!hasFeature(.apic)) return error.NoApic;
+    if (!hasFeature(.apic)) return error.NoApic;
 }
 
 pub fn initCore(cpu_id: arch.cpu.CpuId) !void {
@@ -40,6 +39,9 @@ pub fn initCore(cpu_id: arch.cpu.CpuId) !void {
     if (!present_cpus_mask.isSet(cpu_id)) return error.CpuNotPresent;
 
     setCpuOnline(cpu_id);
+    arch.assembly.wrmsr(.GS_BASE, @intFromPtr(&cpu_data[cpu_id]));
+    try enableLocalApic();
+    initLocalInterrupts();
 }
 
 pub fn hasFeature(feature: arch.cpu.Feature) bool {
@@ -57,4 +59,20 @@ pub fn setCpuPresent(cpu_id: arch.cpu.CpuId, id_data: arch.cpu.IdentificationDat
 pub fn setCpuOnline(cpu_id: arch.cpu.CpuId) void {
     online_cpus_mask.set(cpu_id);
     online_cpus_count = @intCast(online_cpus_mask.count());
+}
+
+pub fn enableLocalApic() !void {
+    if (hasFeature(.x2apic)) {
+        try arch.x2apic.init();
+    } else {
+        try arch.xapic.init(smp.lapic_addr, &mem.kernel_vmem.impl);
+    }
+}
+
+pub fn initLocalInterrupts() void {
+    if (hasFeature(.x2apic)) {
+        // TODO: handle local ints for x2apic
+    } else {
+        arch.xapic.initLocalInterrupts(&smp.local_apic_nmi);
+    }
 }

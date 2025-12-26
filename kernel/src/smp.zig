@@ -5,6 +5,7 @@ const cpu = @import("cpu.zig");
 const arch = @import("arch");
 const trampoline = arch.trampoline;
 const mem = @import("memory.zig");
+const options = @import("options");
 
 const log = std.log.scoped(.smp);
 
@@ -33,25 +34,31 @@ const MadtIterationContext = struct {
                 // setIOApicGSIBase(io.ioapic_id, io.gsi_base);
             },
             .interrupt_source_override => {},
-            .local_apic_nmi => {},
+            .local_apic_nmi => |nmi| {
+                log.debug("nmi: {any}", .{nmi});
+                if (nmi.processor_uid >= options.max_cpu) return;
+                const idx = nmi.processor_uid +% 1;
+                local_apic_nmi[idx] = nmi;
+            },
         }
     }
 };
 
-var lapic_addr: u32 = undefined;
-var ioapic_addr: u32 = undefined;
+// local apic
+pub var lapic_addr: u32 = undefined;
 var pic_compatibility: bool = false;
+
+// io apic
+pub var ioapic_addr: u32 = undefined;
+
+// local apic nmi
+pub var local_apic_nmi: [options.max_cpu + 1]?acpi_events.LocalApicNMIFoundEvent = .{null} ** (options.max_cpu + 1);
 
 pub fn init() !void {
     const madtIterationContext = MadtIterationContext{};
     try acpi.iterateTable(.apic, madtIterationContext.acpiIterationContext());
-    log.info("trampoline data {s} {d} {*}", .{ std.fmt.bytesToHex(trampoline.trampoline_data, .lower), trampoline.trampoline_data.len, trampoline.trampoline_data });
 
-    if (cpu.hasFeature(.x2apic)) {
-        try arch.x2apic.init();
-    } else {
-        try arch.xapic.init(lapic_addr, &mem.kernel_vmem.impl);
-    }
+    log.debug("trampoline data {s} {d} {*}", .{ std.fmt.bytesToHex(trampoline.trampoline_data, .lower), trampoline.trampoline_data.len, trampoline.trampoline_data });
 }
 
 // EL PLAN:

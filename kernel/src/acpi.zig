@@ -96,6 +96,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                                     .bus = intSourceOverride.bus,
                                     .source = intSourceOverride.source,
                                     .gsi = intSourceOverride.global_system_interrupt,
+                                    .flags = makeFlagsFromAcpi(intSourceOverride.flags),
                                 },
                             });
                         },
@@ -105,6 +106,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                                 .local_apic_nmi = .{
                                     .processor_uid = localApicNMI.processor_uid,
                                     .lint_num = localApicNMI.local_apic_lint_num,
+                                    .flags = makeFlagsFromAcpi(localApicNMI.flags),
                                 },
                             });
                         },
@@ -173,4 +175,22 @@ fn validateChecksum(header: *const acpi_types.DescriptionHeader) bool {
     }
     if (checksum != 0) return false;
     return true;
+}
+
+pub fn makeFlagsFromAcpi(acpi_flags: acpi_types.AcpiMadt.MpsIntiFlags) acpi_events.InterruptFlags {
+    const polarity: acpi_events.InterruptFlags.Polarity = switch (acpi_flags.polarity) {
+        .bus_conforming => .bus_conforming,
+        .active_high => .active_high,
+        .active_low => .active_low,
+        else => unreachable,
+    };
+
+    const trigger_mode: acpi_events.InterruptFlags.TriggerMode = switch (acpi_flags.trigger_mode) {
+        .bus_conforming => .bus_conforming,
+        .edge_triggered => .edge_triggered,
+        .level_triggered => .level_triggered,
+        else => unreachable,
+    };
+
+    return .{ .polarity = polarity, .trigger_mode = trigger_mode };
 }

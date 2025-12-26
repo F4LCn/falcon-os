@@ -552,4 +552,12 @@ pub const MSR = enum(u32) {
     X2APIC_CUR_COUNT = 0x00000839,
     X2APIC_DIV_CONFIG = 0x0000083e,
     X2APIC_SELF_IPI = 0x0000083f,
+    FS_BASE = 0xc0000100,
+    GS_BASE = 0xc0000101,
 };
+
+pub fn id() CpuId {
+    return asm volatile ("mov %gs:0, %[id]"
+        : [id] "=r" (-> CpuId),
+    );
+}

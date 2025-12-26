@@ -9,16 +9,22 @@ pub const IOApicFoundEvent = struct {
     gsi_base: u32,
     ioapic_id: u8,
 };
+pub const InterruptFlags = struct {
+    pub const Polarity = enum { bus_conforming, active_high, active_low };
+    pub const TriggerMode = enum { bus_conforming, edge_triggered, level_triggered };
+    polarity: Polarity,
+    trigger_mode: TriggerMode,
+};
 pub const InterruptSourceOverrideFoundEvent = struct {
     gsi: u32,
     bus: u8,
     source: u8,
-    // flags: ???,
+    flags: InterruptFlags,
 };
 pub const LocalApicNMIFoundEvent = struct {
     processor_uid: u8,
     lint_num: u8,
-    // flags: ???,
+    flags: InterruptFlags,
 };
 
 pub const MadtParsingEvent = union(enum) {
