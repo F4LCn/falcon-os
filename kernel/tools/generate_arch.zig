@@ -28,7 +28,7 @@ pub fn main() !void {
     var list = std.ArrayList(KV){};
     const arch_dir_path = try std.fmt.allocPrint(alloc, "src/arch/{s}/", .{arch});
     const arch_dir = try std.fs.cwd().openDir(arch_dir_path, .{ .iterate = true });
-    var dir_walker = try arch_dir.walk(alloc);
+    var dir_walker = try arch_dir.walkSelectively(alloc);
     defer dir_walker.deinit();
     while (try dir_walker.next()) |entry| {
         if (entry.kind != .file) continue;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const io = @import("io.zig");
+const assembly = @import("arch").assembly;
 
 pub const Port = enum(u16) {
     COM1 = 0x3F8,
@@ -56,20 +56,20 @@ pub const SerialWriter = struct {
     const Self = @This();
     pub fn init(comptime port: Port) SerialWriter {
         const port_num = @intFromEnum(port);
-        io.outb(port_num + @intFromEnum(Offset.IntEnable), 0);
-        io.outb(port_num + @intFromEnum(Offset.LineCtrl), @bitCast(LineCtrlReg{ .dlab = 1 }));
-        io.outb(port_num + @intFromEnum(Offset.RxTxBuffer), 3);
-        io.outb(port_num + @intFromEnum(Offset.IntEnable), 0);
-        io.outb(port_num + @intFromEnum(Offset.LineCtrl), @bitCast(LineCtrlReg{ .data = 3 }));
-        io.outb(port_num + @intFromEnum(Offset.FifoCtrl), @bitCast(FifoCtrlReg{ .enable = true, .clear_rx = true, .clear_tx = true, .int_trigger = 0b11 }));
-        io.outb(port_num + @intFromEnum(Offset.ModemCtrl), @bitCast(ModemCtrlReg{ .out1 = 0, .loop = true }));
-        io.outb(port_num + @intFromEnum(Offset.RxTxBuffer), 0xAA);
+        assembly.outb(port_num + @intFromEnum(Offset.IntEnable), 0);
+        assembly.outb(port_num + @intFromEnum(Offset.LineCtrl), @bitCast(LineCtrlReg{ .dlab = 1 }));
+        assembly.outb(port_num + @intFromEnum(Offset.RxTxBuffer), 3);
+        assembly.outb(port_num + @intFromEnum(Offset.IntEnable), 0);
+        assembly.outb(port_num + @intFromEnum(Offset.LineCtrl), @bitCast(LineCtrlReg{ .data = 3 }));
+        assembly.outb(port_num + @intFromEnum(Offset.FifoCtrl), @bitCast(FifoCtrlReg{ .enable = true, .clear_rx = true, .clear_tx = true, .int_trigger = 0b11 }));
+        assembly.outb(port_num + @intFromEnum(Offset.ModemCtrl), @bitCast(ModemCtrlReg{ .out1 = 0, .loop = true }));
+        assembly.outb(port_num + @intFromEnum(Offset.RxTxBuffer), 0xAA);
 
-        if (io.inb(port_num) != 0xAA) {
+        if (assembly.inb(port_num) != 0xAA) {
             unreachable;
         }
 
-        io.outb(port_num + @intFromEnum(Offset.ModemCtrl), @bitCast(ModemCtrlReg{}));
+        assembly.outb(port_num + @intFromEnum(Offset.ModemCtrl), @bitCast(ModemCtrlReg{}));
 
         return .{
             .port = port,
@@ -95,10 +95,10 @@ pub const SerialWriter = struct {
         const port = self.port;
         const port_num = @intFromEnum(port);
         for (bytes) |b| {
-            while ((io.inb(port_num + @intFromEnum(Offset.LineStatus)) & 0x20) == 0) {
+            while ((assembly.inb(port_num + @intFromEnum(Offset.LineStatus)) & 0x20) == 0) {
                 continue;
             }
-            io.outb(port_num, b);
+            assembly.outb(port_num, b);
         }
         return bytes.len;
     }

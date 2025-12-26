@@ -1,6 +1,6 @@
 const std = @import("std");
 const common = @import("common.zig");
-const ISR = @import("../interrupt/types.zig").ISR;
+const ISR = @import("../interrupts.zig").ISR;
 
 pub const Segment = struct {
     pub const PrivilegeLevel = enum(u2) {

@@ -2,8 +2,7 @@ const std = @import("std");
 const GDT = @import("descriptors/gdt.zig");
 const IDT = @import("descriptors/idt.zig");
 const GateDescriptor = @import("descriptors/types.zig").Segment.GateDescriptor;
-const interrupt = @import("interrupt.zig");
-const interrupt_types = @import("interrupt/types.zig");
+const interrupts = @import("interrupts.zig");
 const arch = @import("arch");
 const options = @import("options");
 
@@ -15,13 +14,13 @@ pub var gdt: GDT = undefined;
 pub var idt: IDT = undefined;
 
 const DemoInterruptHandler = struct {
-    pub fn InterruptHandler(self: *@This()) interrupt.InterruptHandler {
-        return .{.ctx = self, .handler = handleInterrupt};
+    pub fn InterruptHandler(self: *@This()) interrupts.InterruptHandler {
+        return .{ .ctx = self, .handler = handleInterrupt };
     }
 
-    fn handleInterrupt(ctx: *anyopaque, context: *const interrupt_types.InterruptContext) bool {
+    fn handleInterrupt(ctx: *anyopaque, context: *const interrupts.InterruptContext) bool {
         log.info("Demo interrupt handle called !!!!", .{});
-        log.info("with ctx {any} and context {any}", .{ctx, context});
+        log.info("with ctx {any} and context {any}", .{ ctx, context });
         return false;
     }
 };
@@ -36,10 +35,10 @@ pub fn init() void {
     gdt.loadTR(.{});
     gdt.flushGDT();
     idt = .create();
-    interrupt.init(&idt);
+    interrupts.init(&idt);
 
-    // TODO: as part of arch specific code maybe 
+    // TODO: as part of arch specific code maybe
     // have an interrupt/exception vectors enum
     var interrupt_handler = demo_handler.InterruptHandler();
-    interrupt.registerHandler(0xE, &interrupt_handler);
+    interrupts.registerHandler(0xE, &interrupt_handler);
 }

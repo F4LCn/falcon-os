@@ -4,16 +4,8 @@ const options = @import("options");
 const mem = @import("memory.zig");
 const smp = @import("smp.zig");
 
-// NOTE: this struct is to serve as an accelerator
-// to any core related query. It will be put in GS
-// so that access to GS:0 would be the cpu_id (for example)
-// TODO: move everything core related here
-pub const CpuData = extern struct {
-    id: arch.cpu.CpuId,
-    cpu_data: arch.cpu.CpuData,
-    // add scheduling vars (current task, etc)
-};
 
+pub const CpuData = arch.cpu.CpuData;
 pub var cpu_info: *arch.cpu.CpuInfo = undefined;
 pub const possible_cpus_count = options.max_cpu;
 pub var possible_cpus_mask: std.bit_set.ArrayBitSet(u64, possible_cpus_count) = .initEmpty();

@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) !void {
     const kernel_module = b.createModule(.{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/entrypoint.zig"),
         .red_zone = false,
         .pic = true,
         .code_model = .default,
@@ -29,6 +29,7 @@ pub fn build(b: *std.Build) !void {
     const arch_module = try createArchModule(alloc, b, kernel_module.resolved_target.?.result.cpu.arch);
     arch_module.addImport("flcn", lib_module);
     arch_module.addImport("options", options_module);
+    lib_module.addImport("arch", arch_module);
     kernel_module.addImport("options", options_module);
     kernel_module.addImport("flcn", lib_module);
     kernel_module.addImport("arch", arch_module);

@@ -1,3 +1,5 @@
+pub const serial = @import("serial.zig");
+pub const logger = @import("logger.zig");
 pub const bootinfo = @import("bootinfo.zig");
 pub const list = @import("list.zig");
 pub const pmm = @import("pmm.zig");

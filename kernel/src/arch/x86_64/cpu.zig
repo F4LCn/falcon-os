@@ -8,15 +8,22 @@ pub const IdentificationData = struct {
     lapic_addr: u32,
 };
 
+// NOTE: this struct is to serve as an accelerator
+// to any core related query. It will be put in GS
+// so that access to GS:0 would be the cpu_id (for example)
+// TODO: move everything core related here
 pub const CpuData = extern struct {
+    id: CpuId,
+    // add scheduling vars (current task, etc)
     // NOTE: Should contain all cpu related data
     // included in core CpuData struct
     // TSS, APIC controller
     apic_base_addr: u32,
     apic_id: CpuId,
 
-    pub fn init(_: CpuId, id_data: IdentificationData) CpuData {
+    pub fn init(cpu_id: CpuId, id_data: IdentificationData) CpuData {
         return .{
+            .id = cpu_id,
             .apic_base_addr = id_data.lapic_addr,
             .apic_id = id_data.apic_id,
         };
