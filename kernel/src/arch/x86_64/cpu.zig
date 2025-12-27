@@ -20,7 +20,7 @@ pub const IdentificationData = struct {
 // to any core related query. It will be put in GS
 // so that access to GS:0 would be the cpu_id (for example)
 // TODO: move everything core related here
-pub const CpuData = extern struct {
+pub const CpuData = struct {
     id: CpuId,
     // add scheduling vars (current task, etc)
     // NOTE: Should contain all cpu related data
@@ -28,7 +28,7 @@ pub const CpuData = extern struct {
     // TSS, APIC controller
     apic_base_addr: u32,
     apic_id: CpuId,
-    apic: *const Apic = undefined,
+    apic: Apic = undefined,
 
     pub fn init(cpu_id: CpuId, id_data: IdentificationData) CpuData {
         return .{
@@ -59,7 +59,7 @@ pub fn doCpuChecks() !void {
 }
 
 pub fn initCore(cpu_id: CpuId) !void {
-    flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) &apic.x2apic.apic() else &apic.xapic.apic();
+    flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) apic.x2apic.apic() else apic.xapic.apic();
     assembly.wrmsr(.GS_BASE, @intFromPtr(&flcn.cpu.cpu_data[cpu_id]));
     try enableLocalApic();
     flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic_nmi);
@@ -73,11 +73,30 @@ pub fn enableLocalApic() !void {
     }
 }
 
-    }
+pub fn perCpu(comptime name: @TypeOf(.enum_literal)) @FieldType(CpuData, @tagName(name)) {
+    const offset = @offsetOf(CpuData, @tagName(name));
+    return asm volatile ("mov %gs:" ++ std.fmt.comptimePrint("{d}", .{offset}) ++ ", %[id]"
+        : [id] "=r" (-> @FieldType(CpuData, @tagName(name))),
+    );
 }
 
-pub fn id() CpuId {
-    return asm volatile ("mov %gs:0, %[id]"
-        : [id] "=r" (-> CpuId),
-    );
+fn TypeToPtr(comptime T: type, comptime mut: bool) type {
+    const type_info = @typeInfo(T);
+    return switch (type_info) {
+        .pointer => |p| @Pointer(p.size, .{
+            .@"const" = !mut,
+            .@"addrspace" = p.address_space,
+            .@"align" = p.alignment,
+            .@"allowzero" = p.is_allowzero,
+            .@"volatile" = p.is_volatile,
+        }, T, p.sentinel()),
+        .array => |a| @Pointer(.slice, .{ .@"const" = !mut }, T, a.sentinel()),
+        else => @Pointer(.one, .{ .@"const" = !mut }, T, null),
+    };
+}
+
+pub fn perCpuPtr(comptime name: @TypeOf(.enum_literal), comptime args: struct { mut: bool = false }) TypeToPtr(@FieldType(CpuData, @tagName(name)), args.mut) {
+    const offset = @offsetOf(CpuData, @tagName(name));
+    const gs_base = assembly.rdmsr(.GS_BASE);
+    return @ptrFromInt(gs_base + offset);
 }

@@ -63,11 +63,11 @@
       * [-] Trampoline start up code
       * [-] Apic initialization
         - [-] xAPIC
-          * [ ] Interrupts
+          * [-] Interrupts
           * [ ] IPI
           * [ ] Timer
         - [-] x2APIC (opt)
-          * [ ] Interrupts
+          * [-] Interrupts
           * [ ] IPI
           * [ ] Timer
       * [ ] AP initialization
