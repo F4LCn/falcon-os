@@ -36,7 +36,6 @@ extern const fb: u64;
 pub fn init(alloc: Allocator, page_allocator: arch.memory.PageAllocator) !VirtualAllocator {
     var vmm = VirtualMemoryManager.init(alloc);
     const inner: PlatformVirtualMapper = try .init(page_allocator);
-    log.info("after init. kernel_end 0x{*}", .{&_kernel_end});
 
     const quickmap_start = @intFromPtr(&_kernel_end) + 2 * arch.constants.default_page_size;
     const quickmap_length = arch.constants.default_page_size * options.max_cpu;
@@ -68,7 +67,7 @@ pub fn init(alloc: Allocator, page_allocator: arch.memory.PageAllocator) !Virtua
     //                      ......
     //  0-1m             ram identity mapped      (0x0000000000000000 => 0x0000000000100000)
 
-    log.info("Trying to register ranges", .{});
+    log.debug("registering ranges", .{});
     {
         vmm.lock.lock();
         defer vmm.lock.unlock();

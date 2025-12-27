@@ -20,7 +20,7 @@ pub fn earlyInit() !void {
 }
 
 pub fn init() !void {
-    std.log.info("Initializing physical memory manager", .{});
+    log.debug("Initializing physical memory manager", .{});
     try pmem.init(permanent_allocator);
     // const range = try pmem.allocatePages(10, .{});
     // log.info("Allocated range: {any}", .{range});
@@ -28,10 +28,12 @@ pub fn init() !void {
 
     arch.memory.init();
 
-    log.info("Initializing virtual memory manager", .{});
+    log.debug("Initializing virtual memory manager", .{});
     kernel_vmem = try vmem.init(permanent_allocator, page_allocator);
     kernel_vmem.printRanges();
     kernel_heap.setVmm(&kernel_vmem);
+
+    log.info("memory subsystem initialized", .{});
 }
 
 pub fn lateInit() !void {

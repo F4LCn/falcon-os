@@ -1,11 +1,12 @@
 const std = @import("std");
-const log = std.log.scoped(.@"x86_64.memory");
 const constants = @import("constants.zig");
 const options = @import("options");
 const registers = @import("registers.zig");
 const flcn = @import("flcn");
 const assembly = @import("assembly.zig");
 const cpu = @import("cpu.zig");
+
+const log = std.log.scoped(.@"x86_64.memory");
 
 pub const PAddrSize = u64;
 pub const PAddr = u64;
@@ -208,7 +209,7 @@ pub const PageMapping = extern struct {
 
         pub fn print(self: *const PML4Entry) void {
             log.debug("PML4 entry: {*}", .{self});
-            log.info("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
+            log.debug("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
     pub const HugePageEntry = packed struct(u64) {
@@ -263,7 +264,7 @@ pub const PageMapping = extern struct {
 
         pub fn print(self: *const HugePageEntry) void {
             log.debug("1GB entry: {*}", .{self});
-            log.info("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
+            log.debug("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
     pub const LargePageEntry = packed struct(u64) {
@@ -318,7 +319,7 @@ pub const PageMapping = extern struct {
 
         pub fn print(self: *const LargePageEntry) void {
             log.debug("2MB entry: {*}", .{self});
-            log.info("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
+            log.debug("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
     pub const PageEntry = packed struct(u64) {
@@ -372,7 +373,7 @@ pub const PageMapping = extern struct {
 
         pub fn print(self: *const PageEntry) void {
             log.debug("entry: {*}", .{self});
-            log.info("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
+            log.debug("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
     pub const Entry = packed union {
@@ -405,7 +406,7 @@ pub const PageMapping = extern struct {
                 2 => vaddr.pd_idx = @intCast(idx),
                 1 => {
                     vaddr.pt_idx = @intCast(idx);
-                    log.info("VAddr: 0x{X}: {any}", .{ @as(u64, @bitCast(vaddr.*)), vaddr });
+                    log.debug("VAddr: 0x{X}: {any}", .{ @as(u64, @bitCast(vaddr.*)), vaddr });
                     entry.print();
                     continue;
                 },
@@ -553,6 +554,7 @@ fn initMTRR() void {
 
             log.debug("MTRR var#{d} base: {f} mask: {f}", .{ i, physbase, physmask });
         }
+        log.info("MTRR checked", .{});
     }
 }
 
@@ -561,7 +563,8 @@ fn initPAT() void {
         log.debug("cpu has PAT feature", .{});
         const pat: PAT = .{};
         assembly.wrmsr(.PAT, @bitCast(pat));
-        log.info("Writing PAT values {any}", .{pat});
+        log.debug("Writing PAT values {any}", .{pat});
+        log.info("PAT initialized", .{});
     }
 }
 
@@ -579,10 +582,9 @@ pub const PageMapManager = struct {
     page_allocator: PageAllocator,
 
     pub fn init(page_allocator: PageAllocator) !Self {
-        log.info("reading kernel config", .{});
         const page_offset = try readPageOffset();
         const root = registers.readCR(.cr3);
-        log.info("Got current pagemap: 0x{X}", .{root});
+        log.debug("current pagemap: 0x{X}", .{root});
         return .{
             .root = root,
             .levels = 4,
@@ -592,7 +594,6 @@ pub const PageMapManager = struct {
     }
 
     fn readPageOffset() !VAddrSize {
-        log.info("env: {*}", .{env});
         const config = env[0..constants.default_page_size];
         var line_tokenizer = std.mem.tokenizeScalar(u8, config, '\n');
         while (line_tokenizer.next()) |line| {

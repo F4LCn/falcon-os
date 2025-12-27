@@ -68,7 +68,7 @@ pub const SelfInfo = struct {
 };
 
 pub fn init(alloc: std.mem.Allocator) !void {
-    log.info("Initializing debug info", .{});
+    log.debug("Initializing debug info", .{});
     if (bootinfo.debug_info_ptr == 0) {
         log.debug("No debug info loaded", .{});
         return;
@@ -134,6 +134,7 @@ pub fn init(alloc: std.mem.Allocator) !void {
             };
         }
     }
+    log.info("debug subsystem initialized", .{});
 }
 
 fn EnumFieldPackedStruct(comptime E: type, comptime Data: type, comptime field_default: ?Data) type {

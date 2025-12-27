@@ -21,7 +21,7 @@ pub fn loadIDTR(self: *Self) void {
         .limit = (@sizeOf(Segment.GateDescriptor) * constants.max_interrupt_vectors) - 1,
         .base = &self.idt_entries,
     };
-    log.info("loading IDTR {*}", .{self.idtr.base});
+    log.debug("loading IDTR {*}", .{self.idtr.base});
     asm volatile (
         \\lidt (%[idtr])
         :

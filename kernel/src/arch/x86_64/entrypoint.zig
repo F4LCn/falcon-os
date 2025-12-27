@@ -5,6 +5,7 @@ const logger = flcn.logger;
 const serial = flcn.serial;
 const constants = @import("constants.zig");
 const descriptors = @import("descriptors.zig");
+const interrupts = @import("interrupts.zig");
 const cpu = flcn.cpu;
 const Memory = flcn.memory;
 const debug = flcn.debug;
@@ -14,6 +15,7 @@ const pit = flcn.pit;
 const panicFn = flcn.panic.panicFn;
 
 pub const panic = std.debug.FullPanic(panicFn);
+const log = std.log.scoped(.entrypoint);
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -42,68 +44,36 @@ pub fn start() callconv(.naked) noreturn {
 pub export fn kernelMain() callconv(.c) void {
     logger.init(serial.Port.COM1);
     cpu.earlyInit() catch unreachable;
-    std.log.info("hello, world", .{});
-    std.log.info("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str[0..12]});
+    log.debug("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str[0..12]});
 
     failableMain() catch |e| {
-        std.log.err("Failed with error: {any}", .{e});
+        log.err("Failed with error: {any}", .{e});
     };
 }
 
 pub fn failableMain() !void {
     try Memory.earlyInit();
-    const kernel_alloc = Memory.allocator();
-
     try Memory.init();
-
-    std.log.info("Quick mapping", .{});
-    const addr = Memory.kernel_vmem.physToVirt(0x1400000);
-    const v: *u64 = @ptrFromInt(addr.toAddr());
-    v.* = 123;
-    std.log.info("quick mapped value @ {*} {d}", .{ v, v.* });
-
-    std.log.info("cpu has feature sse2 {any}", .{cpu.hasFeature(.sse2)});
     try debug.init(Memory.permanent_allocator);
-
     descriptors.init();
+    interrupts.init();
     try Memory.lateInit();
     try debug.init(Memory.permanent_allocator);
-
-    std.log.info("page allocator test", .{});
-    const page_alloc = Memory.page_allocator;
-    std.log.debug("page allocator: {any}", .{page_alloc});
-    const allocated2 = try page_alloc.allocate(1000, .{});
-    std.log.info("allocated 1000 pages at 0x{x}", .{@intFromPtr(allocated2)});
-    try page_alloc.free(allocated2, 1000, .{});
-
-    var list = std.ArrayList([]u32){};
-    for (0..1000) |_| {
-        const a = try kernel_alloc.alloc(u32, 16 * 16);
-        try list.append(kernel_alloc, a);
-    }
-
-    for (list.items) |a| {
-        kernel_alloc.free(a);
-    }
-    list.deinit(kernel_alloc);
-
-    try Memory.printStats();
-
+    // try Memory.printStats();
     try acpi.init();
     try smp.init();
-
     // assuming BSP is always cpu#0
     try cpu.initCore(0);
-    std.log.info("Present cpus: #{d}, mask: {any}", .{ cpu.present_cpus_count, cpu.present_cpus_mask });
-    std.log.info("Online cpus: #{d}, mask: {any}", .{ cpu.online_cpus_count, cpu.online_cpus_mask });
+    log.debug("Present cpus: #{d}, mask: {any}", .{ cpu.present_cpus_count, cpu.present_cpus_mask });
+    log.debug("Online cpus: #{d}, mask: {any}", .{ cpu.online_cpus_count, cpu.online_cpus_mask });
 
     const count50ms = pit.millis(50);
-    std.log.info("counting down from {d}", .{count50ms});
+    log.info("counting down from {d}", .{count50ms});
     var i: u64 = @divExact(5000, 50);
     while (i > 0) : (i -= 1) {
         pit.wait(count50ms);
     }
-    std.log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
+    log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
 
     @panic("test");
 }

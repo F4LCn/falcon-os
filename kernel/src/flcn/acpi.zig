@@ -46,10 +46,11 @@ var acpi_tables: AcpiTableMap = undefined;
 pub fn init() !void {
     const rsdp_paddr = bootinfo.acpi_ptr;
     const rsdp_addr = Memory.kernel_vmem.physToVirt(rsdp_paddr).toAddr();
-    log.info("found ACPI root table at 0x{x}", .{rsdp_addr});
+    log.debug("found ACPI root table at 0x{x}", .{rsdp_addr});
     acpi_tables = .init(.{});
     try initFromRsdt(rsdp_addr);
-    log.info("Initialized tables {any}", .{acpi_tables});
+    log.debug("Initialized tables {any}", .{acpi_tables});
+    log.info("acpi subsystem initialized", .{});
 }
 
 pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationContext) !void {

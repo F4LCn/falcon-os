@@ -12,7 +12,6 @@ const log = std.log.scoped(.descriptors);
 var stacks: [options.max_cpu * constants.default_page_size]u8 align(constants.default_page_size) = [_]u8{0} ** (options.max_cpu * constants.default_page_size);
 
 pub var gdt: GDT = undefined;
-pub var idt: IDT = undefined;
 
 const DemoInterruptHandler = struct {
     pub fn InterruptHandler(self: *@This()) interrupts.InterruptHandler {
@@ -35,8 +34,7 @@ pub fn init() void {
     gdt.loadGDTR();
     gdt.loadTR(.{});
     gdt.flushGDT();
-    idt = .create();
-    interrupts.init(&idt);
+    log.info("segment descriptors initialized", .{});
 
     // TODO: as part of arch specific code maybe
     // have an interrupt/exception vectors enum

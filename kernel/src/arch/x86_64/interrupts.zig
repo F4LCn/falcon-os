@@ -126,8 +126,11 @@ fn vectorToName(vector: u64) []const u8 {
     };
 }
 
-pub fn init(idt: *IDT) void {
-    log.info("Init interrupt", .{});
+pub var idt: IDT = undefined;
+
+pub fn init() void {
+    idt = .create();
+    log.debug("initializing interrupts", .{});
     inline for (0..constants.max_interrupt_vectors) |v| {
         idt.registerGate(v, .create(.{
             .typ = .interrupt_gate,
@@ -141,6 +144,7 @@ pub fn init(idt: *IDT) void {
 
     idt.loadIDTR();
     asm volatile ("sti");
+    log.info("interrupts enabled", .{});
 }
 
 pub fn registerHandler(vector: u64, interrupt_handler: *InterruptHandler) void {
