@@ -1,10 +1,9 @@
 const std = @import("std");
-const acpi = @import("acpi.zig");
+const flcn = @import("flcn");
+const acpi = flcn.acpi;
 const acpi_events = @import("flcn").acpi_events;
-const cpu = @import("cpu.zig");
-const arch = @import("arch");
-const trampoline = arch.trampoline;
-const mem = @import("memory.zig");
+const cpu = flcn.cpu;
+const trampoline = @import("trampoline.zig");
 const options = @import("options");
 
 const log = std.log.scoped(.smp);

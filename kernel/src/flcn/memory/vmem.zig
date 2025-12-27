@@ -3,9 +3,9 @@ const options = @import("options");
 const arch = @import("arch");
 const Allocator = std.mem.Allocator;
 const sizes = @import("sizes.zig");
-const flcn = @import("flcn");
-const DoublyLinkedList = flcn.list.DoublyLinkedList;
-const SpinLock = flcn.synchronization.SpinLock;
+const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
+const SpinLock = @import("../synchronization.zig").SpinLock;
+const vmem_manager = @import("../vmm.zig");
 
 // TODO: make this great again
 const pmem = @import("pmem.zig");
@@ -20,7 +20,7 @@ pub const DefaultFlags: MmapFlags = arch.memory.DefaultFlags;
 const PageMapping = arch.memory.PageMapping;
 
 pub const VirtMemRange = arch.memory.VirtMemRange;
-pub const VirtRangeType = flcn.vmm.VirtRangeType;
+pub const VirtRangeType = vmem_manager.VirtRangeType;
 pub const MMapArgs = arch.memory.MMapArgs;
 
 const VirtualMemoryManager = arch.memory.VirtualMemoryManager;

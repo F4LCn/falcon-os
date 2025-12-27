@@ -1,6 +1,6 @@
 const std = @import("std");
 const common = @import("common.zig");
-const ISR = @import("../interrupts.zig").ISR;
+const isr = @import("../interrupts/isr.zig");
 
 pub const Segment = struct {
     pub const PrivilegeLevel = enum(u2) {
@@ -117,7 +117,7 @@ pub const Segment = struct {
 
         pub fn create(args: struct {
             typ: Type,
-            isr: ISR,
+            isr: isr.ISR,
         }) @This() {
             const offset = @intFromPtr(args.isr);
             const offset_lower: u16 = @truncate(offset);

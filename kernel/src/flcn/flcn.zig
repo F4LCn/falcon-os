@@ -10,7 +10,11 @@ pub const vmm = @import("vmm.zig");
 pub const synchronization = @import("synchronization.zig");
 pub const debug = @import("debug.zig");
 pub const acpi = @import("acpi.zig");
-pub const acpi_events = @import("acpi_events.zig");
+pub const acpi_events = @import("acpi/acpi_events.zig");
+pub const cpu = @import("cpu.zig");
+pub const memory = @import("memory.zig");
+pub const panic = @import("panic.zig");
+pub const pit = @import("pit.zig");
 
 test {
     _ = @import("list.zig");

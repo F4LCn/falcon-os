@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const arch = @import("arch");
-const DoublyLinkedList = @import("flcn").list.DoublyLinkedList;
-const mem_allocator = @import("flcn").allocator;
+const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
+const mem_allocator = @import("../allocator.zig");
 
 const log = std.log.scoped(.slab);
 const CacheManagerConfig = struct {

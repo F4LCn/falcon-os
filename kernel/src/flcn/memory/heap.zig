@@ -1,12 +1,10 @@
 const std = @import("std");
 const options = @import("options");
+const arch = @import("arch");
 const pmem = @import("pmem.zig");
 const vmem = @import("vmem.zig");
-const flcn = @import("flcn");
-const mem_allocator = flcn.allocator;
-const buddy = flcn.buddy;
-const arch = @import("arch");
-const DoubleLinkedList = @import("flcn").list.DoublyLinkedList;
+const mem_allocator = @import("../allocator.zig");
+const DoubleLinkedList = @import("../list.zig").DoublyLinkedList;
 const Cache = @import("slab.zig");
 
 const log = std.log.scoped(.heap);
@@ -237,7 +235,7 @@ test "Test subheap with fixed buffer allocator" {
 
 test "Test subheap with Buddy allocator" {
     var buffer: [128]u8 align(4096) = [_]u8{0} ** 128;
-    const AllocatorType = buddy.Buddy(.{});
+    const AllocatorType = @import("../buddy2.zig").BuddyAllocator(.{});
     var underlying_allocator = try AllocatorType.init(std.testing.allocator, @intFromPtr(&buffer), buffer.len);
     defer underlying_allocator.deinit();
     var buddy_adapter = mem_allocator.adaptBuddyAllocator(AllocatorType, &underlying_allocator);

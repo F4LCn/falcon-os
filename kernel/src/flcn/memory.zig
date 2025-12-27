@@ -6,9 +6,6 @@ const Cache = @import("memory/slab.zig");
 const arch = @import("arch");
 pub const sizes = @import("memory/sizes.zig");
 
-// NOTE: this module is the entrypoint to everything memory related
-// TODO: move all functionality that interact between pmem and vmem here
-
 const log = std.log.scoped(.memory);
 
 var kernel_heap: Heap = undefined;

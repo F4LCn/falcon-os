@@ -3,12 +3,13 @@ const GDT = @import("descriptors/gdt.zig");
 const IDT = @import("descriptors/idt.zig");
 const GateDescriptor = @import("descriptors/types.zig").Segment.GateDescriptor;
 const interrupts = @import("interrupts.zig");
-const arch = @import("arch");
+const interrupt_context = @import("interrupts/context.zig");
 const options = @import("options");
+const constants = @import("constants.zig");
 
 const log = std.log.scoped(.descriptors);
 
-var stacks: [options.max_cpu * arch.constants.default_page_size]u8 align(arch.constants.default_page_size) = [_]u8{0} ** (options.max_cpu * arch.constants.default_page_size);
+var stacks: [options.max_cpu * constants.default_page_size]u8 align(constants.default_page_size) = [_]u8{0} ** (options.max_cpu * constants.default_page_size);
 
 pub var gdt: GDT = undefined;
 pub var idt: IDT = undefined;
@@ -18,7 +19,7 @@ const DemoInterruptHandler = struct {
         return .{ .ctx = self, .handler = handleInterrupt };
     }
 
-    fn handleInterrupt(ctx: *anyopaque, context: *const interrupts.InterruptContext) bool {
+    fn handleInterrupt(ctx: *anyopaque, context: *const interrupt_context.Context) bool {
         log.info("Demo interrupt handle called !!!!", .{});
         log.info("with ctx {any} and context {any}", .{ ctx, context });
         return false;

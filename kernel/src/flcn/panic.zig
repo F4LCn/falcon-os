@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const arch = @import("arch");
 const options = @import("options");
-const debug = @import("flcn").debug;
+const debug = @import("debug.zig");
 
 const log = std.log.scoped(.@"************************* PANICC *************************");
 

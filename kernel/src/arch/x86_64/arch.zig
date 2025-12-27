@@ -10,4 +10,5 @@
  pub const interrupts = @import("interrupts.zig");
  pub const memory = @import("memory.zig");
  pub const registers = @import("registers.zig");
+ pub const smp = @import("smp.zig");
  pub const trampoline = @import("trampoline.zig");

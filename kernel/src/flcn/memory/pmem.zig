@@ -1,11 +1,12 @@
 const std = @import("std");
 const options = @import("options");
 const arch = @import("arch");
-const flcn = @import("flcn");
-const BootInfo = flcn.bootinfo.BootInfo;
-const DoublyLinkedList = flcn.list.DoublyLinkedList;
-const SpinLock = flcn.synchronization.SpinLock;
-const mem_allocator = @import("flcn").allocator;
+const BootInfo = @import("../bootinfo.zig").BootInfo;
+const DoublyLinkedList = @import("../list.zig").DoublyLinkedList;
+const SpinLock = @import("../synchronization.zig").SpinLock;
+const mem_allocator = @import("../allocator");
+const buddy2 = @import("../buddy2.zig");
+const pmm = @import("../pmm.zig");
 
 extern var bootinfo: BootInfo;
 var mmap_entries: []BootInfo.MmapEntry = undefined;
@@ -15,14 +16,14 @@ const Error = error{OutOfPhysMemory};
 
 pub const PAddr = arch.memory.PAddr;
 pub const PAddrSize = arch.memory.PAddrSize;
-const PageAllocator = flcn.buddy2.BuddyAllocator(.{ .min_size = arch.constants.default_page_size, .safety = false });
-pub const PhysicalMemoryManager = flcn.pmm.PhysicalMemoryManager;
-pub const PhysMemRange = flcn.pmm.PhysMemRange;
-pub const PhysRangeType = flcn.pmm.PhysRangeType;
+const PageAllocator = buddy2.BuddyAllocator(.{ .min_size = arch.constants.default_page_size, .safety = false });
+pub const PhysicalMemoryManager = pmm.PhysicalMemoryManager;
+pub const PhysMemRange = pmm.PhysMemRange;
+pub const PhysRangeType = pmm.PhysRangeType;
 
-const PhysMemRangeListItem = flcn.pmm.PhysMemRangeListItem;
-const PhysMemRangeAllocator = flcn.pmm.PhysMemRangeAllocator(PageAllocator);
-const PhysMemRangeAllocatorList = flcn.pmm.PhysMemRangeAllocatorList(PageAllocator);
+const PhysMemRangeListItem = pmm.PhysMemRangeListItem;
+const PhysMemRangeAllocator = pmm.PhysMemRangeAllocator(PageAllocator);
+const PhysMemRangeAllocatorList = pmm.PhysMemRangeAllocatorList(PageAllocator);
 
 var mm: PhysicalMemoryManager = undefined;
 var page_allocators: PhysMemRangeAllocatorList = .{};

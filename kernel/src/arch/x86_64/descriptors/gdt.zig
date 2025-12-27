@@ -1,9 +1,9 @@
 const std = @import("std");
+const options = @import("options");
+const constants = @import("../constants.zig");
 const Segment = @import("types.zig").Segment;
 const builtin = @import("builtin");
 const common = @import("common.zig");
-const options = @import("options");
-const arch = @import("arch");
 
 const log = std.log.scoped(.gdt);
 
@@ -68,7 +68,7 @@ pub fn fillGDTR(self: *Self) void {
     };
 }
 
-pub fn fillTss(self: *Self, stacks: *[max_tsd_entries * arch.constants.default_page_size]u8) void {
+pub fn fillTss(self: *Self, stacks: *[max_tsd_entries * constants.default_page_size]u8) void {
     log.debug("filling TSS", .{});
     const tsd_entries_buffer = self.gdt_entries_buffer[@sizeOf(Segment.GlobalDescriptor) * max_gdt_entries ..];
     var tsd_entries = std.mem.bytesAsSlice(Segment.TaskSegmentDescriptor, tsd_entries_buffer[0 .. @sizeOf(Segment.TaskSegmentDescriptor) * max_tsd_entries]);
@@ -81,7 +81,7 @@ pub fn fillTss(self: *Self, stacks: *[max_tsd_entries * arch.constants.default_p
     }
 
     inline for (0..max_tsd_entries) |tsd_idx| {
-        const stack_start_addr = @intFromPtr(stacks) + stacks.len - tsd_idx * arch.constants.default_page_size;
+        const stack_start_addr = @intFromPtr(stacks) + stacks.len - tsd_idx * constants.default_page_size;
         self.tss_entries[tsd_idx].ist1 = stack_start_addr;
         self.tss_entries[tsd_idx].iomap_offset = std.math.maxInt(u16);
     }
