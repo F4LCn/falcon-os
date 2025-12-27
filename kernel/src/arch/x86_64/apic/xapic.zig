@@ -5,6 +5,7 @@ const assembly = @import("../assembly.zig");
 const flcn = @import("flcn");
 const acpi_events = flcn.acpi_events;
 const cpu = @import("../cpu.zig");
+const Apic = @import("apic.zig");
 
 const log = std.log.scoped(.xapic);
 
@@ -99,7 +100,7 @@ pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent
     writeRegister(.lvt_error, int_mask);
     writeRegister(.lvt_performance_monitoring_counters, int_mask);
     writeRegister(.lvt_thermal_sensor, int_mask);
-    const cpu_id = cpu.id();
+    const cpu_id = cpu.perCpu(.id);
     log.debug("cpu_id {d}", .{cpu_id});
     for (local_apic_nmi) |maybe_nmi| {
         if (maybe_nmi) |nmi| {
@@ -137,4 +138,10 @@ fn writeRegister(register: Registers, val: u32) void {
     const register_addr = lapic_base.toAddr() + @intFromEnum(register);
     const register_ptr: *u32 = @ptrFromInt(register_addr);
     register_ptr.* = val;
+}
+
+pub fn apic() Apic {
+    return .{
+        .init_local_interrupts = initLocalInterrupts,
+    };
 }

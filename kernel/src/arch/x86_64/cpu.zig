@@ -7,6 +7,7 @@ const cpu_features = @import("cpu/features.zig");
 const cpu_msr = @import("cpu/msr.zig");
 const cpu_debug_context = @import("cpu/debug_context.zig");
 const memory = flcn.memory;
+const Apic = @import("apic/apic.zig");
 
 pub const CpuId = u32;
 
@@ -27,6 +28,7 @@ pub const CpuData = extern struct {
     // TSS, APIC controller
     apic_base_addr: u32,
     apic_id: CpuId,
+    apic: *const Apic = undefined,
 
     pub fn init(cpu_id: CpuId, id_data: IdentificationData) CpuData {
         return .{
@@ -57,9 +59,10 @@ pub fn doCpuChecks() !void {
 }
 
 pub fn initCore(cpu_id: CpuId) !void {
+    flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) &apic.x2apic.apic() else &apic.xapic.apic();
     assembly.wrmsr(.GS_BASE, @intFromPtr(&flcn.cpu.cpu_data[cpu_id]));
     try enableLocalApic();
-    initLocalInterrupts();
+    flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic_nmi);
 }
 
 pub fn enableLocalApic() !void {
@@ -70,11 +73,6 @@ pub fn enableLocalApic() !void {
     }
 }
 
-pub fn initLocalInterrupts() void {
-    if (hasFeature(.x2apic)) {
-        // TODO: handle local ints for x2apic
-    } else {
-        apic.xapic.initLocalInterrupts(&smp.local_apic_nmi);
     }
 }
 
