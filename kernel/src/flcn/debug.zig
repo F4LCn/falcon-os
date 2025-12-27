@@ -110,7 +110,6 @@ pub fn init(alloc: std.mem.Allocator) !void {
     };
     if (debug_info) |*di| {
         try Dwarf.open(di, alloc, native_endian);
-        // try di.scanAllUnwindInfo(alloc, 0);
     }
 
     for (@typeInfo(Dwarf.Unwind.Section).@"enum".fields, 0..) |_, i| {

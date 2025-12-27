@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const flcn = @import("flcn");
 const logger = flcn.logger;
 const serial = flcn.serial;
@@ -6,7 +7,7 @@ const constants = @import("constants.zig");
 const descriptors = @import("descriptors.zig");
 const cpu = flcn.cpu;
 const Memory = flcn.memory;
-const debug = flcn.debug; 
+const debug = flcn.debug;
 const acpi = flcn.acpi;
 const smp = @import("smp.zig");
 const pit = flcn.pit;
@@ -16,7 +17,7 @@ pub const panic = std.debug.FullPanic(panicFn);
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
-    .log_level = .debug,
+    .log_level = if (builtin.mode == .ReleaseFast) .info else .debug,
     .log_scope_levels = &.{
         .{ .scope = .debug, .level = .info },
         .{ .scope = .@"x86_64.memory", .level = .info },

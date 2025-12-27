@@ -48,12 +48,19 @@ pub fn build(b: *std.Build) !void {
 
     // TODO: use objcopy for binary stripping
 
-    // switch (optimize) {
-    //     .Debug => kernel_exe.root_module.strip = false,
-    //     else => kernel_exe.root_module.strip = true,
-    // }
-
     kernel_exe.setLinkerScript(b.path("linker.ld"));
+    if (optimize == .ReleaseFast) {
+        const kernel_bin = kernel_exe.getEmittedBin();
+        const strip_cmd = b.addSystemCommand(&.{
+            "llvm-objcopy",
+            "--strip-debug",
+        });
+        strip_cmd.addFileArg(kernel_bin);
+        const stripped_path = strip_cmd.addOutputFileArg("kernel64.stripped.elf");
+        strip_cmd.step.dependOn(&kernel_exe.step);
+        const install_step = b.addInstallBinFile(stripped_path, "kernel64.elf");
+        b.getInstallStep().dependOn(&install_step.step);
+    }
     b.installArtifact(kernel_exe);
 
     const flcn_tests_module = b.createModule(.{
