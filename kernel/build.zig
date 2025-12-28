@@ -138,7 +138,7 @@ fn createOptionsModule(b: *std.Build, optimize: std.builtin.OptimizeMode) *std.B
     options.addOption(bool, "safety", optimize == .Debug or optimize == .ReleaseSafe);
     options.addOption(comptime_int, "num_stack_trace", 4);
     options.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
-    options.addOption(comptime_int, "permanent_heap_size", 5 * 1024 * 1024);
+    options.addOption(comptime_int, "permanent_heap_size", 7 * 1024 * 1024);
     return options.createModule();
 }
 
