@@ -9,7 +9,7 @@ pub const CpuidResult = struct {
     edx: u32,
 };
 
-pub fn cpuid(regs: *CpuidResult) void {
+pub inline fn cpuid(regs: *CpuidResult) void {
     var eax: u32 = regs.eax;
     var ebx: u32 = regs.ebx;
     var ecx: u32 = regs.ecx;
@@ -31,7 +31,7 @@ pub fn cpuid(regs: *CpuidResult) void {
     regs.edx = edx;
 }
 
-pub fn rdmsr(msr: cpu.MSR) u64 {
+pub inline fn rdmsr(msr: cpu.MSR) u64 {
     var low: u32 = undefined;
     var high: u32 = undefined;
     asm volatile (
@@ -43,7 +43,7 @@ pub fn rdmsr(msr: cpu.MSR) u64 {
     return (@as(u64, @intCast(high)) << 32) | (@as(u64, @intCast(low)));
 }
 
-pub fn wrmsr(msr: cpu.MSR, val: u64) void {
+pub inline fn wrmsr(msr: cpu.MSR, val: u64) void {
     asm volatile (
         \\ wrmsr
         :
@@ -53,15 +53,15 @@ pub fn wrmsr(msr: cpu.MSR, val: u64) void {
     );
 }
 
-pub fn halt() void {
+pub inline fn halt() void {
     asm volatile ("hlt");
 }
 
-pub fn haltEternally() noreturn {
+pub inline fn haltEternally() noreturn {
     while (true) asm volatile ("hlt");
 }
 
-pub fn invalidateVirtualAddress(addr: memory.VAddrSize) void {
+pub inline fn invalidateVirtualAddress(addr: memory.VAddrSize) void {
     asm volatile ("invlpg (%[addr])"
         :
         : [addr] "r" (addr),
@@ -85,13 +85,24 @@ pub inline fn inb(port: u16) u8 {
     );
 }
 
-pub inline fn outString(port: u16, bytes: []const u8) usize {
+pub inline fn outString(port: u16, bytes: []const u8) u64 {
     const unwritten_bytes = asm volatile (
         \\ rep outsb
-        : [ret] "={rcx}" (-> usize),
+        : [ret] "={rcx}" (-> u64),
         : [port] "{dx}" (port),
           [src] "{rsi}" (bytes.ptr),
           [len] "{rcx}" (bytes.len),
         : .{ .rcx = true, .rsi = true });
     return bytes.len - unwritten_bytes;
+}
+
+pub inline fn rdtsc() u64 {
+    var low: u32 = undefined;
+    var high: u32 = undefined;
+    asm volatile (
+        \\ rdtsc
+        : [low] "={eax}" (low),
+          [high] "={edx}" (high),
+    );
+    return (@as(u64, @intCast(high)) << 32) | (@as(u64, @intCast(low)));
 }

@@ -283,10 +283,11 @@ pub const CpuInfo = struct {
     extended_family: u32 = std.math.maxInt(u32),
     extended_model: u32 = std.math.maxInt(u32),
     flags: std.EnumSet(Feature) = .initEmpty(),
+    base_freq: u32 = std.math.maxInt(u32),
+    tsc_freq: u32 = std.math.maxInt(u32),
     // TODO: Add info about TLB/caches/core count
     sse_size: u32 = std.math.maxInt(u32),
 };
-
 
 fn fillCpuInfo(raw_info: *const CpuidInfoHolder, cpu_identification: *CpuInfo) !void {
     @memcpy(cpu_identification.vendor_str[0..], @as([*]const u8, @ptrCast(&raw_info.basic[0].ebx)));
@@ -336,19 +337,29 @@ fn fillCpuInfo(raw_info: *const CpuidInfoHolder, cpu_identification: *CpuInfo) !
         cpu_identification.brand_str[48] = 0;
     }
 
-    if (raw_info.basic[0].eax > 0) {
+    if (raw_info.basic[0].eax >= 1) {
         matchFeatures(.ecx_01, raw_info.basic[1].ecx, cpu_identification);
         matchFeatures(.edx_01, raw_info.basic[1].edx, cpu_identification);
     }
-    if (raw_info.basic[0].eax > 6) {
+    if (raw_info.basic[0].eax >= 7) {
         matchFeatures(.ebx_07, raw_info.basic[7].ebx, cpu_identification);
     }
-    if (raw_info.basic[0].eax > 0x80000001) {
+    if (raw_info.basic[0].eax >= 0x80000001) {
         matchFeatures(.ecx_80000001, raw_info.extended[1].ecx, cpu_identification);
         matchFeatures(.edx_80000001, raw_info.extended[1].edx, cpu_identification);
     }
-    if (raw_info.basic[0].eax > 0x80000007) {
+    if (raw_info.basic[0].eax >= 0x80000007) {
         matchFeatures(.edx_80000007, raw_info.extended[7].edx, cpu_identification);
+    }
+    if (raw_info.basic[0].eax >= 22) {
+        cpu_identification.base_freq = (raw_info.basic[22].eax & 0xffff) * 1_000_000;
+        cpu_identification.tsc_freq = cpu_identification.base_freq;
+    }
+    if (raw_info.basic[0].eax >= 21) {
+        cpu_identification.base_freq = raw_info.basic[21].ecx & 0xffff;
+        const numerator = raw_info.basic[21].ebx;
+        const denominator = raw_info.basic[21].eax;
+        cpu_identification.tsc_freq = cpu_identification.base_freq * numerator / denominator;
     }
 
     if (cpu_identification.flags.contains(.sse)) {
