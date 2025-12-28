@@ -94,6 +94,11 @@ pub fn init(lapic_base_addr: memory.PAddr, page_map: *memory.PageMapManager) !vo
     log.info("xAPIC enabled", .{});
 }
 
+pub fn apicId() cpu.CpuId {
+    const id = readRegister(.id);
+    return @intCast(id >> 24);
+}
+
 const int_mask: u32 = 0x10000;
 pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent) void {
     writeRegister(.lvt_corrected_machine_check_interrupt, int_mask);
@@ -142,6 +147,7 @@ fn writeRegister(register: Registers, val: u32) void {
 
 pub fn apic() Apic {
     return .{
+        .apic_id = apicId,
         .init_local_interrupts = initLocalInterrupts,
     };
 }

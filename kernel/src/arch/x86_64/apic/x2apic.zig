@@ -21,6 +21,11 @@ pub fn init() !void {
     log.info("x2APIC enabled", .{});
 }
 
+pub fn apicId() cpu.CpuId {
+    const id = assembly.rdmsr(.X2APIC_APICID);
+    return @intCast(id);
+}
+
 const int_mask: u32 = 0x10000;
 pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent) void {
     assembly.wrmsr(.X2APIC_CMCI, int_mask);
@@ -57,6 +62,7 @@ pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent
 
 pub fn apic() Apic {
     return .{
+        .apic_id = apicId,
         .init_local_interrupts = initLocalInterrupts,
     };
 }
