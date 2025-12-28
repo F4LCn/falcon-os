@@ -58,8 +58,7 @@ pub fn failableMain() !void {
     descriptors.init();
     interrupts.init();
     try Memory.lateInit();
-    try debug.init(Memory.permanent_allocator);
-    // try Memory.printStats();
+    try Memory.printStats();
     try acpi.init();
     try smp.init();
     // assuming BSP is always cpu#0

@@ -22,8 +22,6 @@ pub fn earlyInit() !void {
 pub fn init() !void {
     log.debug("Initializing physical memory manager", .{});
     try pmem.init(permanent_allocator);
-    // const range = try pmem.allocatePages(10, .{});
-    // log.info("Allocated range: {any}", .{range});
     pmem.printRanges();
 
     arch.memory.init();

@@ -91,6 +91,14 @@ pub fn init(self: *Self) !void {
 }
 
 pub fn printMemoryStats(self: *Self) !void {
+    log.info(
+        \\ Subheap: permanent allocator
+        \\ Buffer [{x:0>16} -> {x:0>16}]. Used {d:0>2}%
+    , .{
+        @intFromPtr(Self._permanent_alloc.buffer.ptr),
+        @intFromPtr(Self._permanent_alloc.buffer.ptr) + Self._permanent_alloc.buffer.len,
+        Self._permanent_alloc.end_index * 100 / Self._permanent_alloc.buffer.len,
+    });
     const alloc = self.allocator();
     const buffer = try alloc.alloc(u8, 2048);
     defer alloc.free(buffer);

@@ -156,12 +156,11 @@ fn fixedBufferAllocatorAllocatedMemory(self: *std.heap.FixedBufferAllocator) u64
 
 fn fixedBufferAllocatorMemoryStats(self: *std.heap.FixedBufferAllocator, buffer: []u8) !void {
     _ = try std.fmt.bufPrint(buffer,
-        \\ Type: FixedBuffer. Buffer [{x:0>16} -> {x:0>16}]. Allocated [{x:0>16} -> {x:0>16}]
+        \\ Buffer [{x:0>16} -> {x:0>16}]. Used {d:0>2}%
     , .{
         @intFromPtr(self.buffer.ptr),
         @intFromPtr(self.buffer.ptr) + self.buffer.len,
-        @intFromPtr(self.buffer.ptr),
-        @intFromPtr(self.buffer.ptr) + self.end_index,
+        self.end_index * 100 / self.buffer.len,
     });
 }
 
