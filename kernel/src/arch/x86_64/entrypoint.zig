@@ -66,13 +66,16 @@ pub fn failableMain() !void {
     log.debug("Present cpus: #{d}, mask: {any}", .{ cpu.present_cpus_count, cpu.present_cpus_mask });
     log.debug("Online cpus: #{d}, mask: {any}", .{ cpu.online_cpus_count, cpu.online_cpus_mask });
 
-    const count50ms = pit.millis(50);
-    log.info("counting down from {d}", .{count50ms});
-    var i: u64 = @divExact(5000, 50);
-    while (i > 0) : (i -= 1) {
-        pit.wait(count50ms);
-    }
-    log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
+    // const count50ms = pit.millis(50);
+    // log.info("counting down from {d}", .{count50ms});
+    // var i: u64 = @divExact(5000, 50);
+    // while (i > 0) : (i -= 1) {
+    //     pit.wait(count50ms);
+    // }
+    // log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
+
+    const apic = cpu.perCpu(.apic);
+    try apic.sendIPI(.{.fixed = .{.vector = 0xfd}}, .self, .{});
 
     @panic("test");
 }

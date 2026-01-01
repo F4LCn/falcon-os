@@ -61,6 +61,10 @@ pub inline fn haltEternally() noreturn {
     while (true) asm volatile ("hlt");
 }
 
+pub inline fn spinLoopHint() void {
+    asm volatile ("pause");
+}
+
 pub inline fn invalidateVirtualAddress(addr: memory.VAddrSize) void {
     asm volatile ("invlpg (%[addr])"
         :

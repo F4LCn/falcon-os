@@ -28,7 +28,7 @@ pub const CpuData = struct {
     // TSS, APIC controller
     apic_base_addr: u32,
     apic_id: CpuId,
-    apic: Apic = undefined,
+    apic: *const Apic = undefined,
 
     pub fn init(cpu_id: CpuId, id_data: IdentificationData) CpuData {
         return .{
@@ -59,13 +59,14 @@ pub fn doCpuChecks() !void {
 }
 
 pub fn initCore(cpu_id: CpuId) !void {
-    flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) apic.x2apic.apic() else apic.xapic.apic();
+    flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) &apic.x2apic.apic() else &apic.xapic.apic();
     assembly.wrmsr(.GS_BASE, @intFromPtr(&flcn.cpu.cpu_data[cpu_id]));
-    try enableLocalApic();
+    try initLocalApic();
     flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic_nmi);
+    flcn.cpu.cpu_data[cpu_id].apic.setEnabled(true);
 }
 
-pub fn enableLocalApic() !void {
+pub fn initLocalApic() !void {
     if (hasFeature(.x2apic)) {
         try apic.x2apic.init();
     } else {
@@ -80,7 +81,7 @@ pub fn perCpu(comptime name: @TypeOf(.enum_literal)) @FieldType(CpuData, @tagNam
     );
 }
 
-fn TypeToPtr(comptime T: type, comptime mut: bool) type {
+pub fn TypeToPtr(comptime T: type, comptime mut: bool) type {
     const type_info = @typeInfo(T);
     return switch (type_info) {
         .pointer => |p| @Pointer(p.size, .{
@@ -95,7 +96,11 @@ fn TypeToPtr(comptime T: type, comptime mut: bool) type {
     };
 }
 
-pub fn perCpuPtr(comptime name: @TypeOf(.enum_literal), comptime args: struct { mut: bool = false }) TypeToPtr(@FieldType(CpuData, @tagName(name)), args.mut) {
+const PerCpuOptions = struct {
+    mut: bool = false,
+};
+
+pub fn perCpuPtr(comptime name: @TypeOf(.enum_literal), comptime args: PerCpuOptions) TypeToPtr(@FieldType(CpuData, @tagName(name)), args.mut) {
     const offset = @offsetOf(CpuData, @tagName(name));
     const gs_base = assembly.rdmsr(.GS_BASE);
     return @ptrFromInt(gs_base + offset);

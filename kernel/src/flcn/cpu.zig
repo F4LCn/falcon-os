@@ -43,3 +43,7 @@ pub fn setCpuOnline(cpu_id: arch.cpu.CpuId) void {
     online_cpus_mask.set(cpu_id);
     online_cpus_count = @intCast(online_cpus_mask.count());
 }
+
+pub fn perCpu(comptime name: @TypeOf(.enum_literal)) @FieldType(CpuData, @tagName(name)) {
+    return arch.cpu.perCpu(name);
+}

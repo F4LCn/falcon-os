@@ -64,11 +64,11 @@
       * [-] Apic initialization
         - [-] xAPIC
           * [-] Interrupts
-          * [ ] IPI
+          * [-] IPI
           * [ ] Timer
         - [-] x2APIC (opt)
           * [-] Interrupts
-          * [ ] IPI
+          * [-] IPI
           * [ ] Timer
       * [ ] AP initialization
     * [ ] Advanced interrupt handling (IRQ allocation, ...)

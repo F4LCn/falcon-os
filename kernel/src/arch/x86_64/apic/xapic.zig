@@ -6,8 +6,13 @@ const flcn = @import("flcn");
 const acpi_events = flcn.acpi_events;
 const cpu = @import("../cpu.zig");
 const Apic = @import("apic.zig");
+const options = @import("options");
+const apic_types = @import("types.zig");
 
 const log = std.log.scoped(.xapic);
+
+const CpuIdInt = u8;
+const CpuIdMask = std.math.maxInt(CpuIdInt);
 
 const Registers = enum(u16) {
     id = 0x020,
@@ -94,13 +99,13 @@ pub fn init(lapic_base_addr: memory.PAddr, page_map: *memory.PageMapManager) !vo
     log.info("xAPIC enabled", .{});
 }
 
-pub fn apicId() cpu.CpuId {
+fn apicId() cpu.CpuId {
     const id = readRegister(.id);
     return @intCast(id >> 24);
 }
 
 const int_mask: u32 = 0x10000;
-pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent) void {
+fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent) void {
     writeRegister(.lvt_corrected_machine_check_interrupt, int_mask);
     writeRegister(.lvt_error, int_mask);
     writeRegister(.lvt_performance_monitoring_counters, int_mask);
@@ -133,6 +138,50 @@ pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent
     }
 }
 
+fn setEnabled(enabled: bool) void {
+    const spurious_vector: u32 = 0xff;
+    const local_apic_enable: u32 = @as(u32, @intCast(@intFromBool(enabled))) << 8;
+    const svr_config = local_apic_enable | spurious_vector;
+    writeRegister(.spurious_interrupt_vector, svr_config);
+}
+
+fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: apic_types.SendIPIOptions) !void {
+    if (options.safety) {
+        const is_idle = (readRegister(.interrupt_command_low) >> 12) & 1 == 0;
+        if (!is_idle) return error.ApicPendingSend;
+    }
+    const destination_apic_id = switch (dest) {
+        .apic => |a| a.id,
+        else => 0,
+    };
+    const destination = (destination_apic_id & CpuIdMask) << 24;
+    const destination_shorthand = @intFromEnum(dest);
+    const trigger_mode: u32 = 0 << 15;
+    const level: u32 = 1 << 14;
+    const destination_mode: u32 = 0 << 11;
+    const delivery_mode = @intFromEnum(msg);
+    const vector = switch (msg) {
+        .fixed => |e| e.vector,
+        .lowest_priority => |e| e.vector,
+        .smi,
+        .nmi,
+        .init,
+        => 0,
+        .startup => |s| (s.trampoline >> 12) & 0xff,
+    };
+    const ipi = destination_shorthand | trigger_mode | level | destination_mode | delivery_mode | vector;
+    writeRegister(.interrupt_command_high, destination);
+    writeRegister(.interrupt_command_low, ipi);
+
+    if (opts.wait_for_send) {
+        var send_pending = true;
+        while (send_pending) {
+            send_pending = (readRegister(.interrupt_command_low) >> 12) & 1 == 1;
+            assembly.spinLoopHint();
+        }
+    }
+}
+
 fn readRegister(register: Registers) u32 {
     const register_addr = lapic_base.toAddr() + @intFromEnum(register);
     const register_ptr: *u32 = @ptrFromInt(register_addr);
@@ -149,5 +198,7 @@ pub fn apic() Apic {
     return .{
         .apic_id = apicId,
         .init_local_interrupts = initLocalInterrupts,
+        .set_enabled = setEnabled,
+        .send_ipi = sendIPI,
     };
 }

@@ -3,8 +3,13 @@ const cpu = @import("../cpu.zig");
 const assembly = @import("../assembly.zig");
 const acpi_events = @import("flcn").acpi_events;
 const Apic = @import("apic.zig");
+const apic_types = @import("types.zig");
+const options = @import("options");
 
 const log = std.log.scoped(.x2apic);
+
+const CpuIdInt = u32;
+const CpuIdMask = std.math.maxInt(CpuIdInt);
 
 pub fn init() !void {
     log.debug("initializing x2APIC (base: 0x{x})", .{cpu.MSR.APIC_BASE});
@@ -60,9 +65,46 @@ pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent
     }
 }
 
+fn setEnabled(enabled: bool) void {
+    const spurious_vector: u64 = 0xff;
+    const local_apic_enable: u64 = @as(u64, @intCast(@intFromBool(enabled))) << 8;
+    const svr_config = local_apic_enable | spurious_vector;
+    assembly.wrmsr(.X2APIC_SIVR, svr_config);
+}
+
+fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: apic_types.SendIPIOptions) !void {
+    if (options.safety) {
+        // NOTE: in x2apic mode, there is no wait for send
+        std.debug.assert(opts.wait_for_send == false);
+    }
+    const destination_apic_id: u64 = switch (dest) {
+        .apic => |a| a.id,
+        else => 0,
+    };
+    const destination: u64 = (destination_apic_id & CpuIdMask) << 32;
+    const destination_shorthand = @intFromEnum(dest);
+    const trigger_mode: u32 = 0 << 15;
+    const level: u32 = 1 << 14;
+    const destination_mode: u32 = 0 << 11;
+    const delivery_mode = @intFromEnum(msg);
+    const vector = switch (msg) {
+        .fixed => |e| e.vector,
+        .lowest_priority => |e| e.vector,
+        .smi,
+        .nmi,
+        .init,
+        => 0,
+        .startup => |s| (s.trampoline >> 12) & 0xff,
+    };
+    const ipi: u64 = destination | destination_shorthand | trigger_mode | level | destination_mode | delivery_mode | vector;
+    assembly.wrmsr(.X2APIC_ICR, ipi);
+}
+
 pub fn apic() Apic {
     return .{
         .apic_id = apicId,
         .init_local_interrupts = initLocalInterrupts,
+        .set_enabled = setEnabled,
+        .send_ipi = sendIPI,
     };
 }
