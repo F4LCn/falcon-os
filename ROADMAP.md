@@ -44,10 +44,10 @@
     * [x] Linked list implementation
     * [x] GDT/IDT/TSS definition
     * [x] Hardware exceptions & interrupts
-    * [ ] CPU resolution & init
+    * [-] CPU resolution & init
       * [x] cpu identification & features
       * [ ] fpu initialization
-      * [ ] per-cpu variables
+      * [x] per-cpu variables
     * [ ] Synchronization (Mutex, lock, ...)
 
   - Core features
@@ -63,13 +63,17 @@
       * [-] Trampoline start up code
       * [-] Apic initialization
         - [-] xAPIC
-          * [-] Interrupts
-          * [-] IPI
+          * [x] Interrupts
+          * [x] IPI
           * [ ] Timer
         - [-] x2APIC (opt)
-          * [-] Interrupts
-          * [-] IPI
+          * [x] Interrupts
+          * [x] IPI
           * [ ] Timer
+      * [ ] I/O Apic initialization
+        - [ ] I/O Apic enumeration
+        - [ ] Interrupt overrides
+        - [ ] Interrupts redirection
       * [ ] AP initialization
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] Processes, Threads & context switching
