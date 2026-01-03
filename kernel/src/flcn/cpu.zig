@@ -4,6 +4,7 @@ const options = @import("options");
 const mem = @import("memory.zig");
 
 pub const CpuData = arch.cpu.CpuData;
+pub const CpuId = arch.cpu.CpuId;
 pub var cpu_info: *arch.cpu.CpuInfo = &arch.cpu.cpu_info;
 pub const possible_cpus_count = options.max_cpu;
 pub var possible_cpus_mask: std.bit_set.ArrayBitSet(u64, possible_cpus_count) = .initEmpty();

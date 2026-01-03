@@ -29,7 +29,6 @@ pub const LocalApicNMIFoundEvent = struct {
 
 pub const MadtParsingEvent = union(enum) {
     local_apic_addr: u32,
-    pic_compatibility: void,
     apic: ApicFoundEvent,
     ioapic: IOApicFoundEvent,
     interrupt_source_override: InterruptSourceOverrideFoundEvent,

@@ -3,11 +3,11 @@ const memory = @import("../memory.zig");
 const constants = @import("../constants.zig");
 const assembly = @import("../assembly.zig");
 const flcn = @import("flcn");
-const acpi_events = flcn.acpi_events;
 const cpu = @import("../cpu.zig");
 const Apic = @import("apic.zig");
 const options = @import("options");
 const apic_types = @import("types.zig");
+const smp = @import("../smp.zig");
 
 const log = std.log.scoped(.xapic);
 
@@ -105,16 +105,15 @@ fn apicId() cpu.CpuId {
 }
 
 const int_mask: u32 = 0x10000;
-fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent) void {
+fn initLocalInterrupts(nmis: []?smp.LocalApic.ApicNMI) void {
     writeRegister(.lvt_corrected_machine_check_interrupt, int_mask);
     writeRegister(.lvt_error, int_mask);
     writeRegister(.lvt_performance_monitoring_counters, int_mask);
     writeRegister(.lvt_thermal_sensor, int_mask);
     const cpu_id = cpu.perCpu(.id);
-    log.debug("cpu_id {d}", .{cpu_id});
-    for (local_apic_nmi) |maybe_nmi| {
+    for (nmis) |maybe_nmi| {
         if (maybe_nmi) |nmi| {
-            if (nmi.processor_uid != cpu_id and nmi.processor_uid != 0xff) continue;
+            if (nmi.cpu_id != cpu_id and nmi.cpu_id != 0xff) continue;
             const register: Registers = switch (nmi.lint_num) {
                 0 => .lvt_lint0,
                 1 => .lvt_lint1,
@@ -122,12 +121,12 @@ fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent) vo
             };
             const trigger: u32 = blk: {
                 if (nmi.lint_num == 1) break :blk 0;
-                break :blk switch (nmi.flags.trigger_mode) {
+                break :blk switch (nmi.trigger_mode) {
                     .bus_conforming, .edge_triggered => 0,
                     .level_triggered => 1 << 15,
                 };
             };
-            const polarity: u32 = switch (nmi.flags.polarity) {
+            const polarity: u32 = switch (nmi.polarity) {
                 .bus_conforming, .active_high => 0,
                 .active_low => 1 << 13,
             };

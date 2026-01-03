@@ -1,10 +1,10 @@
 const std = @import("std");
 const cpu = @import("../cpu.zig");
 const assembly = @import("../assembly.zig");
-const acpi_events = @import("flcn").acpi_events;
 const Apic = @import("apic.zig");
 const apic_types = @import("types.zig");
 const options = @import("options");
+const smp = @import("../smp.zig");
 
 const log = std.log.scoped(.x2apic);
 
@@ -32,7 +32,7 @@ pub fn apicId() cpu.CpuId {
 }
 
 const int_mask: u32 = 0x10000;
-pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent) void {
+pub fn initLocalInterrupts(local_apic_nmi: []?smp.LocalApic.ApicNMI) void {
     assembly.wrmsr(.X2APIC_CMCI, int_mask);
     assembly.wrmsr(.X2APIC_LVT_ERROR, int_mask);
     assembly.wrmsr(.X2APIC_LVT_PMC, int_mask);
@@ -41,7 +41,7 @@ pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent
     log.debug("cpu_id {d}", .{cpu_id});
     for (local_apic_nmi) |maybe_nmi| {
         if (maybe_nmi) |nmi| {
-            if (nmi.processor_uid != cpu_id and nmi.processor_uid != 0xff) continue;
+            if (nmi.cpu_id != cpu_id and nmi.cpu_id != 0xff) continue;
             const msr: cpu.MSR = switch (nmi.lint_num) {
                 0 => .X2APIC_LVT_LINT0,
                 1 => .X2APIC_LVT_LINT1,
@@ -49,12 +49,12 @@ pub fn initLocalInterrupts(local_apic_nmi: []?acpi_events.LocalApicNMIFoundEvent
             };
             const trigger: u64 = blk: {
                 if (nmi.lint_num == 1) break :blk 0;
-                break :blk switch (nmi.flags.trigger_mode) {
+                break :blk switch (nmi.trigger_mode) {
                     .bus_conforming, .edge_triggered => 0,
                     .level_triggered => 1 << 15,
                 };
             };
-            const polarity: u64 = switch (nmi.flags.polarity) {
+            const polarity: u64 = switch (nmi.polarity) {
                 .bus_conforming, .active_high => 0,
                 .active_low => 1 << 13,
             };

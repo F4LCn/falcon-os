@@ -62,7 +62,7 @@ pub fn initCore(cpu_id: CpuId) !void {
     flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) &apic.x2apic.apic() else &apic.xapic.apic();
     assembly.wrmsr(.GS_BASE, @intFromPtr(&flcn.cpu.cpu_data[cpu_id]));
     try initLocalApic();
-    flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic_nmi);
+    flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic.nmis);
     flcn.cpu.cpu_data[cpu_id].apic.setEnabled(true);
 }
 
@@ -70,7 +70,7 @@ pub fn initLocalApic() !void {
     if (hasFeature(.x2apic)) {
         try apic.x2apic.init();
     } else {
-        try apic.xapic.init(smp.lapic_addr, &memory.kernel_vmem.impl);
+        try apic.xapic.init(smp.local_apic.address, &memory.kernel_vmem.impl);
     }
 }
 
