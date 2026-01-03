@@ -34,6 +34,12 @@ pub fn start() callconv(.naked) noreturn {
         // Are we an AP ?
         // set up the AP stack
         // jump to AP specific startup code
+        // if we're an AP, get the AP cpu id
+        // stack start = -(AP cpu id * core stack size)
+        // mov rax, CpuId
+        // mul rax, core_stack_size
+        // xor rbx, rbx
+        // sub rbx, rax
         \\ mov $0, %rbp
         \\ mov %rbp, %rsp
         \\ call kernelMain
