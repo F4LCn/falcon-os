@@ -13,9 +13,11 @@ const acpi = flcn.acpi;
 const smp = @import("smp.zig");
 const pit = flcn.pit;
 const panicFn = flcn.panic.panicFn;
+const BootInfo = flcn.bootinfo.BootInfo;
 
 pub const panic = std.debug.FullPanic(panicFn);
 const log = std.log.scoped(.entrypoint);
+extern var bootinfo: BootInfo;
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -47,6 +49,11 @@ pub fn start() callconv(.naked) noreturn {
     while (true) {}
 }
 
+pub fn apstart() callconv(.naked) noreturn {
+    _ = cpu.cpu_count.fetchAdd(1, .monotonic);
+    while (true) {}
+}
+
 pub export fn kernelMain() callconv(.c) void {
     logger.init(serial.Port.COM1);
     cpu.earlyInit() catch unreachable;
@@ -67,8 +74,8 @@ pub fn failableMain() !void {
     try Memory.printStats();
     try acpi.init();
     try smp.init();
-    // assuming BSP is always cpu#0
-    try cpu.initCore(0);
+    try cpu.initCore();
+    try smp.wakeUpCores();
     log.debug("Present cpus: #{d}, mask: {any}", .{ cpu.present_cpus_count, cpu.present_cpus_mask });
     log.debug("Online cpus: #{d}, mask: {any}", .{ cpu.online_cpus_count, cpu.online_cpus_mask });
 
@@ -80,8 +87,7 @@ pub fn failableMain() !void {
     // }
     // log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
 
-    const apic = cpu.perCpu(.apic);
-    try apic.sendIPI(.{.fixed = .{.vector = 0xfd}}, .self, .{});
+    // try apic.sendIPI(.{.fixed = .{.vector = 0xfd}}, .self, .{});
 
     @panic("test");
 }

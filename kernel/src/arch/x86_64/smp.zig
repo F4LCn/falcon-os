@@ -5,8 +5,14 @@ const acpi_events = @import("flcn").acpi_events;
 const cpu = flcn.cpu;
 const trampoline = @import("trampoline.zig");
 const options = @import("options");
+const BootInfo = flcn.bootinfo.BootInfo;
+const constants = @import("constants.zig");
+const pit = flcn.pit;
 
 const log = std.log.scoped(.smp);
+
+extern var bootinfo: BootInfo;
+const apstart = @import("entrypoint.zig").apstart;
 
 pub const Polarity = enum { bus_conforming, active_high, active_low };
 pub const TriggerMode = enum { bus_conforming, edge_triggered, level_triggered };
@@ -48,7 +54,7 @@ const MadtIterationContext = struct {
                 local_apic.address = laa;
             },
             .apic => |apic| {
-                setCpuPresent(apic.id, apic.apic_id);
+                setCpuPresent(apic.processor_id, apic.apic_id) catch return;
             },
             .ioapic => |io| {
                 if (io.ioapic_id >= options.max_cpu) return error.TooManyIoApics;
@@ -112,17 +118,54 @@ pub fn init() !void {
 
     log.debug("ioapics: {any}", .{ioapics.items});
     log.debug("int source overrides: {any}", .{int_source_overrides.items});
+
+    log.debug("trampoline page {x}", .{bootinfo.trampoline_page});
     log.debug("trampoline data {d} {*}", .{ trampoline.trampoline_data.len, trampoline.trampoline_data });
+    const trampoline_addr = bootinfo.trampoline_page;
+    const trampoline_ptr: [*]u8 = @ptrFromInt(trampoline_addr);
+    @memcpy(trampoline_ptr, trampoline.trampoline_data);
+    const trampoline_params_addr: u64 = @as(u64, @intCast(trampoline_addr)) + constants.default_page_size - @sizeOf(trampoline.TrampolineParams);
+    const trampoline_params_ptr: *trampoline.TrampolineParams = @ptrFromInt(trampoline_params_addr);
+    log.debug("_apstart {any}", .{&apstart});
+    trampoline_params_ptr.entrypoint = @intFromPtr(&apstart);
+    trampoline_params_ptr.page_map = @intCast(flcn.memory.kernel_vmem.impl.root);
+    log.debug("trampoline params {x} {x}", .{ trampoline_params_ptr.entrypoint, trampoline_params_ptr.page_map });
+    log.debug("trampoline page initialized", .{});
+}
+
+pub fn wakeUpCores() !void {
+    const count10ms = pit.millis(10);
+    const count50ms = pit.millis(50);
+
+    log.debug("cpu count before wakeup {d}", .{cpu.cpu_count.load(.acquire)});
+
+    const apic = cpu.perCpu(.apic);
+    try apic.sendIPI(.{ .init = {} }, .all_excluding_self, .{});
+    pit.wait(count10ms);
+
+    for (0..2) |_| {
+        try apic.sendIPI(.{ .startup = .{ .trampoline = bootinfo.trampoline_page } }, .all_excluding_self, .{});
+        pit.wait(count10ms);
+        if (cpu.cpu_count.load(.acquire) >= cpu.present_cpus_count) break;
+
+        pit.wait(count50ms);
+        pit.wait(count50ms);
+    }
+
+    log.info("cpu count after wake up {d}", .{cpu.cpu_count.load(.acquire)});
+    if (cpu.cpu_count.load(.acquire) < cpu.present_cpus_count) {
+        return error.MissingCpu;
+    }
 }
 
 // EL PLAN:
 // 1/ identify cpu count (done)
 // 2/ create a trampoline page (done)
 // 2.5/ write the startup code (small bootloader: takes the core from real mode to long mode AFAP)
-// 3/ copy the startup code to the trampoline
-// 4/ have a special path in our kernel entrypoint for APs
+// 3/ copy the startup code to the trampoline (done)
+// 4/ have a special path in our kernel entrypoint for APs (done)
 // 5/ initiate the INIT SIPI SIPI sequence to start up the APs
 
-fn setCpuPresent(cpu_id: u8, apic_id: u8) void {
-    cpu.setCpuPresent(cpu_id, .{ .apic_id = apic_id, .lapic_addr = local_apic.address });
+fn setCpuPresent(cpu_id: cpu.CpuId, apic_id: cpu.CpuId) !void {
+    try cpu.setCpuPresent(cpu_id, .{ .apic_id = apic_id, .lapic_addr = local_apic.address });
 }

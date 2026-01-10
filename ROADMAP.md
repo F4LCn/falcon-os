@@ -74,7 +74,7 @@
         - [ ] I/O Apic enumeration
         - [ ] Interrupt overrides
         - [ ] Interrupts redirection
-      * [ ] AP initialization
+      * [x] AP initialization
     * [ ] Advanced interrupt handling (IRQ allocation, ...)
     * [ ] Processes, Threads & context switching
     * [ ] Task / Task queues ?

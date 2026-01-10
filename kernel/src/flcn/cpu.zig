@@ -13,6 +13,7 @@ pub var present_cpus_mask: std.bit_set.ArrayBitSet(u64, possible_cpus_count) = .
 pub var online_cpus_count: u16 = 1;
 pub var online_cpus_mask: std.bit_set.ArrayBitSet(u64, possible_cpus_count) = .initEmpty();
 
+pub var cpu_count: std.atomic.Value(CpuId) align(std.atomic.cache_line) = .init(0);
 pub var cpu_data: [possible_cpus_count]CpuData align(arch.constants.default_page_size) = undefined;
 
 pub fn earlyInit() !void {
@@ -21,8 +22,9 @@ pub fn earlyInit() !void {
     try arch.cpu.doCpuChecks();
 }
 
-pub fn initCore(cpu_id: arch.cpu.CpuId) !void {
-    if (!possible_cpus_mask.isSet(cpu_id)) return error.ImpossibleCpu;
+pub fn initCore() !void {
+    const cpu_id = cpu_count.fetchAdd(1, .monotonic);
+    if (cpu_id >= possible_cpus_count or !possible_cpus_mask.isSet(cpu_id)) return error.ImpossibleCpu;
     if (!present_cpus_mask.isSet(cpu_id)) return error.CpuNotPresent;
 
     setCpuOnline(cpu_id);
@@ -33,7 +35,8 @@ pub fn hasFeature(feature: arch.cpu.Feature) bool {
     return arch.cpu.hasFeature(feature);
 }
 
-pub fn setCpuPresent(cpu_id: arch.cpu.CpuId, id_data: arch.cpu.IdentificationData) void {
+pub fn setCpuPresent(cpu_id: arch.cpu.CpuId, id_data: arch.cpu.IdentificationData) !void {
+    if (cpu_id >= possible_cpus_count or !possible_cpus_mask.isSet(cpu_id)) return error.ImpossibleCpu;
     present_cpus_mask.set(cpu_id);
     present_cpus_count = @intCast(present_cpus_mask.count());
 

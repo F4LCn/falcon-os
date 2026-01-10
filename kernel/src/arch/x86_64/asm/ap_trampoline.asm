@@ -11,16 +11,17 @@ real_mode:
     
     mov eax, GDT
     add eax, ebx
-    mov dword [GDTR.ptr], eax
+    mov dword [cs:GDTR.ptr], eax
+    mov eax, dword [cs:GDTR]
     lgdt [cs:GDTR]
     mov eax, cr0
     or eax, 1
     mov cr0, eax
     lea eax, [ebx + protected_mode]
-    mov word [cs:jumper.offset], ax
-    mov word [cs:jumper.segment], 0x18
+    mov word [cs:jumper_32.offset], ax
+    mov word [cs:jumper_32.segment], 0x18
     mov dword [cs:trampoline_variables.status], 0x01
-    jmp far dword [ebx + jumper]
+    jmp far dword [ebx + jumper_32]
 
 use32
 protected_mode:
@@ -37,7 +38,8 @@ protected_mode:
     mov eax, cr4                            ; enabling fpu/sse
     or eax, 0x620
     mov cr4, eax
-    mov eax, dword [ebp + trampoline_variables.page_map]
+    mov eax, dword [ebx + trampoline_variables.page_map]
+    mov edx, eax
     mov cr3, eax                            ; set the page map
     mov ecx, 0xC0000080                     ; EFER, enable long mode
     rdmsr
@@ -47,21 +49,21 @@ protected_mode:
     or eax, 0xE000000E
     mov cr0, eax
     lea eax, [ebx + long_mode]
-    mov word [cs:jumper.offset], ax
-    mov word [cs:jumper.segment], 0x28
-    mov dword [cs:trampoline_variables.status], 0x02
-    jmp far dword [ebx + jumper]
+    mov word [ebx + jumper_64.offset], ax
+    mov word [ebx + jumper_64.segment], 0x28
+    mov dword [ebx + trampoline_variables.status], 0x02
+    jmp far dword [ebx + jumper_64]
 
 long_mode:
 USE64
-    mov rax, trampoline_variables.entrypoint                    ; pop entrypoint from stack
+    mov rax, [ebx + trampoline_variables.entrypoint]                    ; pop entrypoint from stack
     jmp rax                                 ; handoff exec to kernel
     jmp $                                   ; catch-all in case the kernel returns
 
 align 16
 GDTR:
     dw GDT_END - GDT - 1
-    .ptr: dd 0xFFFFFFFF
+    .ptr: dd 0xabababab
 
 align 16
 GDT:
@@ -116,15 +118,19 @@ LongData:
     db 0x00
 GDT_END:
 
-jumper:
+jumper_32:
   .offset:  dw 0
   .segment: dw 0
 
-pad:            db 0x1000 - (trampoline_variables_end - trampoline_variables) - ($ - $$) dup 0
+jumper_64:
+  .offset:  dw 0
+  .segment: dw 0
+
+pad:            db 0x1000 - (trampoline_variables_end - trampoline_variables) - ($ - $$) dup 0xcd
 
 ; Trampoline page addr + 4k - sizeof(tampoline_variables struct)
 trampoline_variables:
-.page_map: dq 0xa0a0a0a0
-.entrypoint: dq 0x0b0b0b0b
+.entrypoint: dq 0x0b0b0b0b0b0b0b0b
+.page_map: dd 0xa0a0a0a0
 .status: dw 0
 trampoline_variables_end:

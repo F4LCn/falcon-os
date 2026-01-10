@@ -183,6 +183,7 @@ pub fn main() uefi.Status {
     bootinfo.acpi_ptr = @intFromPtr(rsdp_ptr);
 
     const trampoline_addr = @intFromPtr(trampoline_page);
+    bootinfo.trampoline_page = @intCast(trampoline_addr);
     std.log.info(
         \\ preparing to exit boot services
         \\ trampoline page -> 0x{x}

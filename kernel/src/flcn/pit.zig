@@ -63,7 +63,6 @@ pub fn init() void {}
 
 pub fn millis(ms: u16) u16 {
     const count = @as(u64, @intCast(ms)) * frequency / 1_000;
-    log.debug("{d}ms = {d} ticks", .{ ms, count });
     return @intCast(count);
 }
 
