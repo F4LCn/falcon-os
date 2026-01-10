@@ -96,6 +96,8 @@ pub fn init(lapic_base_addr: memory.PAddr, page_map: *memory.PageMapManager) !vo
     apic_base |= 1 << 11;
     assembly.wrmsr(.APIC_BASE, apic_base);
 
+    writeRegister(.spurious_interrupt_vector, 0x1ff);
+
     log.info("xAPIC enabled", .{});
 }
 
@@ -110,7 +112,7 @@ fn initLocalInterrupts(nmis: []?smp.LocalApic.ApicNMI) void {
     writeRegister(.lvt_error, int_mask);
     writeRegister(.lvt_performance_monitoring_counters, int_mask);
     writeRegister(.lvt_thermal_sensor, int_mask);
-    const cpu_id = cpu.perCpu(.id);
+    const cpu_id = cpu.perCpu(.apic_id);
     for (nmis) |maybe_nmi| {
         if (maybe_nmi) |nmi| {
             if (nmi.cpu_id != cpu_id and nmi.cpu_id != 0xff) continue;
@@ -154,23 +156,25 @@ fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: ap
         else => 0,
     };
     const destination = (destination_apic_id & CpuIdMask) << 24;
-    const destination_shorthand = @intFromEnum(dest);
-    const trigger_mode: u32 = 0 << 15;
-    const level: u32 = 1 << 14;
-    const destination_mode: u32 = 0 << 11;
-    const delivery_mode = @intFromEnum(msg);
-    const vector = switch (msg) {
+    const destination_shorthand: u2 = @intFromEnum(dest);
+    const delivery_mode: u3 = @intFromEnum(msg);
+    const vector: u8 = switch (msg) {
         .fixed => |e| e.vector,
         .lowest_priority => |e| e.vector,
         .smi,
         .nmi,
         .init,
         => 0,
-        .startup => |s| (s.trampoline >> 12) & 0xff,
+        .startup => |s| @intCast((s.trampoline >> 12) & 0xff),
     };
-    const ipi = destination_shorthand | trigger_mode | level | destination_mode | delivery_mode | vector;
+    const ipi: apic_types.IPI = .{
+        .vector = vector,
+        .delivery_mode = delivery_mode,
+        .destination_shorthand = destination_shorthand,
+    };
+    log.debug("Sending IPI with ICR: {x} {x}", .{destination, ipi});
     writeRegister(.interrupt_command_high, destination);
-    writeRegister(.interrupt_command_low, ipi);
+    writeRegister(.interrupt_command_low, @bitCast(ipi));
 
     if (opts.wait_for_send) {
         var send_pending = true;

@@ -37,7 +37,7 @@ pub fn initLocalInterrupts(local_apic_nmi: []?smp.LocalApic.ApicNMI) void {
     assembly.wrmsr(.X2APIC_LVT_ERROR, int_mask);
     assembly.wrmsr(.X2APIC_LVT_PMC, int_mask);
     assembly.wrmsr(.X2APIC_LVT_THERMAL, int_mask);
-    const cpu_id = cpu.perCpu(.id);
+    const cpu_id = cpu.perCpu(.apic_id);
     log.debug("cpu_id {d}", .{cpu_id});
     for (local_apic_nmi) |maybe_nmi| {
         if (maybe_nmi) |nmi| {
@@ -83,20 +83,23 @@ fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: ap
     };
     const destination: u64 = (destination_apic_id & CpuIdMask) << 32;
     const destination_shorthand = @intFromEnum(dest);
-    const trigger_mode: u32 = 0 << 15;
-    const level: u32 = 1 << 14;
-    const destination_mode: u32 = 0 << 11;
     const delivery_mode = @intFromEnum(msg);
-    const vector = switch (msg) {
+    const vector: u8 = switch (msg) {
         .fixed => |e| e.vector,
         .lowest_priority => |e| e.vector,
         .smi,
         .nmi,
         .init,
         => 0,
-        .startup => |s| (s.trampoline >> 12) & 0xff,
+        .startup => |s| @intCast((s.trampoline >> 12) & 0xff),
     };
-    const ipi: u64 = destination | destination_shorthand | trigger_mode | level | destination_mode | delivery_mode | vector;
+    const ipi_lower: apic_types.IPI = .{
+        .vector = vector,
+        .delivery_mode = delivery_mode,
+        .destination_shorthand = destination_shorthand,
+    };
+    log.debug("Sending IPI with ICR: {x} {x}", .{destination, ipi_lower});
+    const ipi: u64 = destination | @as(u32, @bitCast(ipi_lower));
     assembly.wrmsr(.X2APIC_ICR, ipi);
 }
 

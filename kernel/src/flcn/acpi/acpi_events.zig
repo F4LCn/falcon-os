@@ -1,5 +1,5 @@
 pub const ApicFoundEvent = struct {
-    id: u8,
+    processor_id: u8,
     apic_id: u8,
     enabled: bool,
     online_capable: bool,

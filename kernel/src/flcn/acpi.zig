@@ -71,7 +71,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                             const processorLocalApic: *const acpi_types.AcpiMadt.ProcessorLocalApic = @ptrCast(interruptControllerHeader);
                             try ctx.notify(acpi_events.MadtParsingEvent{
                                 .apic = .{
-                                    .id = processorLocalApic.processor_uid,
+                                    .processor_id = processorLocalApic.processor_uid,
                                     .apic_id = processorLocalApic.apic_id,
                                     .enabled = processorLocalApic.flags.enabled,
                                     .online_capable = processorLocalApic.flags.online_capable,
