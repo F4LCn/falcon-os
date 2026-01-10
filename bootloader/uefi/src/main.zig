@@ -256,39 +256,24 @@ fn mapLowMemory(addr_space: *AddressSpace) BootloaderError!void {
 fn mapStacks(addr_space: *AddressSpace) BootloaderError!void {
     const log = std.log.scoped(.KernelSpaceMapper);
     log.info("Mapping kernel space", .{});
-    var core_stack_vaddr: u64 = -%@as(u64, Constants.arch_page_size);
+    var core_stack_vaddr: u64 = -%@as(u64, Constants.core_stack_size);
+    const core_stack_pages = @divExact(Constants.core_stack_size, Constants.arch_page_size);
     for (0..Constants.max_cpu) |i| {
-        const core_stack_ptr = try MemHelper.allocatePages(1, .ReservedMemoryType);
-        log.debug("Mapping core[{d}] stack: 0x{x} -> [0x{x} -> 0x{x}]", .{
+        const core_stack_ptr = try MemHelper.allocatePages(core_stack_pages, .ReservedMemoryType);
+        log.info("Mapping core[{d}] stack: 0x{x} -> [0x{x} -> 0x{x}]", .{
             i,
             @intFromPtr(core_stack_ptr),
             core_stack_vaddr,
-            core_stack_vaddr +% Constants.arch_page_size,
+            core_stack_vaddr +% Constants.core_stack_size,
         });
-        try addr_space.mmap(
-            .{ .vaddr = @bitCast(core_stack_vaddr) },
-            .{ .paddr = @intFromPtr(core_stack_ptr) },
-            AddressSpace.DefaultMmapFlags,
-        );
-        core_stack_vaddr -%= Constants.arch_page_size;
-    }
-}
-
-fn mapFramebuffer(addr_space: *AddressSpace, fb_addr: u64, fb_ptr: u64, fb_size: u64) BootloaderError!void {
-    const log = std.log.scoped(.KernelSpaceMapper);
-    // TODO: make sure the size is page aligned
-    log.info("Mapping framebuffer from 0x{x} -> 0x{x} (0x{x})", .{ fb_ptr, fb_addr, fb_size });
-    var fb_vaddr = fb_addr;
-    var fb_paddr = fb_ptr;
-    while (fb_paddr < fb_ptr + fb_size) : ({
-        fb_paddr += Constants.arch_page_size;
-        fb_vaddr += Constants.arch_page_size;
-    }) {
-        try addr_space.mmap(
-            .{ .vaddr = @bitCast(fb_vaddr) },
-            .{ .paddr = fb_paddr },
-            AddressSpace.DefaultMmapFlags,
-        );
+        for (0..core_stack_pages) |j| {
+            try addr_space.mmap(
+                .{ .vaddr = @bitCast(core_stack_vaddr +% j * Constants.arch_page_size) },
+                .{ .paddr = @intFromPtr(core_stack_ptr) + j * Constants.arch_page_size },
+                AddressSpace.DefaultMmapFlags,
+            );
+        }
+        core_stack_vaddr -%= Constants.core_stack_size;
     }
 }
 
@@ -304,15 +289,6 @@ fn mapMemory(addr_space: *AddressSpace, page_offset: u64, memory_limit: ?u64) Bo
             AddressSpace.DefaultMmapFlags,
         );
     }
-    // i = 0x400000;
-    // log.info("Mapping physical memory to 0x{x}", .{page_offset});
-    // while (i < memory_size) : (i += Constants.arch_page_size) {
-    //     try addr_space.mmap(
-    //         .{ .vaddr = @bitCast(i) },
-    //         .{ .paddr = @bitCast(i) },
-    //         AddressSpace.DefaultMmapFlags,
-    //     );
-    // }
 }
 
 fn mapKernel(
@@ -398,9 +374,12 @@ fn mapKernel(
         );
     }
 
+    const stack_start = -%(@as(u64, Constants.core_stack_size) * Constants.max_cpu);
     const quickmap_pt_entry_length = std.mem.alignForward(u64, Constants.max_cpu * @sizeOf(AddressSpace.PageMapping.Entry), Constants.arch_page_size);
+    const quickmap_pt_entry_start = stack_start - quickmap_pt_entry_length - 2 * Constants.arch_page_size;
+
     const quickmap_pt_entry_pages = @divFloor(quickmap_pt_entry_length + Constants.arch_page_size - 1, Constants.arch_page_size);
-    const quickmap_pt_entry_start = -%(@as(u64, Constants.arch_page_size) * Constants.max_cpu) - quickmap_pt_entry_length - 2 * Constants.arch_page_size;
+
     var quickmap_pt_entry_page = quickmap_pt_entry_start;
     quickmap_page = quickmap_start;
     for (0..quickmap_pt_entry_pages) |p| {
@@ -409,7 +388,7 @@ fn mapKernel(
 
         const quickmap_page_addr: AddressSpace.Pml4VirtualAddress = @bitCast(quickmap_page);
         const pte_addr = try addr_space.getPageTableEntry(quickmap_page_addr, AddressSpace.DefaultMmapFlags);
-        log.info("Quickmap PTE 0x{x} paddr=0x{x}", .{ @intFromPtr(pte_addr), pte_addr.getAddr() });
+        log.info("Quickmap PTE (for 0x{x}) 0x{x} paddr=0x{x}", .{quickmap_page, @intFromPtr(pte_addr), pte_addr.getAddr() });
         const pte_page_addr = std.mem.alignBackward(u64, @intFromPtr(pte_addr), Constants.arch_page_size);
         log.info("\t Quickmap pte page[{d}] 0x{x} -> 0x{x}", .{
             p,

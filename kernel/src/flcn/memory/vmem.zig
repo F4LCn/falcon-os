@@ -42,7 +42,7 @@ pub fn init(alloc: Allocator, page_allocator: arch.memory.PageAllocator) !Virtua
     vmm.quickmap.start = @bitCast(quickmap_start);
     vmm.quickmap.length = quickmap_length;
 
-    const stack_start = -%(@as(u64, arch.constants.default_page_size) * options.max_cpu);
+    const stack_start = -%(@as(u64, arch.constants.core_stack_size) * options.max_cpu);
     const quickmap_pt_entry_length = std.mem.alignForward(u64, options.max_cpu * @sizeOf(PageMapping.Entry), arch.constants.default_page_size);
     const quickmap_pt_entry_start = stack_start - quickmap_pt_entry_length - 2 * arch.constants.default_page_size;
     vmm.quickmap_pt_entry.start = @bitCast(quickmap_pt_entry_start);
@@ -60,10 +60,9 @@ pub fn init(alloc: Allocator, page_allocator: arch.memory.PageAllocator) !Virtua
     // -128m             "fb" framebuffer         (0xfffffffff8000000 => 0xfffffffffc000000)
     //                       .......
     //                   quickmap pte             (stack_end - sizeof(PTE) * N - padding => stack_end - padding)
-    //                   stack start (cpuN)       (-N * 0x1000 => -(N-1) * 0x1000)
+    //                   stack start (cpuN)       (-N * CORE_STACK_SIZE => -(N-1) * CORE_STACK_SIZE)
     //                       ......
-    //                   stack start (cpu1)       (0xffffffffffffe000 => 0xfffffffffffff000)
-    //    0              stack start (cpu0)       (0xfffffffffffff000 => 0x0000000000000000)
+    //    0              stack start (cpu0)       (0xffffffffffff8000 => 0x0000000000000000)
     //                      ......
     //  0-1m             ram identity mapped      (0x0000000000000000 => 0x0000000000100000)
 
@@ -79,7 +78,7 @@ pub fn init(alloc: Allocator, page_allocator: arch.memory.PageAllocator) !Virtua
         log.debug("kernel size: {x}", .{kernel_range_size});
 
         try vmm.registerRange(kernel_range_start, kernel_range_size, .{ .typ = .kernel, .frozen = true });
-        const stack_size = options.max_cpu * arch.constants.default_page_size;
+        const stack_size = options.max_cpu * arch.constants.core_stack_size;
         log.debug("stack start: {x} size: {x}", .{ stack_start, stack_size });
         try vmm.registerRange(stack_start, stack_size, .{ .typ = .stack });
         try vmm.registerRange(0x100000, 0x400000 - 0x101000, .{ .typ = .low_kernel });
