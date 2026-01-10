@@ -4,6 +4,7 @@ const options = @import("options");
 const native_endian = builtin.cpu.arch.endian();
 const Dwarf = std.debug.Dwarf;
 const BootInfo = @import("bootinfo.zig").BootInfo;
+const native_arch = builtin.cpu.arch;
 
 extern var bootinfo: BootInfo;
 
@@ -182,6 +183,221 @@ pub const Stacktrace = struct {
     addresses: [num_traces]usize = .{0} ** num_traces,
     index: usize = 0,
 
+    const StackIterator = union(enum) {
+        ctx_first: *const std.debug.cpu_context.Native,
+        di: if (SelfInfo != void and SelfInfo.can_unwind and fp_usability != .ideal)
+            SelfInfo.UnwindContext
+        else
+            noreturn,
+        fp: usize,
+
+        inline fn init(opt_context_ptr: ?*const std.debug.cpu_context.Native) StackIterator {
+            if (opt_context_ptr) |context_ptr| {
+                return .{ .ctx_first = context_ptr };
+            }
+
+            if (SelfInfo != void and
+                SelfInfo.can_unwind and
+                std.debug.cpu_context.Native != noreturn and
+                fp_usability != .ideal)
+            {
+                return .{ .di = .init(&.current()) };
+            }
+            return .{
+                .fp = if (native_arch.isSPARC()) sp: {
+                    flushSparcWindows();
+                    break :sp asm (""
+                        : [_] "={o6}" (-> usize),
+                    ) + stack_bias;
+                } else @frameAddress(),
+            };
+        }
+
+        noinline fn flushSparcWindows() void {
+            // Flush all register windows except the current one (hence `noinline`). This ensures that
+            // we actually see meaningful data on the stack when we walk the frame chain.
+            if (comptime builtin.target.cpu.has(.sparc, .v9))
+                asm volatile ("flushw" ::: .{ .memory = true })
+            else
+                asm volatile ("ta 3" ::: .{ .memory = true }); // ST_FLUSH_WINDOWS
+        }
+
+        fn deinit(si: *StackIterator) void {
+            switch (si.*) {
+                .ctx_first => {},
+                .fp => {},
+                .di => |*unwind_context| unwind_context.deinit(getDebugInfoAllocator()),
+            }
+        }
+
+        const FpUsability = enum {
+            useless,
+            unsafe,
+            safe,
+            ideal,
+        };
+
+        const fp_usability: FpUsability = switch (builtin.target.cpu.arch) {
+            .alpha,
+            .avr,
+            .csky,
+            .microblaze,
+            .microblazeel,
+            .mips,
+            .mipsel,
+            .mips64,
+            .mips64el,
+            .msp430,
+            .sh,
+            .sheb,
+            .xcore,
+            => .useless,
+            .hexagon,
+            .powerpc,
+            .powerpcle,
+            .powerpc64,
+            .powerpc64le,
+            .sparc,
+            .sparc64,
+            => .ideal,
+            .aarch64 => if (builtin.target.os.tag.isDarwin()) .safe else .unsafe,
+            else => .unsafe,
+        };
+
+        fn stratOk(it: *const StackIterator, allow_unsafe: bool) bool {
+            return switch (it.*) {
+                .ctx_first, .di => true,
+                .fp => switch (fp_usability) {
+                    .useless => false,
+                    .unsafe => allow_unsafe and !builtin.omit_frame_pointer,
+                    .safe => !builtin.omit_frame_pointer,
+                    .ideal => true,
+                },
+            };
+        }
+
+        const Result = union(enum) {
+            frame: usize,
+            end,
+            switch_to_fp: struct {
+                address: usize,
+                err: std.debug.SelfInfoError,
+            },
+        };
+
+        pub inline fn getSelfDebugInfo() !*SelfInfo {
+            if (SelfInfo == void) return error.UnsupportedTarget;
+            const S = struct {
+                var self_info: SelfInfo = .init;
+            };
+            return &S.self_info;
+        }
+
+        fn next(it: *StackIterator) Result {
+            switch (it.*) {
+                .ctx_first => |context_ptr| {
+                    it.* = if (SelfInfo != void and SelfInfo.can_unwind and fp_usability != .ideal)
+                        .{ .di = .init(context_ptr) }
+                    else
+                        .{ .fp = context_ptr.getFp() };
+
+                    return .{ .frame = context_ptr.getPc() +| 1 };
+                },
+                .di => |*unwind_context| {
+                    const di = getSelfDebugInfo() catch unreachable;
+                    const di_gpa = getDebugInfoAllocator();
+                    const ret_addr = di.unwindFrame(di_gpa, unwind_context) catch |err| {
+                        const pc = unwind_context.pc;
+                        const fp = unwind_context.getFp();
+                        it.* = .{ .fp = fp };
+                        return .{ .switch_to_fp = .{
+                            .address = pc,
+                            .err = err,
+                        } };
+                    };
+                    if (ret_addr <= 1) return .end;
+                    return .{ .frame = ret_addr };
+                },
+                .fp => |fp| {
+                    if (fp == 0) return .end;
+
+                    const bp_addr = applyOffset(fp, fp_to_bp_offset) orelse return .end;
+                    const ra_addr = applyOffset(fp, fp_to_ra_offset) orelse return .end;
+
+                    if (bp_addr == 0 or !std.mem.isAligned(bp_addr, @alignOf(usize)) or
+                        ra_addr == 0 or !std.mem.isAligned(ra_addr, @alignOf(usize)))
+                    {
+                        return .end;
+                    }
+
+                    const bp_ptr: *const usize = @ptrFromInt(bp_addr);
+                    const ra_ptr: *const usize = @ptrFromInt(ra_addr);
+                    const bp = applyOffset(bp_ptr.*, stack_bias) orelse return .end;
+
+                    if (bp != 0 and switch (comptime builtin.target.stackGrowth()) {
+                        .down => bp <= fp,
+                        .up => bp >= fp,
+                    }) return .end;
+
+                    it.fp = bp;
+                    const ra = stripInstructionPtrAuthCode(ra_ptr.*);
+                    if (ra <= 1) return .end;
+                    return .{ .frame = ra };
+                },
+            }
+        }
+
+        pub inline fn stripInstructionPtrAuthCode(ptr: usize) usize {
+            if (native_arch.isAARCH64()) {
+                return asm (
+                    \\mov x16, x30
+                    \\mov x30, x15
+                    \\hint 0x07
+                    \\mov x15, x30
+                    \\mov x30, x16
+                    : [ret] "={x15}" (-> usize),
+                    : [ptr] "{x15}" (ptr),
+                    : .{ .x16 = true });
+            }
+
+            return ptr;
+        }
+
+        const fp_to_bp_offset = off: {
+            if (native_arch == .hppa) break :off -1 * @sizeOf(usize);
+            if (native_arch == .hppa64) break :off -1 * @sizeOf(usize);
+            if (native_arch.isLoongArch() or native_arch.isRISCV()) break :off -2 * @sizeOf(usize);
+            if (native_arch == .or1k) break :off -2 * @sizeOf(usize);
+            if (native_arch.isSPARC()) break :off 14 * @sizeOf(usize);
+            break :off 0;
+        };
+
+        const fp_to_ra_offset = off: {
+            if (native_arch == .hppa) break :off -5 * @sizeOf(usize);
+            if (native_arch == .hppa64) break :off -2 * @sizeOf(usize);
+            if (native_arch.isLoongArch() or native_arch.isRISCV()) break :off -1 * @sizeOf(usize);
+            if (native_arch == .or1k) break :off -1 * @sizeOf(usize);
+            if (native_arch.isPowerPC64()) break :off 2 * @sizeOf(usize);
+            if (native_arch == .s390x) break :off 14 * @sizeOf(usize);
+            if (native_arch.isSPARC()) break :off 15 * @sizeOf(usize);
+            break :off @sizeOf(usize);
+        };
+
+        const stack_bias = bias: {
+            if (native_arch == .sparc64) break :bias 2047;
+            break :bias 0;
+        };
+
+        const ra_call_offset = off: {
+            if (native_arch.isSPARC()) break :off 0;
+            break :off 1;
+        };
+
+        fn applyOffset(addr: usize, comptime off: comptime_int) ?usize {
+            if (off >= 0) return std.math.add(usize, addr, off) catch return null;
+            return std.math.sub(usize, addr, -off) catch return null;
+        }
+    };
     pub fn initFromAddr(ret_addr: usize, args: StacktraceArgs) Stacktrace {
         var self: Stacktrace = .{};
         self.capture(ret_addr, .{ .cpu_context = args.cpu_context });
@@ -192,8 +408,40 @@ pub const Stacktrace = struct {
         // NOTE: this is actually important because we look for 0 to decide how deep we go in the stacktrace
         @memset(&self.addresses, 0);
         const cpu_context_ptr = if (args.cpu_context != null) &args.cpu_context.? else null;
-        const stacktrace = std.debug.captureCurrentStackTrace(.{ .first_address = ret_addr, .context = cpu_context_ptr, .allow_unsafe_unwind = true }, &self.addresses);
+        const stacktrace = captureCurrentStackTrace(.{ .first_address = ret_addr, .context = cpu_context_ptr, .allow_unsafe_unwind = true }, &self.addresses);
         self.index = stacktrace.index;
+    }
+
+    pub noinline fn captureCurrentStackTrace(opts: std.debug.StackUnwindOptions, addr_buf: []usize) std.builtin.StackTrace {
+        const empty_trace: std.builtin.StackTrace = .{ .index = 0, .instruction_addresses = &.{} };
+        if (!std.options.allow_stack_tracing) return empty_trace;
+        var it: StackIterator = .init(opts.context);
+        defer it.deinit();
+        if (!it.stratOk(opts.allow_unsafe_unwind)) return empty_trace;
+
+        var total_frames: usize = 0;
+        var index: usize = 0;
+        var wait_for = opts.first_address;
+        while (index < addr_buf.len) switch (it.next()) {
+            .switch_to_fp => if (!it.stratOk(opts.allow_unsafe_unwind)) break,
+            .end => break,
+            .frame => |ret_addr| {
+                if (total_frames > 10_000) {
+                    break;
+                }
+                total_frames += 1;
+                if (wait_for) |target| {
+                    if (ret_addr != target) continue;
+                    wait_for = null;
+                }
+                addr_buf[index] = ret_addr;
+                index += 1;
+            },
+        };
+        return .{
+            .index = index,
+            .instruction_addresses = addr_buf[0..index],
+        };
     }
 
     pub fn format(
