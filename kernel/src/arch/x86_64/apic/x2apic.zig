@@ -98,16 +98,14 @@ fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: ap
         .delivery_mode = delivery_mode,
         .destination_shorthand = destination_shorthand,
     };
-    log.debug("Sending IPI with ICR: {x} {x}", .{destination, ipi_lower});
+    log.debug("Sending IPI with ICR: {x} {x}", .{ destination, ipi_lower });
     const ipi: u64 = destination | @as(u32, @bitCast(ipi_lower));
     assembly.wrmsr(.X2APIC_ICR, ipi);
 }
 
-pub fn apic() Apic {
-    return .{
-        .apic_id = apicId,
-        .init_local_interrupts = initLocalInterrupts,
-        .set_enabled = setEnabled,
-        .send_ipi = sendIPI,
-    };
-}
+pub const apic: Apic = .{
+    .apic_id = apicId,
+    .init_local_interrupts = initLocalInterrupts,
+    .set_enabled = setEnabled,
+    .send_ipi = sendIPI,
+};

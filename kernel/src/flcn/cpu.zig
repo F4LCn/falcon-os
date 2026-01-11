@@ -51,3 +51,7 @@ pub fn setCpuOnline(cpu_id: arch.cpu.CpuId) void {
 pub fn perCpu(comptime name: @TypeOf(.enum_literal)) @FieldType(CpuData, @tagName(name)) {
     return arch.cpu.perCpu(name);
 }
+
+pub fn perCpuPtr(comptime name: @TypeOf(.enum_literal), comptime args: arch.cpu.PerCpuOptions) arch.cpu.TypeToPtr(@FieldType(CpuData, @tagName(name)), args.mut) {
+    return arch.cpu.perCpuPtr(name, args);
+}

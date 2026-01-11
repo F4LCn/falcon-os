@@ -172,7 +172,7 @@ fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: ap
         .delivery_mode = delivery_mode,
         .destination_shorthand = destination_shorthand,
     };
-    log.debug("Sending IPI with ICR: {x} {x}", .{destination, ipi});
+    log.debug("Sending IPI with ICR: {x} {x}", .{ destination, ipi });
     writeRegister(.interrupt_command_high, destination);
     writeRegister(.interrupt_command_low, @bitCast(ipi));
 
@@ -197,11 +197,9 @@ fn writeRegister(register: Registers, val: u32) void {
     register_ptr.* = val;
 }
 
-pub fn apic() Apic {
-    return .{
-        .apic_id = apicId,
-        .init_local_interrupts = initLocalInterrupts,
-        .set_enabled = setEnabled,
-        .send_ipi = sendIPI,
-    };
-}
+pub const apic: Apic = .{
+    .apic_id = apicId,
+    .init_local_interrupts = initLocalInterrupts,
+    .set_enabled = setEnabled,
+    .send_ipi = sendIPI,
+};
