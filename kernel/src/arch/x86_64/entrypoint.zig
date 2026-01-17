@@ -14,6 +14,7 @@ const smp = @import("smp.zig");
 const pit = flcn.pit;
 const panicFn = flcn.panic.panicFn;
 const BootInfo = flcn.bootinfo.BootInfo;
+const assembly = @import("assembly.zig");
 
 pub const panic = std.debug.FullPanic(panicFn);
 const log = std.log.scoped(.entrypoint);
@@ -51,6 +52,7 @@ pub fn start() callconv(.naked) noreturn {
 
 pub fn apstart() callconv(.naked) noreturn {
     _ = cpu.cpu_count.fetchAdd(1, .monotonic);
+    assembly.haltEternally();
     while (true) {}
 }
 

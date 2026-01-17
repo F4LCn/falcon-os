@@ -8,6 +8,7 @@ const cpu_msr = @import("cpu/msr.zig");
 const cpu_debug_context = @import("cpu/debug_context.zig");
 const memory = flcn.memory;
 const Apic = @import("apic/apic.zig");
+const ioapic = @import("ioapic.zig");
 
 const log = std.log.scoped(.@"x86_64.cpu");
 pub const CpuId = u32;
@@ -59,6 +60,7 @@ pub fn initCore(cpu_id: CpuId) !void {
     try initLocalApic();
     flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic.nmis);
     flcn.cpu.cpu_data[cpu_id].apic.setEnabled(true);
+    try initIoApic();
 }
 
 pub fn initLocalApic() !void {
@@ -67,6 +69,10 @@ pub fn initLocalApic() !void {
     } else {
         try apic.xapic.init(smp.local_apic.address, &memory.kernel_vmem.impl);
     }
+}
+
+pub fn initIoApic() !void {
+    try ioapic.init(smp.ioapics.items, &memory.kernel_vmem.impl);
 }
 
 pub fn perCpu(comptime name: @TypeOf(.enum_literal)) @FieldType(CpuData, @tagName(name)) {

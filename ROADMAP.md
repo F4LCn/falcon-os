@@ -70,8 +70,8 @@
           * [x] Interrupts
           * [x] IPI
           * [ ] Timer
-      * [ ] I/O Apic initialization
-        - [ ] I/O Apic enumeration
+      * [-] I/O Apic initialization
+        - [x] I/O Apic enumeration
         - [ ] Interrupt overrides
         - [ ] Interrupts redirection
       * [x] AP initialization

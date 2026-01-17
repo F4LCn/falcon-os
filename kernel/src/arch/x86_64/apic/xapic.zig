@@ -187,13 +187,13 @@ fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: ap
 
 fn readRegister(register: Registers) u32 {
     const register_addr = lapic_base.toAddr() + @intFromEnum(register);
-    const register_ptr: *u32 = @ptrFromInt(register_addr);
+    const register_ptr: *volatile u32 = @ptrFromInt(register_addr);
     return register_ptr.*;
 }
 
 fn writeRegister(register: Registers, val: u32) void {
     const register_addr = lapic_base.toAddr() + @intFromEnum(register);
-    const register_ptr: *u32 = @ptrFromInt(register_addr);
+    const register_ptr: *volatile u32 = @ptrFromInt(register_addr);
     register_ptr.* = val;
 }
 
