@@ -6,7 +6,7 @@ const debug = @import("debug.zig");
 
 const log = std.log.scoped(.@"************************* PANICC *************************");
 
-pub fn panicFn(msg: []const u8, first_trace_addr: ?usize) noreturn {
+pub noinline fn panicFn(msg: []const u8, first_trace_addr: ?usize) noreturn {
     @branchHint(.cold);
     var stacktrace = debug.Stacktrace{
         .addresses = .{0} ** debug.Stacktrace.num_traces,

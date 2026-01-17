@@ -33,16 +33,15 @@ pub const std_options: std.Options = .{
 
 pub fn start() callconv(.naked) noreturn {
     asm volatile (
-        \\ .global kernelMain
-        // Are we an AP ?
-        // set up the AP stack
-        // jump to AP specific startup code
-        // if we're an AP, get the AP cpu id
-        // stack start = -(AP cpu id * core stack size)
-        // mov rax, CpuId
-        // mul rax, core_stack_size
-        // xor rbx, rbx
-        // sub rbx, rax
+    // Are we an AP ?
+    // set up the AP stack
+    // jump to AP specific startup code
+    // if we're an AP, get the AP cpu id
+    // stack start = -(AP cpu id * core stack size)
+    // mov rax, CpuId
+    // mul rax, core_stack_size
+    // xor rbx, rbx
+    // sub rbx, rax
         \\ mov $0, %rbp
         \\ mov %rbp, %rsp
         \\ call kernelMain
@@ -56,7 +55,7 @@ pub fn apstart() callconv(.naked) noreturn {
     while (true) {}
 }
 
-pub export fn kernelMain() callconv(.c) void {
+export fn kernelMain() callconv(.c) void {
     logger.init(serial.Port.COM1);
     cpu.earlyInit() catch unreachable;
     log.debug("Cpu vendor id: {s}", .{cpu.cpu_info.vendor_str[0..12]});
@@ -66,7 +65,7 @@ pub export fn kernelMain() callconv(.c) void {
     };
 }
 
-pub fn failableMain() !void {
+fn failableMain() !void {
     try Memory.earlyInit();
     try Memory.init();
     try debug.init(Memory.permanent_allocator);

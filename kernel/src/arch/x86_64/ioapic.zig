@@ -64,7 +64,7 @@ const IoApicDriver = struct {
         return self.window.*;
     }
 
-    pub fn write(self: IoApicDriver, reg: Register, val: u32) void {
+    fn write(self: IoApicDriver, reg: Register, val: u32) void {
         const reg_offset = @intFromEnum(reg);
         self.register_select.* = reg_offset;
 
@@ -82,8 +82,5 @@ pub fn init(ioapics: []smp.IoApic, page_map: *memory.PageMapManager) !void {
         try drivers.appendBounded(driver);
     }
 
-    log.debug("ioapic drivers: {any}", .{drivers.items});
-    const d = drivers.items[0];
-    d.write(.id, 2 << 24);
-    log.debug("id: {b}", .{d.id()});
+    log.info("ioapic subsystem initialized", .{});
 }
