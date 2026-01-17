@@ -9,6 +9,15 @@ pub fn build(b: *std.Build) !void {
         .abi = .none,
         .ofmt = .elf,
         .os_tag = .other,
+        .cpu_features_sub = std.Target.x86.featureSet(&.{
+            .mmx,
+            .sse,
+            .sse2,
+            .x87,
+        }),
+        .cpu_features_add = std.Target.x86.featureSet(&.{
+            .soft_float,
+        }),
     });
     const optimize = b.standardOptimizeOption(.{});
 
@@ -19,7 +28,7 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("src/entrypoint.zig"),
         .red_zone = false,
         .pic = true,
-        .code_model = .default,
+        .code_model = .kernel,
         .sanitize_thread = false,
         .dwarf_format = .@"64",
         .omit_frame_pointer = false,
@@ -37,7 +46,10 @@ pub fn build(b: *std.Build) !void {
     const kernel_exe = b.addExecutable(.{
         .name = "kernel64.elf",
         .root_module = kernel_module,
+        .linkage = .static,
     });
+    kernel_exe.link_function_sections = true;
+    kernel_exe.link_gc_sections = true;
 
     if (optimize == .Debug or optimize == .ReleaseSafe) {
         kernel_exe.use_llvm = true;
