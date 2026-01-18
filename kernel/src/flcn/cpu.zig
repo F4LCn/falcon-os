@@ -31,10 +31,6 @@ pub fn initCore() !void {
     try arch.cpu.initCore(cpu_id);
 }
 
-pub fn hasFeature(feature: arch.cpu.Feature) bool {
-    return arch.cpu.hasFeature(feature);
-}
-
 pub fn setCpuPresent(cpu_id: arch.cpu.CpuId, id_data: arch.cpu.IdentificationData) !void {
     if (cpu_id >= possible_cpus_count or !possible_cpus_mask.isSet(cpu_id)) return error.ImpossibleCpu;
     present_cpus_mask.set(cpu_id);
@@ -48,10 +44,6 @@ pub fn setCpuOnline(cpu_id: arch.cpu.CpuId) void {
     online_cpus_count = @intCast(online_cpus_mask.count());
 }
 
-pub fn perCpu(comptime name: @TypeOf(.enum_literal)) @FieldType(CpuData, @tagName(name)) {
-    return arch.cpu.perCpu(name);
-}
-
-pub fn perCpuPtr(comptime name: @TypeOf(.enum_literal), comptime args: arch.cpu.PerCpuOptions) arch.cpu.TypeToPtr(@FieldType(CpuData, @tagName(name)), args.mut) {
-    return arch.cpu.perCpuPtr(name, args);
-}
+pub const hasFeature = arch.cpu.hasFeature;
+pub const perCpu = arch.cpu.perCpu;
+pub const perCpuPtr = arch.cpu.perCpuPtr;
