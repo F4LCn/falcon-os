@@ -103,9 +103,14 @@ fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: ap
     assembly.wrmsr(.X2APIC_ICR, ipi);
 }
 
+fn sendEoi() void {
+    assembly.wrmsr(.X2APIC_EOI, 0);
+}
+
 pub const apic: Apic = .{
     .apic_id = apicId,
     .init_local_interrupts = initLocalInterrupts,
     .set_enabled = setEnabled,
     .send_ipi = sendIPI,
+    .send_eoi = sendEoi,
 };

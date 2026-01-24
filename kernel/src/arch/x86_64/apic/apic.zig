@@ -8,6 +8,7 @@ apic_id: *const fn () cpu.CpuId,
 init_local_interrupts: *const fn ([]?smp.LocalApic.ApicNMI) void,
 set_enabled: *const fn (enabled: bool) void,
 send_ipi: *const fn (apic_types.IPIMessage, apic_types.IPIDestination, apic_types.SendIPIOptions) anyerror!void,
+send_eoi: *const fn() void,
 
 pub fn apicId(self: Self) cpu.CpuId {
     return self.apic_id();
@@ -23,4 +24,8 @@ pub fn setEnabled(self: Self, enabled: bool) void {
 
 pub fn sendIPI(self: Self, msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: apic_types.SendIPIOptions) !void {
     try self.send_ipi(msg, dest, opts);
+}
+
+pub fn eoi(self: Self) void {
+    self.send_eoi();
 }

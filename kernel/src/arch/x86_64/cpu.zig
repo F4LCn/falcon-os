@@ -72,7 +72,7 @@ pub fn initLocalApic() !void {
 }
 
 pub fn initIoApic() !void {
-    try ioapic.init(smp.ioapics.items, &memory.kernel_vmem.impl);
+    try ioapic.init(smp.ioapics.items, smp.int_source_overrides.items, &memory.kernel_vmem.impl);
 }
 
 pub fn perCpu(comptime name: @TypeOf(.enum_literal)) @FieldType(CpuData, @tagName(name)) {

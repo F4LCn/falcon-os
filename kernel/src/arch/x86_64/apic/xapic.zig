@@ -185,6 +185,10 @@ fn sendIPI(msg: apic_types.IPIMessage, dest: apic_types.IPIDestination, opts: ap
     }
 }
 
+fn sendEoi() void {
+    writeRegister(.eoi, 0);
+}
+
 fn readRegister(register: Registers) u32 {
     const register_addr = lapic_base.toAddr() + @intFromEnum(register);
     const register_ptr: *volatile u32 = @ptrFromInt(register_addr);
@@ -202,4 +206,5 @@ pub const apic: Apic = .{
     .init_local_interrupts = initLocalInterrupts,
     .set_enabled = setEnabled,
     .send_ipi = sendIPI,
+    .send_eoi = sendEoi,
 };

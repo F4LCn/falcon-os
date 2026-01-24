@@ -7,6 +7,7 @@ const interrupt_context = @import("interrupts/context.zig");
 const isr = @import("interrupts/isr.zig");
 const SinglyLinkedList = @import("flcn").list.SinglyLinkedList;
 const debug = @import("flcn").debug;
+const cpu = @import("cpu.zig");
 
 const log = std.log.scoped(.interrupt);
 
@@ -42,6 +43,12 @@ export fn dispatchInterrupt(context: *interrupt_context.Context) callconv(.c) vo
 }
 
 fn defaultHandler(context: *interrupt_context.Context) void {
+    if (context.vector >= system_interrupt_count) {
+        const apic = cpu.perCpu(.apic);
+        log.warn("no interrupt handler setup for vector {d}, sending eoi", .{context.vector});
+        apic.eoi();
+        return;
+    }
     const cpu_context = interrupt_context.toCpuContext(context);
     var stacktrace = debug.Stacktrace{
         .addresses = .{0} ** debug.Stacktrace.num_traces,
@@ -50,7 +57,7 @@ fn defaultHandler(context: *interrupt_context.Context) void {
     log.err(
         \\
         \\ ---------- EXCEPTION ----------
-        \\ An interrupt has not been handled
+        \\ An interrupt has not been handled on core {d}
         \\ Exception 0x{X}: {s}
         \\
         \\ Error code: 0x{X}
@@ -78,7 +85,8 @@ fn defaultHandler(context: *interrupt_context.Context) void {
         \\ {f}
         \\
     , .{
-        context.vector,        vectorToName(context.vector),
+        cpu.perCpu(.id),
+        context.vector,        vectorToName(@intCast(context.vector)),
         context.error_code,    context.flags,
         asm volatile ("mov %%CR2, %[ret]"
             : [ret] "=r" (-> u64),
@@ -98,7 +106,7 @@ fn defaultHandler(context: *interrupt_context.Context) void {
     unreachable;
 }
 
-fn vectorToName(vector: u64) []const u8 {
+fn vectorToName(vector: u8) []const u8 {
     return switch (vector) {
         0 => "#DE: Divide error",
         1 => "#DB: Debug exception",
@@ -127,6 +135,7 @@ fn vectorToName(vector: u64) []const u8 {
 }
 
 pub var idt: IDT = undefined;
+pub const system_interrupt_count = 32;
 
 pub fn init() void {
     idt = .create();
