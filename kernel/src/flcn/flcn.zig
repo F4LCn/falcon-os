@@ -15,6 +15,7 @@ pub const cpu = @import("cpu.zig");
 pub const memory = @import("memory.zig");
 pub const panic = @import("panic.zig");
 pub const pit = @import("pit.zig");
+pub const pic = @import("pic.zig");
 
 test {
     _ = @import("list.zig");

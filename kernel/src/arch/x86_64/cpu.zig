@@ -60,6 +60,7 @@ pub fn initCore(cpu_id: CpuId) !void {
     try initLocalApic();
     flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic.nmis);
     flcn.cpu.cpu_data[cpu_id].apic.setEnabled(true);
+    flcn.pic.disable();
     try initIoApic();
 }
 
