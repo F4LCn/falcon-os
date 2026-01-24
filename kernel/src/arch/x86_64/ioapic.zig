@@ -110,7 +110,9 @@ const IoApicDriver = struct {
     }
 
     pub fn initRedirectionTable(self: IoApicDriver, int_src_overrides: []smp.IntSourceOverride) void {
-        // TODO: check we are the BP
+        if(options.safety) {
+            if(!cpu.perCpu(.is_bsp)) @panic("attempted to init ioapic from non-bsp");
+        }
         for (0..self.redirection_count) |i| {
             // FIXME: system to mark interrupts as "allocated"
             const irq_id = @as(u8, @truncate(i));

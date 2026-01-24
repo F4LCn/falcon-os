@@ -21,6 +21,7 @@ pub const IdentificationData = struct {
 // TODO: move everything core related here
 pub const CpuData = struct {
     id: CpuId,
+    is_bsp: bool = false,
     apic_base_addr: u32,
     apic_id: CpuId,
     apic: *const Apic = undefined,
@@ -55,8 +56,11 @@ pub fn doCpuChecks() !void {
 }
 
 pub fn initCore(cpu_id: CpuId) !void {
-    flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) &apic.x2apic.apic else &apic.xapic.apic;
     assembly.wrmsr(.GS_BASE, @intFromPtr(&flcn.cpu.cpu_data[cpu_id]));
+    const apic_base = assembly.rdmsr(.APIC_BASE);
+    const is_bsp = ((apic_base >> 8) & 1) == 1;
+    flcn.cpu.cpu_data[cpu_id].is_bsp = is_bsp;
+    flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) &apic.x2apic.apic else &apic.xapic.apic;
     try initLocalApic();
     flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic.nmis);
     flcn.cpu.cpu_data[cpu_id].apic.setEnabled(true);
