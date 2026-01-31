@@ -75,7 +75,12 @@
         - [x] Interrupts redirection
         - [x] Interrupt overrides
       * [x] AP initialization
-    * [ ] Advanced interrupt handling (IRQ allocation, ...)
+    * [-] Advanced interrupt handling (IRQ allocation, ...)
+      * - [-] IrqManager
+      * - [ ] Vector allocator
+      * - [ ] Irq Handling
+      * - [ ] Irq stats (per cpu ?)
+      * - [ ] Irq balancing
     * [ ] Processes, Threads & context switching
     * [ ] Task / Task queues ?
     * [ ] Scheduling

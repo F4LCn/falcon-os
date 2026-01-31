@@ -137,7 +137,6 @@ const IoApicDriver = struct {
             redirection_entry.polarity = new_polarity;
             redirection_entry.trigger_mode = new_trigger_mode;
             redirection_entry.vector = new_vector;
-            redirection_entry.masked = false;
             self.writeRedirectionTableEntry(irq_id, redirection_entry);
         }
     }
