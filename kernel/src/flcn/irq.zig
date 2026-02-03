@@ -18,3 +18,4 @@
 // * then once we send eoi we start handling the deferred work.
 // * maybe we have some budget that gets exhausted and forces us to move on
 
+pub const irq = @import("irq/irq.zig");

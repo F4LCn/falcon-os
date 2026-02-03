@@ -8,6 +8,8 @@
  pub const descriptors = @import("descriptors.zig");
  pub const entrypoint = @import("entrypoint.zig");
  pub const interrupts = @import("interrupts.zig");
+ pub const ioapic = @import("ioapic.zig");
+ pub const irq = @import("irq.zig");
  pub const memory = @import("memory.zig");
  pub const registers = @import("registers.zig");
  pub const smp = @import("smp.zig");

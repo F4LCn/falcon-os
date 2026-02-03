@@ -77,7 +77,7 @@
       * [x] AP initialization
     * [-] Advanced interrupt handling (IRQ allocation, ...)
       * - [-] IrqManager
-      * - [ ] Vector allocator
+      * - [x] Vector allocator
       * - [ ] Irq Handling
       * - [ ] Irq stats (per cpu ?)
       * - [ ] Irq balancing

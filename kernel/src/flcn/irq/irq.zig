@@ -5,37 +5,17 @@ const cpu = @import("../cpu.zig");
 // this is arch specific
 // for x64 we have:
 
-// domains
-// [0 - 31] -> system fixed domain
-// [32 -> 254] -> dynamic irq
-// [255] -> spurious irq
-pub const VectorId = u8;
-pub const Domain = union(enum) {
-    single: VectorId,
-    range: struct {
-        start: VectorId,
-        end: VectorId,
-    },
-};
+const log = std.log.scoped(.irq);
+
+pub const VectorId = arch.irq.VectorId;
+pub const Kind = arch.irq.Kind;
+pub const Domain = arch.irq.Domain;
+pub const DomainDefinition = arch.irq.DomainDefinition;
+
 pub const Source = struct {
     domain: ?Domain = null,
     vector: ?VectorId = null,
-    kind: union(enum) {
-        fixed,
-        ioapic: struct {
-            polarity: Polarity,
-            trigger_mode: TriggerMode,
-            // ...
-        },
-        local_apic: struct {
-            polarity: Polarity,
-            trigger_mode: TriggerMode,
-            // ...
-        },
-        msi: struct {
-            // TODO: if we ever get to pci this needs to be implemented
-        },
-    },
+    kind: Kind,
 };
 
 // TODO: this can be simplified to just arch.InterruptBackend instead of (Backend: type) + generics
@@ -72,26 +52,98 @@ pub const IrqHandle = struct {
     vector: VectorId,
     handler: u64,
 
-    pub fn mask(self: IrqHandle) !void {}
-    pub fn unmask(self: IrqHandle) !void {}
-    pub fn release(self: IrqHandle) !void {}
+    pub fn mask(self: IrqHandle) !void {
+        _ = self; // autofix
+    }
+    pub fn unmask(self: IrqHandle) !void {
+        _ = self; // autofix
+    }
+    pub fn release(self: IrqHandle) !void {
+        _ = self; // autofix
+    }
 };
 
-const Backend = arch.InterruptBackend;
+const VectorAllocator = struct {
+    const DomainAllocator = struct {
+        bitset: std.StaticBitSet(arch.irq.max_vector_count),
+        start_vector: VectorId,
+        // TODO: handle shared vectors tracking
+
+        pub fn init(domain_definition: DomainDefinition) DomainAllocator {
+            return .{
+                .bitset = .initFull(),
+                .start_vector = switch (domain_definition) {
+                    .single => |v| v,
+                    .range => |r| r.start,
+                },
+            };
+        }
+    };
+    allocators: std.EnumMap(Domain, DomainAllocator),
+
+    pub fn init() @This() {
+        var map = std.EnumMap(Domain, DomainAllocator).init(.{});
+        for (std.enums.values(Domain)) |domain| {
+            const domain_definition = arch.irq.domain_definitions.get(domain).?;
+            map.put(domain, DomainAllocator.init(domain_definition));
+        }
+        return .{
+            .allocators = map,
+        };
+    }
+
+    pub fn alloc(self: *@This(), in_domain: ?arch.irq.Domain, _: struct { shared: bool = false }) !VectorId {
+        const domain = if (in_domain) |d| d else arch.irq.default_domain;
+        var domain_allocator = self.allocators.getPtr(domain).?;
+        const first_free = domain_allocator.bitset.findFirstSet();
+        domain_allocator.bitset.unset(first_free);
+        return @intCast(first_free + domain_allocator.start_vector);
+    }
+
+    pub fn allocSpecificVector(self: *@This(), vector: VectorId, _: struct { shared: bool = false }) !VectorId {
+        const domain = try getVectorDomain(vector);
+        var domain_allocator = self.allocators.getPtr(domain).?;
+        const idx: usize = @as(usize, vector) - domain_allocator.start_vector;
+        if (!domain_allocator.bitset.isSet(idx)) return error.AlreadyAllocated;
+        domain_allocator.bitset.unset(idx);
+        return vector;
+    }
+
+    pub fn free(self: *@This(), vector: VectorId) !void {
+        const domain = try getVectorDomain(vector);
+        var domain_allocator = self.allocators.getPtr(domain).?;
+        const idx: usize = @as(usize, vector) - domain_allocator.start_vector;
+        if (domain_allocator.bitset.isSet(idx)) return error.AlreadyFree;
+        domain_allocator.bitset.set(idx);
+    }
+
+    fn getVectorDomain(vector: VectorId) !Domain {
+        const domains = std.enums.values(Domain);
+        const domain: Domain = blk: for (domains) |domain| {
+            const domain_definition = arch.irq.domain_definitions.get(domain).?;
+            if (!domain_definition.contains(vector)) continue;
+            break :blk domain;
+        } else {
+            return error.NoDomain;
+        };
+        return domain;
+    }
+};
+
+const Backend = arch.irq;
 
 backend: Backend,
 vector_allocator: VectorAllocator,
 
 pub fn init() !Self {
     return .{
-        .backend = Backend.init(),
-        .vector_allocator = VectorAllocator.init(), // NOTE: will need to know about the domains, and the default domain
+        .backend = try Backend.init(),
+        .vector_allocator = VectorAllocator.init(),
     };
 }
 
 // NOTE: maybe if we release all handlers for a given irq/vector we auto mask that vector
 pub fn register(self: Self, irq_request: Request) !IrqHandle {
-    _ = irq_request;
     // 1/ check which vector we need
     // 1.1/ if vector specified: allocate specific vector from domain or error (vector domain mismatch, vector is not shared and already registered)
     // 1.2/ allocate a vector from the domain or error
