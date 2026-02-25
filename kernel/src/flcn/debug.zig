@@ -226,7 +226,7 @@ pub const Stacktrace = struct {
             switch (si.*) {
                 .ctx_first => {},
                 .fp => {},
-                .di => |*unwind_context| unwind_context.deinit(getDebugInfoAllocator()),
+                .di => |*unwind_context| unwind_context.deinit(),
             }
         }
 

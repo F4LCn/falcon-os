@@ -97,7 +97,7 @@ pub fn TypeToPtr(comptime T: type, comptime mut: bool) type {
             .@"allowzero" = true,
             .@"volatile" = true,
         }, T, null),
-        .array => |_| @Pointer(.one, .{ .@"const" = !mut, .@"allowzero" = true, .@"addrspace" = .gs }, T, null),
+        .array => @Pointer(.one, .{ .@"const" = !mut, .@"allowzero" = true, .@"addrspace" = .gs }, T, null),
         else => @Pointer(.one, .{ .@"const" = !mut, .@"allowzero" = true, .@"addrspace" = .gs }, T, null),
     };
 }
