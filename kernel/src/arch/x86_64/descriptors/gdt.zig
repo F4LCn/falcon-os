@@ -8,9 +8,9 @@ const common = @import("common.zig");
 const log = std.log.scoped(.gdt);
 
 const Self = @This();
-const GDTR = packed struct {
-    limit: u16,
-    base: *[gdt_entries_size]u8,
+const GDTR = extern struct {
+    limit: u16 align(1),
+    base: *[gdt_entries_size]u8 align(1),
 };
 const max_gdt_entries = 5;
 const max_tsd_entries = options.max_cpu;

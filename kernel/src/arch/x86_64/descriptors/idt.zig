@@ -5,9 +5,9 @@ const Segment = @import("types.zig").Segment;
 
 const log = std.log.scoped(.idt);
 const Self = @This();
-const IDTR = packed struct {
-    limit: u16,
-    base: *[constants.max_interrupt_vectors]Segment.GateDescriptor,
+const IDTR = extern struct {
+    limit: u16 align(1),
+    base: *[constants.max_interrupt_vectors]Segment.GateDescriptor align(1),
 };
 idt_entries: [constants.max_interrupt_vectors]Segment.GateDescriptor align(constants.default_page_size) = [_]Segment.GateDescriptor{std.mem.zeroes(Segment.GateDescriptor)} ** constants.max_interrupt_vectors,
 idtr: IDTR = undefined,

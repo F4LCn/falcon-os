@@ -47,9 +47,9 @@ const MadtIterationContext = struct {
         };
     }
 
-    fn onCallback(_: *const anyopaque, args: anytype) !void {
-        const msg: acpi_events.MadtParsingEvent = args;
-        switch (msg) {
+    fn onCallback(_: *const anyopaque, args: *const anyopaque) !void {
+        const msg: *const acpi_events.MadtParsingEvent = @alignCast(@ptrCast(args));
+        switch (msg.*) {
             .local_apic_addr => |laa| {
                 local_apic.address = laa;
             },

@@ -13,7 +13,7 @@ pub const BootInfo = extern struct {
         BGRA = 3,
     };
 
-    pub const MmapEntry = packed struct {
+    pub const MmapEntry = extern struct {
         pub const Type = enum(u12) {
             USED,
             FREE,
@@ -26,8 +26,8 @@ pub const BootInfo = extern struct {
             TRAMPOLINE,
         };
 
-        ptr: u64,
-        len: u64,
+        ptr: u64 align(1),
+        len: u64 align(1),
 
         pub fn create(ptr: u64, size: u64, typ: Type) MmapEntry {
             const ptr_with_typ = ptr + @intFromEnum(typ);

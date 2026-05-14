@@ -481,8 +481,24 @@ pub fn writeStackTrace(
         }) {
             const return_address = stack_trace.addresses[frame_index];
             const symbol_address = return_address - 1;
-            const symbol = try di.getSymbol(debug_alloc, native_endian, symbol_address);
+            var symbol_fallback_allocator = std.heap.stackFallback(@sizeOf(std.debug.Symbol) + @alignOf(std.debug.Symbol) - 1, getDebugInfoAllocator());
+            const symbol_allocator = symbol_fallback_allocator.get();
+            var symbols = std.ArrayList(std.debug.Symbol).initCapacity(symbol_allocator, 1) catch unreachable;
+            defer symbols.deinit(symbol_allocator);
+            try di.getSymbols(
+                debug_alloc,
+                debug_alloc,
+                native_endian,
+                symbol_address,
+                true,
+                &symbols,
+            );
+
+            if (symbols.items.len == 0) symbols.appendAssumeCapacity(.unknown);
+
+            for (symbols.items) |symbol| {
             try printSourceAtAddress(writer, symbol.source_location, return_address - 1, symbol.name, symbol.compile_unit_name);
+            }
         }
 
         if (stack_trace.index > stack_trace.addresses.len) {

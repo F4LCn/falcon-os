@@ -376,7 +376,7 @@ pub const PageMapping = extern struct {
             log.debug("Addr: 0x{X} - 0x{X}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };
-    pub const Entry = packed union {
+    pub const Entry = packed union(u64) {
         pml4: PML4Entry,
         huge: HugePageEntry,
         large: LargePageEntry,

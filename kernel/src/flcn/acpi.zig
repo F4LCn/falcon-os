@@ -10,10 +10,10 @@ const log = std.log.scoped(.acpi);
 
 pub const AcpiTableIterationContext = struct {
     ptr: *const anyopaque,
-    cb: *const fn (*const anyopaque, args: anytype) anyerror!void,
+    cb: *const fn (*const anyopaque, args: *const anyopaque) anyerror!void,
 
-    pub fn notify(self: *const AcpiTableIterationContext, args: anytype) !void {
-        try self.cb(self.ptr, args);
+    pub fn notify(self: *const AcpiTableIterationContext, args: *const anyopaque) !void {
+        try @call(.auto, self.cb, .{self.ptr, args});
     }
 };
 
@@ -60,7 +60,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
             .apic => {
                 if (!table.is_valid) return error.BadChecksum;
                 const madt: *const acpi_types.AcpiMadt = @ptrFromInt(table.virt_addr);
-                try ctx.notify(acpi_events.MadtParsingEvent{ .local_apic_addr = madt.lapic_addr });
+                try ctx.notify(&acpi_events.MadtParsingEvent{ .local_apic_addr = madt.lapic_addr });
                 const table_end: u64 = table.virt_addr + table.header.len;
                 var interruptControllerHeader: *const acpi_types.AcpiMadt.InterruptControllerHeader = @ptrFromInt(table.virt_addr + @sizeOf(acpi_types.AcpiMadt));
 
@@ -69,7 +69,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                     switch (interruptControllerHeader.typ) {
                         .processorLocalApic => {
                             const processorLocalApic: *const acpi_types.AcpiMadt.ProcessorLocalApic = @ptrCast(interruptControllerHeader);
-                            try ctx.notify(acpi_events.MadtParsingEvent{
+                            try ctx.notify(&acpi_events.MadtParsingEvent{
                                 .apic = .{
                                     .processor_id = processorLocalApic.processor_uid,
                                     .apic_id = processorLocalApic.apic_id,
@@ -80,7 +80,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                         },
                         .ioApic => {
                             const ioapic: *const acpi_types.AcpiMadt.IoApic = @ptrCast(interruptControllerHeader);
-                            try ctx.notify(acpi_events.MadtParsingEvent{
+                            try ctx.notify(&acpi_events.MadtParsingEvent{
                                 .ioapic = .{
                                     .ioapic_id = ioapic.ioapic_id,
                                     .ioapic_addr = ioapic.ioapic_addr,
@@ -90,7 +90,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                         },
                         .interruptSourceOverride => {
                             const intSourceOverride: *const acpi_types.AcpiMadt.InterruptSourceOverride = @ptrCast(interruptControllerHeader);
-                            try ctx.notify(acpi_events.MadtParsingEvent{
+                            try ctx.notify(&acpi_events.MadtParsingEvent{
                                 .interrupt_source_override = .{
                                     .bus = intSourceOverride.bus,
                                     .source = intSourceOverride.source,
@@ -101,7 +101,7 @@ pub fn iterateTable(sig: acpi_types.TableSignatures, ctx: AcpiTableIterationCont
                         },
                         .localApicNMI => {
                             const localApicNMI: *const acpi_types.AcpiMadt.LocalApicNMI = @ptrCast(interruptControllerHeader);
-                            try ctx.notify(acpi_events.MadtParsingEvent{
+                            try ctx.notify(&acpi_events.MadtParsingEvent{
                                 .local_apic_nmi = .{
                                     .processor_uid = localApicNMI.processor_uid,
                                     .lint_num = localApicNMI.local_apic_lint_num,

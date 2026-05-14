@@ -28,7 +28,7 @@ pub fn main(init: std.process.Init) !void {
         \\
     );
     const KV = struct { key: []const u8, value: []const u8 };
-    var list = std.ArrayList(KV){};
+    var list: std.ArrayList(KV) = .empty;
     const arch_dir = try std.Io.Dir.cwd().openDir(io, arch_dir_path, .{ .iterate = true });
     var dir_walker = try arch_dir.walkSelectively(alloc);
     defer dir_walker.deinit();
