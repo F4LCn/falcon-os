@@ -25,7 +25,7 @@ pub const CpuData = struct {
     apic_base_addr: u32,
     apic_id: CpuId,
     apic: *const Apic = undefined,
-    array: [4]u8 = .{1} ** 4,
+    irq_metrics: *const flcn.irq.CpuMetrics = undefined,
 
     pub fn init(cpu_id: CpuId, id_data: IdentificationData) CpuData {
         return .{
@@ -62,7 +62,7 @@ pub fn initCore(cpu_id: CpuId) !void {
     flcn.cpu.cpu_data[cpu_id].is_bsp = is_bsp;
     flcn.cpu.cpu_data[cpu_id].apic = if (hasFeature(.x2apic)) &apic.x2apic.apic else &apic.xapic.apic;
     try initLocalApic();
-    flcn.cpu.cpu_data[cpu_id].apic.initLocalInterrupts(&smp.local_apic.nmis);
+    flcn.cpu.cpu_data[cpu_id].apic.init(&smp.local_apic.nmis);
     flcn.cpu.cpu_data[cpu_id].apic.setEnabled(true);
     flcn.pic.disable();
     try initIoApic();

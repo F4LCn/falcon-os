@@ -1,48 +1,24 @@
 const std = @import("std");
-const options = @import("options");
 const constants = @import("constants.zig");
-const descriptors = @import("descriptors.zig");
 const IDT = @import("descriptors/idt.zig");
 pub const interrupt_context = @import("interrupts/context.zig");
 const isr = @import("interrupts/isr.zig");
-const SinglyLinkedList = @import("flcn").list.SinglyLinkedList;
+const flcn = @import("flcn");
 const debug = @import("flcn").debug;
 const cpu = @import("cpu.zig");
 
 const log = std.log.scoped(.interrupt);
 
-pub const InterruptHandler = struct {
-    const HandlerFn = *const fn (self: *anyopaque, context: *const interrupt_context.Context) bool;
-    ctx: *anyopaque,
-    handler: HandlerFn,
-    next: ?*@This() = null,
-
-    pub fn handle(self: *@This(), context: *const interrupt_context.Context) bool {
-        return self.handler(self.ctx, context);
-    }
-};
-
-const InterruptHandlerList = SinglyLinkedList(InterruptHandler, .next);
-
-var handlers_list: [constants.max_interrupt_vectors]InterruptHandlerList = [_]InterruptHandlerList{.{}} ** constants.max_interrupt_vectors;
-
 export fn dispatchInterrupt(context: *interrupt_context.Context) callconv(.c) void {
-    // Interface "InterruptHandler"
-    // Register one or more interrupt handlers
-    // ? Call the handlers one by one (prob have some sort of mechanism to stop the propagation)
-    // have default handlers in place just in case
-    const vector = context.vector;
-    const handler_list = handlers_list[vector];
-    var iter = handler_list.iter();
-    while (iter.next()) |handler| {
-        if (handler.handle(context)) {
-            return;
-        }
-    }
+    if (flcn.irq.dispatch(context)) return;
     defaultHandler(context);
 }
 
-fn defaultHandler(context: *interrupt_context.Context) void {
+pub fn defaultExceptionIrqHandler(context: *const interrupt_context.Context, _: ?*anyopaque) void {
+    defaultHandler(context);
+}
+
+pub fn defaultHandler(context: *const interrupt_context.Context) void {
     if (context.vector >= system_interrupt_count) {
         const apic = cpu.perCpu(.apic);
         log.warn("no interrupt handler setup for vector {d}, sending eoi", .{context.vector});
@@ -106,7 +82,7 @@ fn defaultHandler(context: *interrupt_context.Context) void {
     unreachable;
 }
 
-fn vectorToName(vector: u8) []const u8 {
+pub fn vectorToName(vector: u8) []const u8 {
     return switch (vector) {
         0 => "#DE: Divide error",
         1 => "#DB: Debug exception",
@@ -155,10 +131,3 @@ pub fn init() void {
     asm volatile ("sti");
     log.info("interrupts enabled", .{});
 }
-
-pub fn registerHandler(vector: u64, interrupt_handler: *InterruptHandler) void {
-    var handle_list = &handlers_list[vector];
-    handle_list.prepend(interrupt_handler);
-    log.debug("registering demo handler {any}", .{handle_list});
-}
-

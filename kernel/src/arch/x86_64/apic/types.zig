@@ -46,3 +46,30 @@ pub const IPIDestination = union(enum(u2)) {
 pub const SendIPIOptions = struct {
     wait_for_send: bool = false,
 };
+
+pub const LocalInterrupt = enum {
+    cmci,
+    timer,
+    thermal,
+    performance_monitoring,
+    lint0,
+    lint1,
+    err,
+};
+
+pub const Polarity = enum(u1) {
+    active_high = 0,
+    active_low = 1,
+};
+
+pub const TriggerMode = enum(u1) {
+    edge_triggered = 0,
+    level_triggered = 1,
+};
+
+pub const InterruptConfiguration = struct {
+    vector: u8,
+    masked: bool = true,
+    polarity: Polarity = .active_high,
+    trigger_mode: TriggerMode = .edge_triggered,
+};

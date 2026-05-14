@@ -79,22 +79,7 @@ fn failableMain() !void {
     try smp.wakeUpCores();
     log.debug("Present cpus: #{d}, mask: {any}", .{ cpu.present_cpus_count, cpu.present_cpus_mask });
     log.debug("Online cpus: #{d}, mask: {any}", .{ cpu.online_cpus_count, cpu.online_cpus_mask });
-
-    const irq = try flcn.irq.irq.init();
-
-    var vector_alloc = irq.vector_allocator;
-
-    const v = try vector_alloc.allocSpecificVector(0xf0, .{});
-    log.info("allocated {x}", .{v});
-
-    var it = vector_alloc.allocators.iterator();
-    while (it.next()) |entry| {
-        log.info("{t}", .{entry.key});
-        const bitset = entry.value.bitset;
-        for (bitset.masks) |m| {
-            log.info("{x}", .{m});
-        }
-    }
+    try flcn.irq.init();
 
     // const count50ms = pit.millis(50);
     // log.info("counting down from {d}", .{count50ms});
@@ -104,7 +89,20 @@ fn failableMain() !void {
     // }
     // log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
 
-    // try apic.sendIPI(.{.fixed = .{.vector = 0xfd}}, .self, .{});
+    const irq_handle = try flcn.irq.register(.{
+        .source = .{ .vector = 0xfd, .kind = .fixed },
+        .config = .{ .masked = false },
+        .name = "ipi test",
+        .route = .any,
+        .handler = .{ .handler_fn = onIPI },
+    });
+    const apic = cpu.perCpu(.apic);
+    try apic.sendIPI(.{ .fixed = .{ .vector = 0xfd } }, .self, .{});
+    try flcn.irq.release(irq_handle);
 
     @panic("test");
+}
+
+fn onIPI(context: *const interrupts.interrupt_context.Context, _: ?*anyopaque) void {
+    log.info("ipi called {any}", .{context});
 }

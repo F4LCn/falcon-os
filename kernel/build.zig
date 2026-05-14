@@ -148,6 +148,8 @@ fn createOptionsModule(b: *std.Build, optimize: std.builtin.OptimizeMode) *std.B
     }
 
     options.addOption(bool, "safety", optimize == .Debug or optimize == .ReleaseSafe);
+    options.addOption(bool, "irq_debug", b.option(bool, "irq_debug", "Enable IRQ debug metadata") orelse false);
+    options.addOption(bool, "irq_metrics", b.option(bool, "irq_metrics", "Enable IRQ runtime metrics") orelse false);
     options.addOption(comptime_int, "num_stack_trace", 4);
     options.addOption(comptime_int, "heap_size", 1 * 1024 * 1024);
     options.addOption(comptime_int, "permanent_heap_size", 7 * 1024 * 1024);

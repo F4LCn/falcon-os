@@ -107,7 +107,7 @@ fn apicId() cpu.CpuId {
 }
 
 const int_mask: u32 = 0x10000;
-fn initLocalInterrupts(nmis: []?smp.LocalApic.ApicNMI) void {
+fn initInterrupts(nmis: []?smp.LocalApic.ApicNMI) void {
     writeRegister(.lvt_corrected_machine_check_interrupt, int_mask);
     writeRegister(.lvt_error, int_mask);
     writeRegister(.lvt_performance_monitoring_counters, int_mask);
@@ -189,6 +189,46 @@ fn sendEoi() void {
     writeRegister(.eoi, 0);
 }
 
+fn configureInterrupt(interrupt: apic_types.LocalInterrupt, config: apic_types.InterruptConfiguration) !void {
+    writeRegister(interruptRegister(interrupt), interruptValue(interrupt, config));
+}
+
+fn maskInterrupt(interrupt: apic_types.LocalInterrupt) !void {
+    const register = interruptRegister(interrupt);
+    writeRegister(register, readRegister(register) | int_mask);
+}
+
+fn unmaskInterrupt(interrupt: apic_types.LocalInterrupt) !void {
+    const register = interruptRegister(interrupt);
+    writeRegister(register, readRegister(register) & ~int_mask);
+}
+
+fn interruptRegister(interrupt: apic_types.LocalInterrupt) Registers {
+    return switch (interrupt) {
+        .cmci => .lvt_corrected_machine_check_interrupt,
+        .timer => .lvt_timer,
+        .thermal => .lvt_thermal_sensor,
+        .performance_monitoring => .lvt_performance_monitoring_counters,
+        .lint0 => .lvt_lint0,
+        .lint1 => .lvt_lint1,
+        .err => .lvt_error,
+    };
+}
+
+fn interruptValue(interrupt: apic_types.LocalInterrupt, config: apic_types.InterruptConfiguration) u32 {
+    const mask: u32 = @as(u32, @intCast(@intFromBool(config.masked))) << 16;
+    const polarity: u32 = if (usesPolarityAndTrigger(interrupt)) @as(u32, @intFromEnum(config.polarity)) << 13 else 0;
+    const trigger_mode: u32 = if (usesPolarityAndTrigger(interrupt)) @as(u32, @intFromEnum(config.trigger_mode)) << 15 else 0;
+    return @as(u32, config.vector) | mask | polarity | trigger_mode;
+}
+
+fn usesPolarityAndTrigger(interrupt: apic_types.LocalInterrupt) bool {
+    return switch (interrupt) {
+        .lint0, .lint1 => true,
+        else => false,
+    };
+}
+
 fn readRegister(register: Registers) u32 {
     const register_addr = lapic_base.toAddr() + @intFromEnum(register);
     const register_ptr: *volatile u32 = @ptrFromInt(register_addr);
@@ -203,8 +243,11 @@ fn writeRegister(register: Registers, val: u32) void {
 
 pub const apic: Apic = .{
     .apic_id = apicId,
-    .init_local_interrupts = initLocalInterrupts,
+    .init_interrupts = initInterrupts,
     .set_enabled = setEnabled,
     .send_ipi = sendIPI,
     .send_eoi = sendEoi,
+    .configure_interrupt = configureInterrupt,
+    .mask_interrupt = maskInterrupt,
+    .unmask_interrupt = unmaskInterrupt,
 };

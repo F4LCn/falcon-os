@@ -5,8 +5,28 @@ const smp = @import("smp.zig");
 const options = @import("options");
 const interrupts = @import("interrupts.zig");
 const cpu = @import("cpu.zig");
+const flcn = @import("flcn");
 
 const log = std.log.scoped(.ioapic);
+
+pub const Polarity = enum(u1) {
+    active_high = 0,
+    active_low = 1,
+};
+
+pub const TriggerMode = enum(u1) {
+    level_triggered = 1,
+    edge_triggered = 0,
+};
+
+pub const IrqConfig = struct {
+    gsi: u32,
+    vector: u8,
+    target_cpu: cpu.CpuId,
+    masked: bool = true,
+    polarity: Polarity = .active_high,
+    trigger_mode: TriggerMode = .edge_triggered,
+};
 
 const IoApicDriver = struct {
     const Id = packed struct {
@@ -31,15 +51,6 @@ const IoApicDriver = struct {
             init = 0b101,
             ext_int = 0b111,
         };
-        const Polarity = enum(u1) {
-            active_high = 0,
-            active_low = 1,
-        };
-        const TriggerMode = enum(u1) {
-            level_triggered = 1,
-            edge_triggered = 0,
-        };
-
         vector: u8,
         delivery_mode: DeliveryMode,
         destination_mode: u1 = 0,
@@ -126,11 +137,11 @@ const IoApicDriver = struct {
             const irq_id: u8 = @truncate(int_src_override.gsi - self.gsi_base);
             var redirection_entry = self.readRedirectionTableEntry(irq_id);
             const new_vector = interrupts.system_interrupt_count + irq_id;
-            const new_polarity: RedirectionEntry.Polarity = switch (int_src_override.polarity) {
+            const new_polarity: Polarity = switch (int_src_override.polarity) {
                 .bus_conforming, .active_high => .active_high,
                 .active_low => .active_low,
             };
-            const new_trigger_mode: RedirectionEntry.TriggerMode = switch (int_src_override.trigger_mode) {
+            const new_trigger_mode: TriggerMode = switch (int_src_override.trigger_mode) {
                 .bus_conforming, .edge_triggered => .edge_triggered,
                 .level_triggered => .level_triggered,
             };
@@ -189,6 +200,61 @@ const IoApicDriver = struct {
 
 var drivers_buf: [options.max_cpu]IoApicDriver = .{undefined} ** options.max_cpu;
 var drivers: std.ArrayList(IoApicDriver) = .initBuffer(&drivers_buf);
+
+const DriverLookup = struct {
+    driver: *IoApicDriver,
+    irq_id: u8,
+};
+
+fn lookupDriver(gsi: u32) !DriverLookup {
+    for (drivers.items) |*driver| {
+        const end = driver.gsi_base + @as(u32, driver.redirection_count);
+        if (gsi < driver.gsi_base or gsi >= end) continue;
+        return .{
+            .driver = driver,
+            .irq_id = @intCast(gsi - driver.gsi_base),
+        };
+    }
+    return error.NoIoApicForGsi;
+}
+
+fn apicIdForCpu(cpu_id: cpu.CpuId) !u8 {
+    if (cpu_id >= flcn.cpu.possible_cpus_count) return error.InvalidCpu;
+    return @intCast(flcn.cpu.cpu_data[cpu_id].apic_id);
+}
+
+pub fn configure(config: IrqConfig) !void {
+    const lookup = try lookupDriver(config.gsi);
+    var redirection_entry = lookup.driver.readRedirectionTableEntry(lookup.irq_id);
+    redirection_entry.vector = config.vector;
+    redirection_entry.destination = try apicIdForCpu(config.target_cpu);
+    redirection_entry.masked = config.masked;
+    redirection_entry.polarity = config.polarity;
+    redirection_entry.trigger_mode = config.trigger_mode;
+    lookup.driver.writeRedirectionTableEntry(lookup.irq_id, redirection_entry);
+}
+
+pub fn mask(gsi: u32) !void {
+    const lookup = try lookupDriver(gsi);
+    var redirection_entry = lookup.driver.readRedirectionTableEntry(lookup.irq_id);
+    redirection_entry.masked = true;
+    lookup.driver.writeRedirectionTableEntry(lookup.irq_id, redirection_entry);
+}
+
+pub fn unmask(gsi: u32) !void {
+    const lookup = try lookupDriver(gsi);
+    var redirection_entry = lookup.driver.readRedirectionTableEntry(lookup.irq_id);
+    redirection_entry.masked = false;
+    lookup.driver.writeRedirectionTableEntry(lookup.irq_id, redirection_entry);
+}
+
+pub fn route(gsi: u32, target_cpu: cpu.CpuId) !void {
+    const lookup = try lookupDriver(gsi);
+    var redirection_entry = lookup.driver.readRedirectionTableEntry(lookup.irq_id);
+    redirection_entry.destination = try apicIdForCpu(target_cpu);
+    lookup.driver.writeRedirectionTableEntry(lookup.irq_id, redirection_entry);
+}
+
 pub fn init(ioapics: []smp.IoApic, int_src_overrides: []smp.IntSourceOverride, page_map: *memory.PageMapManager) !void {
     for (ioapics) |ioapic| {
         const driver: IoApicDriver = try .init(ioapic.address, ioapic.gsi_base, page_map);

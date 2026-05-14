@@ -32,7 +32,7 @@ pub fn apicId() cpu.CpuId {
 }
 
 const int_mask: u32 = 0x10000;
-pub fn initLocalInterrupts(local_apic_nmi: []?smp.LocalApic.ApicNMI) void {
+pub fn initInterrupts(local_apic_nmi: []?smp.LocalApic.ApicNMI) void {
     assembly.wrmsr(.X2APIC_CMCI, int_mask);
     assembly.wrmsr(.X2APIC_LVT_ERROR, int_mask);
     assembly.wrmsr(.X2APIC_LVT_PMC, int_mask);
@@ -107,10 +107,53 @@ fn sendEoi() void {
     assembly.wrmsr(.X2APIC_EOI, 0);
 }
 
+fn configureInterrupt(interrupt: apic_types.LocalInterrupt, config: apic_types.InterruptConfiguration) !void {
+    assembly.wrmsr(interruptMsr(interrupt), interruptValue(interrupt, config));
+}
+
+fn maskInterrupt(interrupt: apic_types.LocalInterrupt) !void {
+    const msr = interruptMsr(interrupt);
+    assembly.wrmsr(msr, assembly.rdmsr(msr) | @as(u64, int_mask));
+}
+
+fn unmaskInterrupt(interrupt: apic_types.LocalInterrupt) !void {
+    const msr = interruptMsr(interrupt);
+    assembly.wrmsr(msr, assembly.rdmsr(msr) & ~@as(u64, int_mask));
+}
+
+fn interruptMsr(interrupt: apic_types.LocalInterrupt) cpu.MSR {
+    return switch (interrupt) {
+        .cmci => .X2APIC_CMCI,
+        .timer => .X2APIC_LVT_TIMER,
+        .thermal => .X2APIC_LVT_THERMAL,
+        .performance_monitoring => .X2APIC_LVT_PMC,
+        .lint0 => .X2APIC_LVT_LINT0,
+        .lint1 => .X2APIC_LVT_LINT1,
+        .err => .X2APIC_LVT_ERROR,
+    };
+}
+
+fn interruptValue(interrupt: apic_types.LocalInterrupt, config: apic_types.InterruptConfiguration) u64 {
+    const mask: u64 = @as(u64, @intCast(@intFromBool(config.masked))) << 16;
+    const polarity: u64 = if (usesPolarityAndTrigger(interrupt)) @as(u64, @intFromEnum(config.polarity)) << 13 else 0;
+    const trigger_mode: u64 = if (usesPolarityAndTrigger(interrupt)) @as(u64, @intFromEnum(config.trigger_mode)) << 15 else 0;
+    return @as(u64, config.vector) | mask | polarity | trigger_mode;
+}
+
+fn usesPolarityAndTrigger(interrupt: apic_types.LocalInterrupt) bool {
+    return switch (interrupt) {
+        .lint0, .lint1 => true,
+        else => false,
+    };
+}
+
 pub const apic: Apic = .{
     .apic_id = apicId,
-    .init_local_interrupts = initLocalInterrupts,
+    .init_interrupts = initInterrupts,
     .set_enabled = setEnabled,
     .send_ipi = sendIPI,
     .send_eoi = sendEoi,
+    .configure_interrupt = configureInterrupt,
+    .mask_interrupt = maskInterrupt,
+    .unmask_interrupt = unmaskInterrupt,
 };

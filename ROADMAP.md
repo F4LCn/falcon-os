@@ -78,8 +78,8 @@
     * [-] Advanced interrupt handling (IRQ allocation, ...)
       * - [-] IrqManager
       * - [x] Vector allocator
-      * - [ ] Irq Handling
-      * - [ ] Irq stats (per cpu ?)
+      * - [x] Irq Handling
+      * - [x] Irq stats (per cpu ?)
       * - [ ] Irq balancing
     * [ ] Processes, Threads & context switching
     * [ ] Task / Task queues ?
