@@ -75,20 +75,21 @@
         - [x] Interrupts redirection
         - [x] Interrupt overrides
       * [x] AP initialization
-    * [-] Advanced interrupt handling (IRQ allocation, ...)
-      * - [-] IrqManager
+    * [-] Advanced interrupt handling (IRQ allocation, ...) 
+      * - [x] IrqManager
       * - [x] Vector allocator
       * - [x] Irq Handling
-      * - [x] Irq stats (per cpu ?)
+      * - [x] Irq stats (per vector + per cpu)
       * - [ ] Irq balancing
-    * [ ] Processes, Threads & context switching
-    * [ ] Task / Task queues ?
-    * [ ] Scheduling
     * [ ] Timers
+      * [-] subsystem
       * [x] PIT
       * [ ] Local APIC timer
       * [ ] HPET
       * [ ] (x64) TSC
+    * [ ] Processes, Threads & context switching
+    * [ ] Task / Task queues ?
+    * [ ] Scheduling
     * [ ] Basic graphics (Console + basic font rendering)
 
   - Nice to haves
