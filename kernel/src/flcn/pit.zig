@@ -1,6 +1,8 @@
 const std = @import("std");
 const arch = @import("arch");
 const assembly = arch.assembly;
+const timer = @import("timer.zig");
+const irq = @import("irq.zig");
 
 const log = std.log.scoped(.pit);
 pub const Self = @This();
@@ -59,15 +61,32 @@ pub const Command = packed struct(u8) {
     },
 };
 
-pub fn init() void {}
+var irq_handle: irq.IrqHandle = undefined;
 
-pub fn millis(ms: u16) u16 {
-    const count = @as(u64, @intCast(ms)) * frequency / 1_000;
-    return @intCast(count);
+pub fn init() void {
+    setCounter(.Channel1, std.math.maxInt(u16));
+    timer._registerTickSource(tickSource());
+    timer._registerTickNotifier(tickNotifier());
+    irq_handle = irq.register(.{
+        .source = .{
+            .kind = .{ .ioapic = .{ .gsi = 2 } },
+            .vector = 32,
+        },
+        .config = .{ .masked = true },
+        .name = "PIT",
+        .route = .any,
+        .handler = .{ .handler_fn = timer.timerHandler },
+    }) catch unreachable;
 }
 
-pub fn micros(us: u16) u16 {
-    return @intCast(us * frequency / 1_000_000);
+pub fn millis(ms: u64) u16 {
+    const count = ms * frequency / 1_000;
+    return @truncate(@min(std.math.maxInt(u16) / 2, count));
+}
+
+pub fn micros(us: u64) u16 {
+    const count = us * frequency / 1_000_000;
+    return @truncate(@min(std.math.maxInt(u16) / 2, count));
 }
 
 pub const pit = Self.init();
@@ -94,10 +113,42 @@ pub fn getCount(channel: Channels) u16 {
 
 pub fn wait(count: u16) void {
     var last_count = count;
-    setCounter(.Channel0, count);
+    setCounter(.Channel1, count);
     while (last_count > 0) {
-        const current_count = getCount(.Channel0);
+        const current_count = getCount(.Channel1);
         if (current_count > last_count) break;
         last_count = current_count;
     }
+}
+
+fn freq() !timer.TickFreq {
+    return frequency;
+}
+
+fn programInterrupt(deadline: timer.Duration) !irq.IrqHandle {
+    // TODO: assert we actually *CAN* program this deadline.
+    const deadline_ms: u64 = @intCast(deadline.toMilliseconds());
+    const deadline_ticks = millis(deadline_ms);
+    setCounter(.Channel0, deadline_ticks);
+    return irq_handle;
+}
+
+fn read() !u64 { 
+    return getCount(.Channel1);
+}
+
+pub fn tickSource() timer.TickSource {
+    return .{
+        ._read = read,
+        ._freq = freq,
+        .max_counter = std.math.maxInt(u16),
+        .priority = 0,
+    };
+}
+
+pub fn tickNotifier() timer.TickNotifier {
+    return .{
+        ._program_interrupt = programInterrupt,
+        .priority = 0,
+    };
 }

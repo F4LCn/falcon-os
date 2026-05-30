@@ -15,6 +15,7 @@ const pit = flcn.pit;
 const panicFn = flcn.panic.panicFn;
 const BootInfo = flcn.bootinfo.BootInfo;
 const assembly = @import("assembly.zig");
+const Timer = flcn.timer;
 
 pub const panic = std.debug.FullPanic(panicFn);
 const log = std.log.scoped(.entrypoint);
@@ -80,29 +81,35 @@ fn failableMain() !void {
     log.debug("Present cpus: #{d}, mask: {any}", .{ cpu.present_cpus_count, cpu.present_cpus_mask });
     log.debug("Online cpus: #{d}, mask: {any}", .{ cpu.online_cpus_count, cpu.online_cpus_mask });
     try flcn.irq.init();
+    const allocator = Memory.allocator();
+    Timer.init(allocator);
+    pit.init();
 
-    // const count50ms = pit.millis(50);
-    // log.info("counting down from {d}", .{count50ms});
-    // var i: u64 = @divExact(5000, 50);
-    // while (i > 0) : (i -= 1) {
-    //     pit.wait(count50ms);
-    // }
-    // log.info("done counting down from {d}", .{32 * @as(u64, @intCast(count50ms))});
+    log.info("running timer for 2s", .{});
+    const wait_duration: Timer.Duration = .fromSeconds(2);
+    Timer.wait(wait_duration);
+    log.info("done counting down from {f}", .{wait_duration});
 
-    const irq_handle = try flcn.irq.register(.{
-        .source = .{ .vector = 0xfd, .kind = .fixed },
-        .config = .{ .masked = false },
-        .name = "ipi test",
-        .route = .any,
-        .handler = .{ .handler_fn = onIPI },
-    });
-    const apic = cpu.perCpu(.apic);
-    try apic.sendIPI(.{ .fixed = .{ .vector = 0xfd } }, .self, .{});
-    try flcn.irq.release(irq_handle);
+    log.info("creating 5s timer", .{});
+    Timer._createTimer(.oneShot(onTimer, .fromSeconds(5)));
 
-    @panic("test");
+    // const irq_handle = try flcn.irq.register(.{
+    //     .source = .{ .vector = 0xfd, .kind = .fixed },
+    //     .config = .{ .masked = false },
+    //     .name = "ipi test",
+    //     .route = .any,
+    //     .handler = .{ .handler_fn = onIPI },
+    // });
+    // const apic = cpu.perCpu(.apic);
+    // try apic.sendIPI(.{ .fixed = .{ .vector = 0xfd } }, .self, .{});
+    // try flcn.irq.release(irq_handle);
+
+    // @panic("test");
 }
 
-fn onIPI(context: *const interrupts.interrupt_context.Context, _: ?*anyopaque) void {
-    log.info("ipi called {any}", .{context});
+fn onTimer(_: ?*anyopaque) void {
+    log.info("Timer fired after 5s !!!", .{});
 }
+// fn onIPI(context: *const interrupts.interrupt_context.Context, _: ?*anyopaque) void {
+//     log.info("ipi called {any}", .{context});
+// }

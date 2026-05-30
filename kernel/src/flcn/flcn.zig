@@ -17,6 +17,7 @@ pub const panic = @import("panic.zig");
 pub const pit = @import("pit.zig");
 pub const pic = @import("pic.zig");
 pub const irq = @import("irq.zig");
+pub const timer = @import("timer.zig");
 
 test {
     _ = @import("list.zig");

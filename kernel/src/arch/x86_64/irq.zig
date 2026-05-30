@@ -24,8 +24,8 @@ pub const Kind = union(enum) {
     fixed,
     ioapic: struct {
         gsi: u32,
-        polarity: Polarity,
-        trigger_mode: TriggerMode,
+        polarity: Polarity = .active_high,
+        trigger_mode: TriggerMode = .edge_triggered,
     },
     local_apic: LocalApicSource,
     msi,

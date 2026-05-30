@@ -37,7 +37,7 @@ pub const Route = irq.Route;
 pub const Source = irq.Source;
 pub const VectorId = irq.VectorId;
 
-const Context = arch.interrupts.interrupt_context.Context;
+pub const Context = arch.interrupts.interrupt_context.Context;
 
 var manager: Manager = undefined;
 
